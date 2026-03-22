@@ -1,0 +1,32 @@
+{
+  "id": "frontend-env",
+  "name": {
+    "zh-CN": "前端开发环境",
+    "en": "Frontend Environment"
+  },
+  "version": "0.1.0",
+  "mainAppVersion": "^0.1.0",
+  "platforms": ["darwin", "win32"],
+  "permissions": ["download", "write_path", "modify_env"],
+  "parameters": {
+    "nodeManager": {
+      "type": "enum",
+      "values": ["node", "nvm"],
+      "required": true
+    },
+    "nodeVersion": {
+      "type": "version",
+      "required": true
+    },
+    "npmCacheDir": {
+      "type": "path",
+      "required": true
+    },
+    "npmGlobalPrefix": {
+      "type": "path",
+      "required": true
+    }
+  },
+  "dependencies": [],
+  "entry": "index.ts"
+}

@@ -1,0 +1,56 @@
+{
+  "id": "frontend-template",
+  "name": {
+    "zh-CN": "前端开发环境",
+    "en": "Frontend Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "面向团队标准化交付的前端环境模板，覆盖 Node、npm 缓存和用户级全局目录。",
+    "en": "A team-managed frontend environment template covering Node, npm cache, and user-level global directories."
+  },
+  "plugins": [
+    {
+      "pluginId": "frontend-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "frontend.nodeManager": "nvm",
+    "frontend.nodeVersion": "20.11.1",
+    "frontend.npmCacheDir": "./.envsetup-data/npm-cache",
+    "frontend.npmGlobalPrefix": "./.envsetup-data/npm-global"
+  },
+  "overrides": {
+    "frontend.nodeManager": {
+      "editable": true,
+      "required": true,
+      "enum": ["node", "nvm"],
+      "affects": ["frontend-env"]
+    },
+    "frontend.nodeVersion": {
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "dependsOn": {
+        "field": "frontend.nodeManager",
+        "in": ["node", "nvm"]
+      }
+    },
+    "frontend.npmCacheDir": {
+      "editable": true,
+      "required": true
+    },
+    "frontend.npmGlobalPrefix": {
+      "editable": true,
+      "required": true
+    }
+  },
+  "checks": [],
+  "maintainer": {
+    "zh-CN": "环境配置团队",
+    "en": "Environment Setup Team"
+  },
+  "recommended": true
+}

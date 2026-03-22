@@ -2,6 +2,8 @@ import { app, BrowserWindow } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { registerIpcHandlers } from './ipc/index'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 function createWindow() {
@@ -9,7 +11,8 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
+      sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -24,6 +27,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  registerIpcHandlers()
   createWindow()
 
   app.on('activate', () => {

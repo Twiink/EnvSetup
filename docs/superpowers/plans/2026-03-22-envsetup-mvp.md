@@ -58,6 +58,7 @@
 ### Task 1: 初始化 Electron + TypeScript + React MVP 骨架
 
 **Files:**
+
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `electron.vite.config.ts`
@@ -118,6 +119,7 @@ git commit -m "feat: bootstrap envsetup electron shell"
 ### Task 2: 定义核心契约、错误模型与任务状态机
 
 **Files:**
+
 - Create: `src/main/core/contracts.ts`
 - Test: `tests/unit/contracts.test.ts`
 
@@ -199,6 +201,7 @@ git commit -m "feat: add core mvp contracts"
 ### Task 3: 实现模板解析与参数约束
 
 **Files:**
+
 - Create: `src/main/core/template.ts`
 - Create: `fixtures/templates/frontend-template.json`
 - Test: `tests/unit/template.test.ts`
@@ -216,7 +219,10 @@ describe('template', () => {
       defaults: { 'frontend.nodeManager': 'nvm' },
       overrides: {
         'frontend.nodeManager': { editable: true, enum: ['node', 'nvm'] },
-        'frontend.nodeVersion': { editable: true, dependsOn: { field: 'frontend.nodeManager', in: ['nvm', 'node'] } },
+        'frontend.nodeVersion': {
+          editable: true,
+          dependsOn: { field: 'frontend.nodeManager', in: ['nvm', 'node'] },
+        },
       },
     } as any)
 
@@ -225,11 +231,13 @@ describe('template', () => {
   })
 
   it('rejects override for undefined field', () => {
-    expect(() => resolveTemplate({
-      id: 'bad',
-      defaults: {},
-      overrides: { 'frontend.missing': { editable: true } },
-    } as any)).toThrowError()
+    expect(() =>
+      resolveTemplate({
+        id: 'bad',
+        defaults: {},
+        overrides: { 'frontend.missing': { editable: true } },
+      } as any),
+    ).toThrowError()
   })
 })
 ```
@@ -295,6 +303,7 @@ git commit -m "feat: add template parsing and frontend template fixture"
 ### Task 4: 实现本地插件导入，覆盖目录与 zip 两种形态
 
 **Files:**
+
 - Create: `src/main/core/appPaths.ts`
 - Create: `src/main/core/plugin.ts`
 - Create: `fixtures/plugins/frontend-env/manifest.json`
@@ -309,17 +318,19 @@ import { validatePluginManifest, normalizeImportedPlugin } from '../../src/main/
 
 describe('plugin import', () => {
   it('accepts a valid plugin manifest', () => {
-    expect(() => validatePluginManifest({
-      id: 'frontend-env',
-      name: 'Frontend Env',
-      version: '0.1.0',
-      mainAppVersion: '^0.1.0',
-      platforms: ['darwin', 'win32'],
-      permissions: ['download', 'write_path', 'modify_env'],
-      parameters: {},
-      dependencies: [],
-      entry: 'index.ts'
-    })).not.toThrow()
+    expect(() =>
+      validatePluginManifest({
+        id: 'frontend-env',
+        name: 'Frontend Env',
+        version: '0.1.0',
+        mainAppVersion: '^0.1.0',
+        platforms: ['darwin', 'win32'],
+        permissions: ['download', 'write_path', 'modify_env'],
+        parameters: {},
+        dependencies: [],
+        entry: 'index.ts',
+      }),
+    ).not.toThrow()
   })
 
   it('rejects manifest without entry', () => {
@@ -389,6 +400,7 @@ git commit -m "feat: add local plugin directory and zip import"
 ### Task 5: 实现真实预检项，而不只是聚合器
 
 **Files:**
+
 - Create: `src/main/core/precheck.ts`
 - Test: `tests/unit/precheck.test.ts`
 
@@ -474,6 +486,7 @@ git commit -m "feat: add real mvp precheck evaluation"
 ### Task 6: 实现任务状态流转、持久化、日志脱敏与插件级重试
 
 **Files:**
+
 - Create: `src/main/core/logger.ts`
 - Create: `src/main/core/task.ts`
 - Test: `tests/unit/task.test.ts`
@@ -487,13 +500,21 @@ import { createTask, applyPluginResult, shouldRerunPlugin } from '../../src/main
 
 describe('task', () => {
   it('creates task with draft status and plugin snapshots', () => {
-    const task = createTask({ templateId: 'frontend-template', plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }] } as any)
+    const task = createTask({
+      templateId: 'frontend-template',
+      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+    } as any)
     expect(task.status).toBe('draft')
     expect(task.plugins[0].status).toBe('not_started')
   })
 
   it('marks plugin for rerun when parameters changed', () => {
-    expect(shouldRerunPlugin({ previous: { params: { a: 1 }, version: '1', context: {} }, next: { params: { a: 2 }, version: '1', context: {} } } as any)).toBe(true)
+    expect(
+      shouldRerunPlugin({
+        previous: { params: { a: 1 }, version: '1', context: {} },
+        next: { params: { a: 2 }, version: '1', context: {} },
+      } as any),
+    ).toBe(true)
   })
 })
 ```
@@ -554,6 +575,7 @@ git commit -m "feat: add task state machine retry logic and log sanitization"
 ### Task 7: 实现平台生效策略与“至少一条真实安装链路”
 
 **Files:**
+
 - Create: `src/main/core/platform.ts`
 - Modify: `fixtures/plugins/frontend-env/index.ts`
 - Test: `tests/unit/platform.test.ts`
@@ -668,6 +690,7 @@ git commit -m "feat: add platform strategy and frontend installer plugin"
 ### Task 8: 实现单页 UI + IPC，覆盖模板、预检、任务和结果工作流
 
 **Files:**
+
 - Create: `src/main/ipc/index.ts`
 - Modify: `src/preload/index.ts`
 - Modify: `src/renderer/App.tsx`
@@ -740,6 +763,7 @@ git commit -m "feat: add single-page template precheck and task workflow"
 ### Task 9: 集成验收，验证目录/zip 插件导入、任务执行、结果展示
 
 **Files:**
+
 - Modify: `README.md`
 - Test: `tests/unit/*.test.ts`
 - Test: `tests/renderer/app.test.tsx`
@@ -768,6 +792,7 @@ Expected: all tests PASS
 
 Run: `npm run dev`
 Expected:
+
 - 能导入本地前端插件（目录或 zip）
 - 能加载前端模板
 - 能修改 node manager / version / npm 目录参数
@@ -779,12 +804,14 @@ Expected:
 
 ```md
 ## Development
+
 - npm install
 - npm run dev
 - npm run test
 - npm run test:e2e
 
 ## MVP Manual Verification
+
 - import local plugin from directory and zip
 - load frontend template
 - run precheck
