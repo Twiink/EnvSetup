@@ -369,6 +369,25 @@ export type EnhancedPrecheckResult = {
   canProceed: boolean  // false 表示有阻断性冲突
 }
 
+// ============================================================
+// 失败分析类型
+// ============================================================
+
+export type FailureCategory =
+  | 'network'       // 网络下载失败
+  | 'permission'    // 权限不足
+  | 'conflict'      // 文件/环境冲突
+  | 'dependency'    // 依赖缺失
+  | 'unknown'       // 未知原因
+
+export type FailureAnalysis = {
+  category: FailureCategory
+  message: string
+  detail?: string
+  retryable: boolean
+  suggestedAction?: string
+}
+
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
