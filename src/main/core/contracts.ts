@@ -388,6 +388,22 @@ export type FailureAnalysis = {
   suggestedAction?: string
 }
 
+export type RollbackSuggestion = {
+  snapshotId: string
+  snapshotLabel?: string
+  createdAt: string
+  reason: string  // 为什么建议这个快照
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export type RollbackResult = {
+  success: boolean
+  snapshotId: string
+  filesRestored: number
+  errors: Array<{ path: string; error: string }>
+  message: string
+}
+
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
