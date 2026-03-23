@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { constants } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   computeFileHash,
@@ -305,5 +306,59 @@ describe('Snapshot - Metadata Management', () => {
     const meta = await loadSnapshotMeta(testDir)
     // 无可删除快照时，不强制删除，允许超过限制
     expect(meta.snapshots.length).toBe(6)
+  })
+
+  it('should physically delete unreferenced object files after deleteSnapshot', async () => {
+    const tmpFile = join(testDir, 'gctest.txt')
+    await writeFile(tmpFile, 'gc content')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'gc-task',
+      type: 'auto',
+      trackedPaths: [tmpFile],
+    })
+
+    const hash = snapshot.files[tmpFile].hash
+    const objectPath = join(testDir, 'objects', hash.slice(0, 2), hash.slice(2))
+
+    // 对象文件应存在
+    await expect(access(objectPath, constants.F_OK)).resolves.toBeUndefined()
+
+    await markSnapshotDeletable(testDir, snapshot.id)
+    await deleteSnapshot(testDir, snapshot.id)
+
+    // 对象文件应被物理删除
+    await expect(access(objectPath, constants.F_OK)).rejects.toThrow()
+  })
+
+  it('should capture shell config files in shellConfigs', async () => {
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'shell-task',
+      type: 'auto',
+      trackedPaths: [],
+    })
+
+    // shellConfigs 应是一个对象（可以为空，取决于系统环境）
+    expect(typeof snapshot.shellConfigs).toBe('object')
+    // 如果存在配置文件，验证其格式
+    for (const [, cfg] of Object.entries(snapshot.shellConfigs)) {
+      expect(cfg.hash).toMatch(/^[a-f0-9]{64}$/)
+      expect(typeof cfg.lines).toBe('number')
+    }
+    // 在 macOS 测试环境下，至少尝试了标准配置路径
+    if (process.platform !== 'win32') {
+      const expectedPaths = [
+        join(homedir(), '.zshrc'),
+        join(homedir(), '.bash_profile'),
+        join(homedir(), '.bashrc'),
+      ]
+      const capturedPaths = Object.keys(snapshot.shellConfigs)
+      // 所有捕获路径必须是预期路径之一
+      for (const p of capturedPaths) {
+        expect(expectedPaths).toContain(p)
+      }
+    }
   })
 })

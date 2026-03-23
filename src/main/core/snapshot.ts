@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
-import type { ObjectRefs, Snapshot, SnapshotMeta } from './contracts'
+import type { AppPlatform, ObjectRefs, Snapshot, SnapshotMeta } from './contracts'
 
 // ============================================================
 // 对象存储（内容寻址）
@@ -133,6 +134,26 @@ export async function createSnapshot(options: {
     path: (process.env.PATH ?? '').split(delimiter),
   }
 
+  // 捕获 shell 配置文件
+  const shellConfigs: Snapshot['shellConfigs'] = {}
+  const homeDir = homedir()
+  const configPaths =
+    process.platform === 'win32'
+      ? [join(homeDir, '.profile')]
+      : [join(homeDir, '.zshrc'), join(homeDir, '.bash_profile'), join(homeDir, '.bashrc')]
+
+  for (const configPath of configPaths) {
+    try {
+      const content = await readFile(configPath)
+      const hash = await storeObject(objectsDir, content)
+      await incrementRefCount(options.baseDir, hash)
+      const lines = content.toString('utf8').split('\n').length
+      shellConfigs[configPath] = { hash, lines }
+    } catch {
+      // 配置文件不存在时跳过
+    }
+  }
+
   const snapshot: Snapshot = {
     id: randomUUID(),
     taskId: options.taskId,
@@ -141,9 +162,9 @@ export async function createSnapshot(options: {
     label: options.label,
     files,
     environment,
-    shellConfigs: {},
+    shellConfigs,
     metadata: {
-      platform: process.platform as 'darwin' | 'win32',
+      platform: process.platform as AppPlatform,
       diskUsage: Object.values(files).reduce((sum, f) => sum + f.size, 0),
       fileCount: Object.keys(files).length,
     },
@@ -234,14 +255,40 @@ export async function markSnapshotDeletable(baseDir: string, snapshotId: string)
 }
 
 /**
- * 删除快照：减少引用计数并移除快照索引文件
+ * 删除快照：减少引用计数、物理 GC 归零对象文件、移除快照索引文件
  */
 export async function deleteSnapshot(baseDir: string, snapshotId: string): Promise<void> {
   const snapshot = await loadSnapshot(baseDir, snapshotId)
+  const objectsDir = join(baseDir, 'objects')
 
-  // 减少对象引用计数
-  for (const file of Object.values(snapshot.files)) {
-    await decrementRefCount(baseDir, file.hash)
+  // 收集所有被引用的 hash（文件 + shellConfigs）
+  const hashes = [
+    ...Object.values(snapshot.files).map((f) => f.hash),
+    ...Object.values(snapshot.shellConfigs).map((c) => c.hash),
+  ]
+
+  // 减少引用计数
+  for (const hash of hashes) {
+    await decrementRefCount(baseDir, hash)
+  }
+
+  // 加载更新后的引用计数，物理删除归零的对象文件
+  const updatedRefs = await loadRefCounts(baseDir)
+  for (const hash of hashes) {
+    if (!(hash in updatedRefs)) {
+      const objectPath = join(objectsDir, hash.slice(0, 2), hash.slice(2))
+      try {
+        await rm(objectPath)
+      } catch {
+        // 文件已不存在，忽略
+      }
+      // 尝试删除空子目录
+      try {
+        await rmdir(join(objectsDir, hash.slice(0, 2)))
+      } catch {
+        // 非空或已不存在，忽略
+      }
+    }
   }
 
   // 删除快照索引文件
