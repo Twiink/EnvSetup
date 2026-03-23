@@ -1,0 +1,22 @@
+{
+  "id": "python-template",
+  "name": {
+    "zh-CN": "Python 开发环境",
+    "en": "Python Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "占位模板，用于预检当前机器上的 Python 解释器、虚拟环境与 pyenv/conda 路径。",
+    "en": "Placeholder template for checking Python interpreters, virtual environments, and pyenv/conda paths."
+  },
+  "plugins": [],
+  "defaults": {},
+  "overrides": {},
+  "checks": ["python"],
+  "maintainer": {
+    "zh-CN": "环境配置团队",
+    "en": "Environment Setup Team"
+  },
+  "recommended": false
+}

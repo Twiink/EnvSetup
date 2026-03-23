@@ -14,6 +14,7 @@ describe('precheck', () => {
     })
 
     expect(result.level).toBe('block')
+    expect(result.detections).toEqual([])
   })
 
   it('returns warn when existing environment is detected', async () => {

@@ -1,4 +1,5 @@
 import type {
+  DetectedEnvironment,
   ErrorCode,
   PluginExecutionStatus,
   PrecheckLevel,
@@ -48,6 +49,10 @@ const uiText = {
     'zh-CN': '仅展示模板允许修改的字段，其他内容保持团队标准。',
     en: 'Only editable fields from the template are shown here. Everything else stays aligned with the team standard.',
   },
+  overridesNoEditableFields: {
+    'zh-CN': '当前模板没有需要调整的参数，可以直接运行预检查看现有环境。',
+    en: 'This template has no editable parameters. Run precheck directly to inspect the current environment.',
+  },
   overridesEmpty: {
     'zh-CN': '请选择一个模板以查看可编辑参数。',
     en: 'Select a template to review editable fields.',
@@ -59,6 +64,10 @@ const uiText = {
   optionalField: {
     'zh-CN': '可选字段',
     en: 'Optional field',
+  },
+  browseFolder: {
+    'zh-CN': '选择文件夹',
+    en: 'Choose Folder',
   },
   precheckTitle: {
     'zh-CN': '预检',
@@ -79,6 +88,18 @@ const uiText = {
   precheckAllPassed: {
     'zh-CN': '当前预检项均已通过。',
     en: 'All current precheck items passed.',
+  },
+  detectedEnvironmentTitle: {
+    'zh-CN': '已发现环境',
+    en: 'Detected Environments',
+  },
+  cleanupEnvironment: {
+    'zh-CN': '一键清理',
+    en: 'Clean Up',
+  },
+  cleanupUnavailable: {
+    'zh-CN': '仅展示路径',
+    en: 'Display Only',
   },
   taskTitle: {
     'zh-CN': '任务',
@@ -189,6 +210,10 @@ const templateFieldLabelMap: Record<string, LocalizedTextInput> = {
     'zh-CN': 'Node 版本',
     en: 'Node Version',
   },
+  'frontend.installRootDir': {
+    'zh-CN': '工具安装根目录',
+    en: 'Tool Install Root',
+  },
   'frontend.npmCacheDir': {
     'zh-CN': 'npm 缓存目录',
     en: 'npm Cache Directory',
@@ -218,6 +243,60 @@ const pluginSummaryMap: Record<string, LocalizedTextInput> = {
   'frontend-env.real_run': {
     'zh-CN': '前端环境安装命令已执行完成。',
     en: 'Completed frontend environment install commands.',
+  },
+}
+
+const detectedEnvironmentKindMap: Record<
+  DetectedEnvironment['kind'],
+  Partial<Record<DetectedEnvironment['tool'], LocalizedTextInput>>
+> = {
+  managed_root: {
+    node: {
+      'zh-CN': '模板管理目录',
+      en: 'Template-Managed Directory',
+    },
+  },
+  manager_root: {
+    node: {
+      'zh-CN': 'Node 管理器目录',
+      en: 'Node Manager Directory',
+    },
+    python: {
+      'zh-CN': 'Python 管理器目录',
+      en: 'Python Manager Directory',
+    },
+  },
+  runtime_executable: {
+    node: {
+      'zh-CN': 'Node 可执行文件',
+      en: 'Node Executable',
+    },
+    java: {
+      'zh-CN': 'Java 可执行文件',
+      en: 'Java Executable',
+    },
+    python: {
+      'zh-CN': 'Python 可执行文件',
+      en: 'Python Executable',
+    },
+  },
+  runtime_home: {
+    java: {
+      'zh-CN': 'JAVA_HOME',
+      en: 'JAVA_HOME',
+    },
+  },
+  global_prefix: {
+    node: {
+      'zh-CN': 'npm 全局目录',
+      en: 'npm Global Prefix',
+    },
+  },
+  virtual_env: {
+    python: {
+      'zh-CN': 'Python 虚拟环境',
+      en: 'Python Virtual Environment',
+    },
   },
 }
 
@@ -266,4 +345,22 @@ export function getPluginSummary(
   fallback: string,
 ): string {
   return resolveLocalizedText(pluginSummaryMap[`${pluginId}.${executionMode}`], locale, fallback)
+}
+
+export function getDetectedEnvironmentKindLabel(
+  locale: AppLocale,
+  detection: DetectedEnvironment,
+): string {
+  return resolveLocalizedText(
+    detectedEnvironmentKindMap[detection.kind]?.[detection.tool],
+    locale,
+    detection.kind,
+  )
+}
+
+export function getDetectedEnvironmentSourceLabel(
+  locale: AppLocale,
+  detection: DetectedEnvironment,
+): string {
+  return locale === 'zh-CN' ? `来源：${detection.source}` : `Source: ${detection.source}`
 }

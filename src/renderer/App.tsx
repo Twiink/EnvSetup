@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type {
+  DetectedEnvironment,
   InstallTask,
   Primitive,
   PrecheckResult,
@@ -14,8 +15,41 @@ import { PrecheckPanel } from './components/PrecheckPanel'
 import { TaskPanel } from './components/TaskPanel'
 import { TemplatePanel } from './components/TemplatePanel'
 
-function buildInitialValues(template: ResolvedTemplate): Record<string, Primitive> {
-  return Object.fromEntries(Object.values(template.fields).map((field) => [field.key, field.value]))
+function buildInitialValues(
+  template: ResolvedTemplate,
+  nodeLtsVersions: string[],
+): Record<string, Primitive> {
+  const values = Object.fromEntries(
+    Object.values(template.fields).map((field) => [field.key, field.value]),
+  )
+
+  const templateNodeVersion = values['frontend.nodeVersion']
+  if (
+    nodeLtsVersions.length > 0 &&
+    (typeof templateNodeVersion !== 'string' || !nodeLtsVersions.includes(templateNodeVersion))
+  ) {
+    values['frontend.nodeVersion'] = nodeLtsVersions[0]
+  }
+
+  return values
+}
+
+function buildFieldOptions(
+  values: Record<string, Primitive>,
+  nodeLtsVersions: string[],
+): Record<string, string[]> {
+  const currentNodeVersion =
+    typeof values['frontend.nodeVersion'] === 'string' ? values['frontend.nodeVersion'] : undefined
+  const versions =
+    nodeLtsVersions.length > 0
+      ? nodeLtsVersions
+      : currentNodeVersion
+        ? [currentNodeVersion]
+        : []
+
+  return {
+    'frontend.nodeVersion': versions,
+  }
 }
 
 function getTemplateById(
@@ -35,6 +69,7 @@ export default function App() {
   })
   const [templates, setTemplates] = useState<ResolvedTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [nodeLtsVersions, setNodeLtsVersions] = useState<string[]>([])
   const [values, setValues] = useState<Record<string, Primitive>>({})
   const [precheck, setPrecheck] = useState<PrecheckResult>()
   const [task, setTask] = useState<InstallTask>()
@@ -52,15 +87,19 @@ export default function App() {
 
     async function loadTemplates() {
       try {
-        const nextTemplates = await window.envSetup.listTemplates()
+        const [nextTemplates, nextNodeLtsVersions] = await Promise.all([
+          window.envSetup.listTemplates(),
+          window.envSetup.listNodeLtsVersions(),
+        ])
         if (!active || nextTemplates.length === 0) {
           return
         }
 
         const firstTemplate = nextTemplates[0]
         setTemplates(nextTemplates)
+        setNodeLtsVersions(nextNodeLtsVersions)
         setSelectedTemplateId(firstTemplate.id)
-        setValues(buildInitialValues(firstTemplate))
+        setValues(buildInitialValues(firstTemplate, nextNodeLtsVersions))
       } catch (loadError) {
         if (!active) {
           return
@@ -82,6 +121,7 @@ export default function App() {
     : {}
   const canCreateTask =
     Boolean(selectedTemplate) &&
+    selectedTemplate.plugins.length > 0 &&
     Object.keys(validationErrors).length === 0 &&
     precheck !== undefined &&
     precheck.level !== 'block'
@@ -93,7 +133,7 @@ export default function App() {
     }
 
     setSelectedTemplateId(templateId)
-    setValues(buildInitialValues(template))
+    setValues(buildInitialValues(template, nodeLtsVersions))
     setPrecheck(undefined)
     setTask(undefined)
     setError(undefined)
@@ -190,6 +230,41 @@ export default function App() {
     }
   }
 
+  async function handleCleanupDetection(detection: DetectedEnvironment) {
+    if (!selectedTemplate) {
+      return
+    }
+
+    setBusy(true)
+    setError(undefined)
+
+    try {
+      await window.envSetup.cleanupEnvironment(detection)
+      const nextPrecheck = await window.envSetup.runPrecheck({
+        templateId: selectedTemplate.id,
+        values,
+        locale,
+      })
+      setPrecheck(nextPrecheck)
+    } catch (cleanupError) {
+      setError(cleanupError instanceof Error ? cleanupError.message : String(cleanupError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handlePickDirectory(key: string) {
+    const selectedPath = await window.envSetup.pickDirectory(
+      typeof values[key] === 'string' ? values[key] : undefined,
+    )
+
+    if (!selectedPath) {
+      return
+    }
+
+    handleChange(key, selectedPath)
+  }
+
   return (
     <main
       style={{
@@ -276,6 +351,7 @@ export default function App() {
             display: 'grid',
             gap: '1.25rem',
             gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)',
+            alignItems: 'start',
           }}
         >
           <TemplatePanel
@@ -286,18 +362,23 @@ export default function App() {
           />
 
           <div style={{ display: 'grid', gap: '1rem' }}>
-            <OverrideForm
-              locale={locale}
-              template={selectedTemplate}
-              values={values}
-              errors={validationErrors}
-              onChange={handleChange}
-            />
+        <OverrideForm
+          locale={locale}
+          template={selectedTemplate}
+          values={values}
+          errors={validationErrors}
+          busy={busy}
+          fieldOptions={buildFieldOptions(values, nodeLtsVersions)}
+          onChange={handleChange}
+          onPickDirectory={handlePickDirectory}
+        />
             <PrecheckPanel
               locale={locale}
               precheck={precheck}
               disabled={!selectedTemplate || busy || Object.keys(validationErrors).length > 0}
+              busy={busy}
               onRun={handleRunPrecheck}
+              onCleanup={handleCleanupDetection}
             />
             <TaskPanel
               locale={locale}

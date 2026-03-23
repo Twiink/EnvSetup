@@ -24,6 +24,7 @@ export function resolveTemplate(template: TemplateManifest): ResolvedTemplate {
     fields[key] = {
       key,
       value,
+      type: override?.type,
       editable: override?.editable ?? false,
       required: override?.required ?? false,
       enum: override?.enum,

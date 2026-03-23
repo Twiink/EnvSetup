@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 
 import type {
   AppLocale,
+  DetectedEnvironment,
   PrecheckInput,
   PrecheckItem,
   PrecheckResult,
@@ -11,8 +12,17 @@ import type {
   ResolvedTemplate,
 } from './contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
+import { detectTemplateEnvironments } from './environment'
 import { getPrecheckMessage } from './i18n'
 import { mapTemplateValuesToPluginParams } from './template'
+
+function isSupportedArchForPlatform(platform: 'darwin' | 'win32', arch: string): boolean {
+  if (platform === 'darwin') {
+    return arch === 'x64' || arch === 'arm64'
+  }
+
+  return arch === 'x64'
+}
 
 export async function isWritablePath(targetPath: string): Promise<boolean> {
   const normalizedPath = targetPath.startsWith('~/')
@@ -42,17 +52,11 @@ export async function isWritablePath(targetPath: string): Promise<boolean> {
   }
 }
 
-export async function detectExistingNodeEnvironment(): Promise<boolean> {
-  return (
-    Boolean(process.env.NVM_DIR || process.env.NVM_HOME || process.env.npm_config_prefix) ||
-    Boolean(process.env.PATH?.toLowerCase().includes('node'))
-  )
-}
-
 export async function buildRuntimePrecheckInput(
   template: ResolvedTemplate,
   values: Record<string, Primitive>,
 ): Promise<PrecheckInput> {
+  const detections = await detectTemplateEnvironments(template, values)
   const frontendParams = mapTemplateValuesToPluginParams(
     template.plugins[0]?.pluginId ?? 'frontend-env',
     values,
@@ -63,19 +67,26 @@ export async function buildRuntimePrecheckInput(
     typeof frontendParams.npmGlobalPrefix === 'string'
       ? frontendParams.npmGlobalPrefix
       : process.cwd()
+  const installRootDir =
+    typeof frontendParams.installRootDir === 'string'
+      ? frontendParams.installRootDir
+      : process.cwd()
+  const currentPlatform = process.platform === 'win32' ? 'win32' : 'darwin'
 
   return {
-    platformSupported: template.platforms.includes(process.platform as 'darwin' | 'win32'),
-    archSupported: process.arch === 'x64' || process.arch === 'arm64',
+    platformSupported: template.platforms.includes(currentPlatform),
+    archSupported: isSupportedArchForPlatform(currentPlatform, process.arch),
     writable: (
       await Promise.all([
+        isWritablePath(installRootDir).catch(() => false),
         isWritablePath(npmCacheDir).catch(() => false),
         isWritablePath(npmGlobalPrefix).catch(() => false),
       ])
     ).every(Boolean),
     dependencySatisfied: true,
     versionCompatible: true,
-    existingEnvConflict: await detectExistingNodeEnvironment(),
+    existingEnvConflict: detections.length > 0,
+    detections,
     networkAvailable: true,
     elevationRequired: false,
   }
@@ -86,6 +97,7 @@ export async function runPrecheck(
   locale: AppLocale = DEFAULT_LOCALE,
 ): Promise<PrecheckResult> {
   const items: PrecheckItem[] = []
+  const detections: DetectedEnvironment[] = input.detections ?? []
 
   if (!input.platformSupported) {
     items.push({
@@ -160,6 +172,7 @@ export async function runPrecheck(
   return {
     level,
     items,
+    detections,
     createdAt: new Date().toISOString(),
   }
 }

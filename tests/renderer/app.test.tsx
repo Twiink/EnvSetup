@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EnvSetupApi } from '../../src/main/core/contracts'
 import App from '../../src/renderer/App'
 
-const templateFixture = {
+const frontendTemplateFixture = {
   id: 'frontend-template',
   name: {
     'zh-CN': '前端开发环境',
@@ -26,6 +26,7 @@ const templateFixture = {
   fields: {
     'frontend.nodeManager': {
       key: 'frontend.nodeManager',
+      type: 'enum',
       value: 'nvm',
       editable: true,
       required: true,
@@ -33,23 +34,80 @@ const templateFixture = {
     },
     'frontend.nodeVersion': {
       key: 'frontend.nodeVersion',
+      type: 'version',
       value: '20.11.1',
+      editable: true,
+      required: true,
+    },
+    'frontend.installRootDir': {
+      key: 'frontend.installRootDir',
+      type: 'path',
+      value: '/tmp/toolchain',
       editable: true,
       required: true,
     },
   },
 }
 
+const javaTemplateFixture = {
+  id: 'java-template',
+  name: {
+    'zh-CN': 'Java 开发环境',
+    en: 'Java Environment',
+  },
+  version: '0.1.0',
+  platforms: ['darwin'],
+  description: {
+    'zh-CN': 'Java 占位模板',
+    en: 'Java placeholder template',
+  },
+  plugins: [],
+  defaults: {},
+  overrides: {},
+  checks: ['java'],
+  fields: {},
+}
+
+const pythonTemplateFixture = {
+  id: 'python-template',
+  name: {
+    'zh-CN': 'Python 开发环境',
+    en: 'Python Environment',
+  },
+  version: '0.1.0',
+  platforms: ['darwin'],
+  description: {
+    'zh-CN': 'Python 占位模板',
+    en: 'Python placeholder template',
+  },
+  plugins: [],
+  defaults: {},
+  overrides: {},
+  checks: ['python'],
+  fields: {},
+}
+
+const pickDirectory = vi.fn()
+const runPrecheck = vi.fn()
+
 beforeEach(() => {
   window.localStorage.clear()
+  pickDirectory.mockReset()
+  pickDirectory.mockResolvedValue('/tmp/selected-toolchain')
+  runPrecheck.mockReset()
+  runPrecheck.mockResolvedValue({
+    level: 'pass',
+    items: [],
+    detections: [],
+    createdAt: new Date().toISOString(),
+  })
 
   const api: EnvSetupApi = {
-    listTemplates: vi.fn().mockResolvedValue([templateFixture]),
-    runPrecheck: vi.fn().mockResolvedValue({
-      level: 'pass',
-      items: [],
-      createdAt: new Date().toISOString(),
-    }),
+    listTemplates: vi
+      .fn()
+      .mockResolvedValue([frontendTemplateFixture, javaTemplateFixture, pythonTemplateFixture]),
+    listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
+    runPrecheck,
     createTask: vi.fn().mockResolvedValue({
       id: 'task-1',
       templateId: 'frontend-template',
@@ -63,6 +121,7 @@ beforeEach(() => {
     }),
     startTask: vi.fn(),
     retryPlugin: vi.fn(),
+    pickDirectory,
     importPluginFromPath: vi.fn(),
   }
 
@@ -84,6 +143,8 @@ describe('App', () => {
     expect(await screen.findByText('模板')).toBeInTheDocument()
     expect(await screen.findByText('预检')).toBeInTheDocument()
     expect(await screen.findByText('前端开发环境')).toBeInTheDocument()
+    expect(await screen.findByText('Java 开发环境')).toBeInTheDocument()
+    expect(await screen.findByText('Python 开发环境')).toBeInTheDocument()
   })
 
   it('creates a task after precheck', async () => {
@@ -95,6 +156,44 @@ describe('App', () => {
 
     expect(await screen.findByText('任务状态')).toBeInTheDocument()
     expect(await screen.findByText('草稿')).toBeInTheDocument()
+  })
+
+  it('renders node version as official lts select and allows directory picking', async () => {
+    render(<App />)
+
+    expect(await screen.findByDisplayValue('24.13.1')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '工具安装根目录 选择文件夹' }))
+
+    expect(pickDirectory).toHaveBeenCalledWith('/tmp/toolchain')
+    expect(await screen.findByDisplayValue('/tmp/selected-toolchain')).toBeInTheDocument()
+  })
+
+  it('shows detected environments and cleanup action after precheck', async () => {
+    runPrecheck.mockResolvedValueOnce({
+      level: 'warn',
+      items: [],
+      detections: [
+        {
+          id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+          tool: 'node',
+          kind: 'manager_root',
+          path: '/tmp/.nvm',
+          source: 'NVM_DIR',
+          cleanupSupported: true,
+          cleanupPath: '/tmp/.nvm',
+          cleanupEnvKey: 'NVM_DIR',
+        },
+      ],
+      createdAt: new Date().toISOString(),
+    })
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+
+    expect(await screen.findByText('已发现环境')).toBeInTheDocument()
+    expect(await screen.findByText('Node 管理器目录')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '一键清理' })).toBeInTheDocument()
   })
 
   it('switches visible copy to english', async () => {

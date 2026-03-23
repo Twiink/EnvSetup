@@ -6,6 +6,8 @@ test('app launches and shows envsetup shell', async () => {
 
   await expect(page.getByRole('heading', { name: '开发环境配置' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '团队标准模板' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Java 开发环境' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Python 开发环境' })).toBeVisible()
   await page.getByRole('button', { name: 'English' }).click()
   await expect(page.getByRole('heading', { name: 'Environment Setup' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Team Standard Templates' })).toBeVisible()
@@ -18,7 +20,7 @@ test('user can select template and create task', async () => {
   const page = await app.firstWindow()
 
   await page.getByRole('button', { name: '前端开发环境' }).click()
-  await page.getByLabel('Node 版本').fill('20.11.1')
+  await page.locator('select[id="frontend.nodeVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible()
   await expect(page.getByRole('button', { name: '创建任务' })).toBeEnabled()

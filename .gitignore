@@ -4,3 +4,7 @@ out/
 playwright-report/
 test-results/
 .idea/
+package-lock.json
+CLAUDE.md
+AGENTS.md
+GEMINI.md

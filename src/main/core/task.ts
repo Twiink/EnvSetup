@@ -108,6 +108,7 @@ function buildPluginLogs(
 ): string[] {
   return [
     ...installResult.logs,
+    ...installResult.downloads.map((download) => `download=${download.tool}:${download.url}`),
     ...installResult.commands.map((command) => `command=${command}`),
     ...installResult.envChanges.map((change) => `${change.kind}:${change.key}=${change.value}`),
     ...verifyResult.checks.map((check) => `verify=${check}`),

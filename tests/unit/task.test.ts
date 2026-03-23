@@ -42,10 +42,21 @@ describe('task', () => {
         executionMode: 'dry_run',
         version: '20.11.1',
         paths: {
+          installRootDir: '/tmp/toolchain',
           npmCacheDir: '/tmp/npm-cache',
           npmGlobalPrefix: '/tmp/npm-global',
         },
         envChanges: [],
+        downloads: [
+          {
+            kind: 'archive',
+            tool: 'node',
+            url: 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-arm64.tar.gz',
+            official: true,
+            checksumUrl: 'https://nodejs.org/dist/v20.11.1/SHASUMS256.txt',
+            checksumAlgorithm: 'sha256',
+          },
+        ],
         commands: ['echo plan'],
         logs: ['token=secret-123'],
         summary: 'Dry-run plan prepared.',

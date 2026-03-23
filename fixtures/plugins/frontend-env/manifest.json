@@ -18,6 +18,10 @@
       "type": "version",
       "required": true
     },
+    "installRootDir": {
+      "type": "path",
+      "required": true
+    },
     "npmCacheDir": {
       "type": "path",
       "required": true

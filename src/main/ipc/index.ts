@@ -1,8 +1,10 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { stat } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 
 import { ensureAppPaths } from '../core/appPaths'
+import { cleanupDetectedEnvironment } from '../core/environment'
+import { listNodeLtsVersions } from '../core/nodeVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
 import { buildRuntimePrecheckInput, runPrecheck } from '../core/precheck'
 import {
@@ -14,7 +16,7 @@ import {
   type PluginRegistry,
 } from '../core/task'
 import { loadTemplatesFromDirectory, mapTemplateValuesToPluginParams } from '../core/template'
-import type { InstallTask, Primitive, ResolvedTemplate } from '../core/contracts'
+import type { DetectedEnvironment, InstallTask, Primitive, ResolvedTemplate } from '../core/contracts'
 import frontendEnvPlugin from '../plugins/frontendEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
@@ -50,6 +52,10 @@ export function registerIpcHandlers(): void {
   ipcRegistered = true
 
   ipcMain.handle('template:list', async () => listTemplates())
+  ipcMain.handle('node:list-lts-versions', async () => listNodeLtsVersions())
+  ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) =>
+    cleanupDetectedEnvironment(detection),
+  )
 
   ipcMain.handle(
     'task:precheck',
@@ -147,5 +153,14 @@ export function registerIpcHandlers(): void {
     }
 
     throw new Error(`Unsupported plugin import path: ${payload.path}`)
+  })
+
+  ipcMain.handle('dialog:pick-directory', async (_event, payload?: { defaultPath?: string }) => {
+    const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow() ?? undefined, {
+      defaultPath: payload?.defaultPath,
+      properties: ['openDirectory', 'createDirectory'],
+    })
+
+    return result.canceled ? undefined : result.filePaths[0]
   })
 }

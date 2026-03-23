@@ -30,6 +30,7 @@ export function TemplatePanel({
       style={{
         display: 'grid',
         gap: '1rem',
+        alignContent: 'start',
         padding: '1.25rem',
         borderRadius: '24px',
         background: 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,245,230,0.9))',

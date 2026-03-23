@@ -10,10 +10,22 @@ type OverrideFormProps = {
   template?: ResolvedTemplate
   values: Record<string, Primitive>
   errors: Record<string, string>
+  busy?: boolean
+  fieldOptions?: Record<string, string[]>
   onChange: (key: string, value: Primitive) => void
+  onPickDirectory: (key: string) => void | Promise<void>
 }
 
-export function OverrideForm({ locale, template, values, errors, onChange }: OverrideFormProps) {
+export function OverrideForm({
+  locale,
+  template,
+  values,
+  errors,
+  busy,
+  fieldOptions = {},
+  onChange,
+  onPickDirectory,
+}: OverrideFormProps) {
   if (!template) {
     return (
       <section
@@ -29,6 +41,10 @@ export function OverrideForm({ locale, template, values, errors, onChange }: Ove
     )
   }
 
+  const activeFields = Object.values(template.fields).filter((field) =>
+    isTemplateFieldActive(field, values),
+  )
+
   return (
     <section
       style={{ padding: '1.25rem', borderRadius: '24px', background: 'rgba(255, 255, 255, 0.82)' }}
@@ -41,10 +57,23 @@ export function OverrideForm({ locale, template, values, errors, onChange }: Ove
       </header>
 
       <div style={{ display: 'grid', gap: '1rem' }}>
-        {Object.values(template.fields)
-          .filter((field) => isTemplateFieldActive(field, values))
-          .map((field) => {
+        {activeFields.length === 0 ? (
+          <p
+            style={{
+              margin: 0,
+              padding: '0.95rem 1rem',
+              borderRadius: '16px',
+              background: 'rgba(248, 250, 252, 0.9)',
+              color: '#64748b',
+              lineHeight: 1.65,
+            }}
+          >
+            {getUiText(locale, 'overridesNoEditableFields')}
+          </p>
+        ) : null}
+        {activeFields.map((field) => {
             const value = values[field.key]
+            const selectOptions = fieldOptions[field.key] ?? field.enum
             const commonStyle = {
               width: '100%',
               borderRadius: '14px',
@@ -62,7 +91,7 @@ export function OverrideForm({ locale, template, values, errors, onChange }: Ove
                 style={{ display: 'grid', gap: '0.45rem' }}
               >
                 <span style={{ fontWeight: 600, color: '#111827' }}>{label}</span>
-                {field.enum ? (
+                {selectOptions && selectOptions.length > 0 ? (
                   <select
                     id={field.key}
                     value={typeof value === 'string' ? value : ''}
@@ -72,12 +101,44 @@ export function OverrideForm({ locale, template, values, errors, onChange }: Ove
                     }
                     style={commonStyle}
                   >
-                    {field.enum.map((option) => (
+                    {selectOptions.map((option) => (
                       <option key={option} value={option}>
                         {getTemplateOptionLabel(locale, option)}
                       </option>
                     ))}
                   </select>
+                ) : field.type === 'path' ? (
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <input
+                      id={field.key}
+                      type="text"
+                      value={typeof value === 'string' ? value : ''}
+                      disabled={!field.editable}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        onChange(field.key, event.currentTarget.value)
+                      }
+                      style={commonStyle}
+                    />
+                    <button
+                      type="button"
+                      disabled={!field.editable || busy}
+                      aria-label={`${label} ${getUiText(locale, 'browseFolder')}`}
+                      onClick={() => {
+                        void onPickDirectory(field.key)
+                      }}
+                      style={{
+                        flexShrink: 0,
+                        borderRadius: '14px',
+                        border: '1px solid rgba(217, 119, 6, 0.24)',
+                        padding: '0.75rem 0.95rem',
+                        background: !field.editable || busy ? '#cbd5e1' : '#fff7ed',
+                        color: '#9a3412',
+                        cursor: !field.editable || busy ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {getUiText(locale, 'browseFolder')}
+                    </button>
+                  </div>
                 ) : typeof field.value === 'boolean' ? (
                   <input
                     id={field.key}

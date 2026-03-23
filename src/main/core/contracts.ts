@@ -48,6 +48,15 @@ export type PrecheckLevel = 'pass' | 'warn' | 'block'
 export type ParameterType = 'string' | 'boolean' | 'enum' | 'path' | 'version' | 'number'
 export type EnvChangeKind = 'env' | 'path' | 'profile'
 export type TaskResultLevel = 'success' | 'partial' | 'failure'
+export type DownloadArtifactKind = 'archive' | 'mirror'
+export type EnvironmentTool = 'node' | 'java' | 'python'
+export type DetectedEnvironmentKind =
+  | 'managed_root'
+  | 'manager_root'
+  | 'runtime_executable'
+  | 'runtime_home'
+  | 'global_prefix'
+  | 'virtual_env'
 
 export type TemplatePluginReference = {
   pluginId: string
@@ -61,6 +70,7 @@ export type TemplateDependsOn = {
 }
 
 export type TemplateOverrideConstraint = {
+  type?: ParameterType
   editable: boolean
   required?: boolean
   enum?: string[]
@@ -135,6 +145,7 @@ export type PrecheckInput = {
   dependencySatisfied: boolean
   versionCompatible: boolean
   existingEnvConflict: boolean
+  detections?: DetectedEnvironment[]
   networkAvailable?: boolean
   elevationRequired?: boolean
 }
@@ -145,10 +156,28 @@ export type PrecheckItem = {
   message: string
 }
 
+export type DetectedEnvironment = {
+  id: string
+  tool: EnvironmentTool
+  kind: DetectedEnvironmentKind
+  path: string
+  source: string
+  cleanupSupported: boolean
+  cleanupPath?: string
+  cleanupEnvKey?: string
+}
+
 export type PrecheckResult = {
   level: PrecheckLevel
   items: PrecheckItem[]
+  detections: DetectedEnvironment[]
   createdAt: string
+}
+
+export type CleanupEnvironmentResult = {
+  message: string
+  removedPath?: string
+  clearedEnvKey?: string
 }
 
 export type EnvChange = {
@@ -160,12 +189,23 @@ export type EnvChange = {
   description: string
 }
 
+export type DownloadArtifact = {
+  kind: DownloadArtifactKind
+  tool: 'node' | 'nvm' | 'nvm-windows'
+  url: string
+  official: boolean
+  checksumUrl?: string
+  checksumAlgorithm?: 'sha256'
+  note?: string
+}
+
 export type PluginInstallResult = {
   status: Extract<PluginExecutionStatus, 'installed_unverified' | 'failed'>
   executionMode: 'dry_run' | 'real_run'
   version: string
   paths: Record<string, string>
   envChanges: EnvChange[]
+  downloads: DownloadArtifact[]
   commands: string[]
   logs: string[]
   summary: string
@@ -189,6 +229,7 @@ export type PluginExecutionInput = {
 export type FrontendPluginParams = PluginExecutionInput & {
   nodeManager: 'node' | 'nvm'
   nodeVersion: string
+  installRootDir: string
   npmCacheDir: string
   npmGlobalPrefix: string
 }
@@ -233,6 +274,7 @@ export type InstallTask = {
 
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
+  listNodeLtsVersions: () => Promise<string[]>
   runPrecheck: (payload: {
     templateId: string
     values: Record<string, Primitive>
@@ -246,5 +288,7 @@ export type EnvSetupApi = {
   }) => Promise<InstallTask>
   startTask: (taskId: string) => Promise<InstallTask>
   retryPlugin: (taskId: string, pluginId: string) => Promise<InstallTask>
+  cleanupEnvironment: (detection: DetectedEnvironment) => Promise<CleanupEnvironmentResult>
+  pickDirectory: (defaultPath?: string) => Promise<string | undefined>
   importPluginFromPath: (pluginPath: string) => Promise<ImportedPlugin>
 }

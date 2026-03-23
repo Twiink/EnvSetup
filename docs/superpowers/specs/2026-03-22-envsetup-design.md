@@ -91,6 +91,10 @@
 - 一期前端插件仅强制覆盖 **Node / nvm(nvm-windows) + npm** 场景
 - pnpm store、Yarn cache 等目录管理不纳入一期强制范围，可作为后续扩展项
 - 一期默认优先支持 **用户态安装**，不以系统级安装为默认路径
+- 一期要求 `Node.js` 与 `nvm / nvm-windows` 的下载来源可追踪到 **官方上游**
+- `Node.js` 应固定使用 `nodejs.org` 官方分发地址，不使用第三方镜像作为默认源
+- `nvm` 与 `nvm-windows` 可使用其官方 GitHub 仓库 / Release 作为上游来源，但不应默认依赖第三方脚本镜像
+- 在进入真实执行阶段前，主程序应为下载步骤预留 **host allowlist** 与 **checksum / 签名校验** 能力
 
 ### 4.3 长期范围
 

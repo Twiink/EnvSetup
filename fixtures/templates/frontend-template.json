@@ -19,17 +19,20 @@
   "defaults": {
     "frontend.nodeManager": "nvm",
     "frontend.nodeVersion": "20.11.1",
+    "frontend.installRootDir": "./.envsetup-data/toolchain",
     "frontend.npmCacheDir": "./.envsetup-data/npm-cache",
     "frontend.npmGlobalPrefix": "./.envsetup-data/npm-global"
   },
   "overrides": {
     "frontend.nodeManager": {
+      "type": "enum",
       "editable": true,
       "required": true,
       "enum": ["node", "nvm"],
       "affects": ["frontend-env"]
     },
     "frontend.nodeVersion": {
+      "type": "version",
       "editable": true,
       "required": true,
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
@@ -38,16 +41,24 @@
         "in": ["node", "nvm"]
       }
     },
+    "frontend.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["frontend-env"]
+    },
     "frontend.npmCacheDir": {
+      "type": "path",
       "editable": true,
       "required": true
     },
     "frontend.npmGlobalPrefix": {
+      "type": "path",
       "editable": true,
       "required": true
     }
   },
-  "checks": [],
+  "checks": ["node"],
   "maintainer": {
     "zh-CN": "环境配置团队",
     "en": "Environment Setup Team"

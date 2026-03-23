@@ -1,0 +1,22 @@
+{
+  "id": "java-template",
+  "name": {
+    "zh-CN": "Java 开发环境",
+    "en": "Java Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "占位模板，用于预检当前机器上的 Java 运行时与 JAVA_HOME。",
+    "en": "Placeholder template for checking Java runtimes and JAVA_HOME on the current machine."
+  },
+  "plugins": [],
+  "defaults": {},
+  "overrides": {},
+  "checks": ["java"],
+  "maintainer": {
+    "zh-CN": "环境配置团队",
+    "en": "Environment Setup Team"
+  },
+  "recommended": false
+}
