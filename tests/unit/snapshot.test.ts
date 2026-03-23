@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,6 +16,8 @@ import {
   updateSnapshotMeta,
   markSnapshotDeletable,
   deleteSnapshot,
+  applySnapshot,
+  restoreShellConfigs,
 } from '../../src/main/core/snapshot'
 
 describe('Snapshot - Object Storage', () => {
@@ -360,5 +362,156 @@ describe('Snapshot - Metadata Management', () => {
         expect(expectedPaths).toContain(p)
       }
     }
+  })
+})
+
+describe('Snapshot - Apply & Restore', () => {
+  let testDir: string
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), 'snapshot-apply-test-'))
+  })
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  it('should restore all files in full mode', async () => {
+    // 在 testDir 内创建两个被追踪的文件
+    const fileA = join(testDir, 'fileA.txt')
+    const fileB = join(testDir, 'fileB.txt')
+    await writeFile(fileA, 'content-a')
+    await writeFile(fileB, 'content-b')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-full',
+      type: 'auto',
+      trackedPaths: [fileA, fileB],
+    })
+
+    // 修改文件内容，模拟安装后状态
+    await writeFile(fileA, 'modified-a')
+    await writeFile(fileB, 'modified-b')
+
+    const result = await applySnapshot({
+      baseDir: testDir,
+      snapshotId: snapshot.id,
+      mode: 'full',
+    })
+
+    expect(result.filesRestored).toBe(2)
+    expect(result.filesSkipped).toBe(0)
+    expect(result.errors).toHaveLength(0)
+
+    const restoredA = await readFile(fileA, 'utf8')
+    const restoredB = await readFile(fileB, 'utf8')
+    expect(restoredA).toBe('content-a')
+    expect(restoredB).toBe('content-b')
+  })
+
+  it('should only restore specified files in partial mode', async () => {
+    const fileA = join(testDir, 'fileA.txt')
+    const fileB = join(testDir, 'fileB.txt')
+    await writeFile(fileA, 'content-a')
+    await writeFile(fileB, 'content-b')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-partial',
+      type: 'auto',
+      trackedPaths: [fileA, fileB],
+    })
+
+    await writeFile(fileA, 'modified-a')
+    await writeFile(fileB, 'modified-b')
+
+    const result = await applySnapshot({
+      baseDir: testDir,
+      snapshotId: snapshot.id,
+      mode: 'partial',
+      filePaths: [fileA],
+    })
+
+    expect(result.filesRestored).toBe(1)
+    expect(result.errors).toHaveLength(0)
+
+    // fileA 恢复，fileB 保持 modified
+    expect(await readFile(fileA, 'utf8')).toBe('content-a')
+    expect(await readFile(fileB, 'utf8')).toBe('modified-b')
+  })
+
+  it('should record error instead of throwing when object hash is missing', async () => {
+    const fileA = join(testDir, 'fileA.txt')
+    await writeFile(fileA, 'content-a')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-missing',
+      type: 'auto',
+      trackedPaths: [fileA],
+    })
+
+    // 删除对象存储中的文件，模拟哈希丢失
+    const hash = snapshot.files[fileA].hash
+    const objectPath = join(testDir, 'objects', hash.slice(0, 2), hash.slice(2))
+    await rm(objectPath)
+
+    const result = await applySnapshot({
+      baseDir: testDir,
+      snapshotId: snapshot.id,
+      mode: 'full',
+    })
+
+    expect(result.filesRestored).toBe(0)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].path).toBe(fileA)
+  })
+
+  it('should restore shell config files', async () => {
+    const configPath = join(testDir, '.zshrc')
+    const originalContent = Buffer.from('export FOO=bar\n')
+
+    // 手动存入对象存储并构造 shellConfigs
+    const objectsDir = join(testDir, 'objects')
+    const { storeObject: store } = await import('../../src/main/core/snapshot')
+    const hash = await store(objectsDir, originalContent)
+
+    const shellConfigs = {
+      [configPath]: { hash, lines: 1 },
+    }
+
+    const count = await restoreShellConfigs(testDir, shellConfigs)
+
+    expect(count).toBe(1)
+    const restored = await readFile(configPath, 'utf8')
+    expect(restored).toBe('export FOO=bar\n')
+  })
+
+  it('should return correct statistics for partial mode with unknown paths', async () => {
+    const fileA = join(testDir, 'fileA.txt')
+    await writeFile(fileA, 'content-a')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-stats',
+      type: 'auto',
+      trackedPaths: [fileA],
+    })
+
+    const nonExistentPath = join(testDir, 'not-in-snapshot.txt')
+
+    const result = await applySnapshot({
+      baseDir: testDir,
+      snapshotId: snapshot.id,
+      mode: 'partial',
+      filePaths: [fileA, nonExistentPath],
+    })
+
+    // fileA 在快照中 -> restored，nonExistentPath 不在快照中 -> skipped
+    expect(result.filesRestored).toBe(1)
+    expect(result.filesSkipped).toBe(1)
+    expect(result.envVariablesRestored).toBe(0)
+    expect(result.errors).toHaveLength(0)
   })
 })
