@@ -272,6 +272,60 @@ export type InstallTask = {
   finishedAt?: string
 }
 
+// ============================================================
+// 快照回滚系统类型定义
+// ============================================================
+
+export type Snapshot = {
+  id: string
+  taskId: string
+  createdAt: string
+  type: 'auto' | 'manual'
+  label?: string
+  // 文件系统快照
+  files: {
+    [filePath: string]: {
+      hash: string   // SHA-256 哈希，对应对象存储中的内容
+      mode: number   // 文件权限（如 0o755）
+      size: number   // 文件大小（字节）
+    }
+  }
+  // 环境变量快照
+  environment: {
+    variables: Record<string, string>
+    path: string[]
+  }
+  // Shell 配置文件快照
+  shellConfigs: {
+    [configPath: string]: {
+      hash: string
+      lines: number
+    }
+  }
+  // 元数据
+  metadata: {
+    platform: 'darwin' | 'win32'
+    diskUsage: number   // 快照占用磁盘空间（字节）
+    fileCount: number   // 快照包含的文件数量
+  }
+}
+
+export type SnapshotMeta = {
+  snapshots: Array<{
+    id: string
+    taskId: string
+    createdAt: string
+    type: 'auto' | 'manual'
+    label?: string
+    canDelete: boolean  // 成功任务的快照可删除
+  }>
+  maxSnapshots: number  // 最大保留数量（默认 5）
+}
+
+export type ObjectRefs = {
+  [hash: string]: number  // hash -> 引用计数
+}
+
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
