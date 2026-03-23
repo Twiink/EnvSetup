@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+
 import type {
   ConflictItem,
   EnhancedPrecheckResult,
@@ -61,10 +63,13 @@ export function generateInstallPlan(pluginResults: PluginDryRunResult[]): Instal
   }
 }
 
+const SEMVER_RE = /\d+\.\d+\.\d+/
+
 export function detectConflicts(
   plan: InstallPlan,
   existingPaths: string[],
   existingEnvVars: Record<string, string>,
+  installedVersions?: Record<string, string>,
 ): ConflictItem[] {
   const conflicts: ConflictItem[] = []
   const existingPathSet = new Set(existingPaths)
@@ -91,7 +96,26 @@ export function detectConflicts(
     }
   }
 
-  // version_mismatch: not implemented yet
+  // version_mismatch: detect when installed tool version differs from requested
+  if (installedVersions) {
+    for (const change of plan.envChanges) {
+      // Match keys like NODE_VERSION, JAVA_VERSION, PYTHON_VERSION, or any *_VERSION key
+      const keyMatch = change.key.match(/^([A-Z][A-Z0-9]*)_VERSION$/i)
+      const requestedMatch = change.value.match(SEMVER_RE)
+      if (keyMatch && requestedMatch) {
+        const toolName = keyMatch[1].toLowerCase()
+        const requestedVersion = requestedMatch[0]
+        const installedVersion = installedVersions[toolName]
+        if (installedVersion && installedVersion !== requestedVersion) {
+          conflicts.push({
+            type: 'version_mismatch',
+            key: toolName,
+            detail: `Installed: ${installedVersion}, requested: ${requestedVersion}`,
+          })
+        }
+      }
+    }
+  }
 
   return conflicts
 }
@@ -121,9 +145,10 @@ export function runEnhancedPrecheck(
   pluginResults: PluginDryRunResult[],
   existingPaths: string[],
   existingEnvVars: Record<string, string>,
+  installedVersions?: Record<string, string>,
 ): EnhancedPrecheckResult {
   const plan = generateInstallPlan(pluginResults)
-  const conflicts = detectConflicts(plan, existingPaths, existingEnvVars)
+  const conflicts = detectConflicts(plan, existingPaths, existingEnvVars, installedVersions)
   const impact = generateImpactSummary(plan)
 
   return {
@@ -132,4 +157,23 @@ export function runEnhancedPrecheck(
     impact,
     canProceed: conflicts.length === 0,
   }
+}
+
+/**
+ * Integrated enhanced precheck: automatically reads disk state (existingPaths, existingEnvVars)
+ * then calls runEnhancedPrecheck.
+ */
+export async function runPrecheck(
+  pluginResults: PluginDryRunResult[],
+  installedVersions?: Record<string, string>,
+): Promise<EnhancedPrecheckResult> {
+  // Collect all file paths referenced in plugin results
+  const allPaths = pluginResults.flatMap((r) => (r.files ?? []).map((f) => f.path))
+  // Check which paths already exist on disk
+  const existingPaths = allPaths.filter((p) => existsSync(p))
+  // Use current process environment as existing env vars
+  const existingEnvVars = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
+  return runEnhancedPrecheck(pluginResults, existingPaths, existingEnvVars, installedVersions)
 }

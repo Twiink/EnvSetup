@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { existsSync } from 'node:fs'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   detectConflicts,
   generateImpactSummary,
   generateInstallPlan,
   runEnhancedPrecheck,
+  runPrecheck,
 } from '../../src/main/core/enhancedPrecheck'
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, existsSync: vi.fn(actual.existsSync) }
+})
 
 describe('generateInstallPlan', () => {
   it('returns empty plan for empty input', () => {
@@ -231,5 +238,135 @@ describe('runEnhancedPrecheck', () => {
     expect(result.impact.filesCreated).toBe(1)
     expect(result.impact.filesModified).toBe(1)
     expect(result.impact.envVarsChanged).toBe(1)
+  })
+})
+
+describe('detectConflicts – version_mismatch', () => {
+  it('detects version_mismatch when installed version differs from requested', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [{ key: 'NODE_VERSION', value: '20.11.0', action: 'set' }],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { node: '18.0.0' })
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].type).toBe('version_mismatch')
+    expect(conflicts[0].key).toBe('node')
+    expect(conflicts[0].detail).toBe('Installed: 18.0.0, requested: 20.11.0')
+  })
+
+  it('does not emit version_mismatch when versions match', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [{ key: 'NODE_VERSION', value: '20.11.0', action: 'set' }],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { node: '20.11.0' })
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('does not emit version_mismatch when tool is not in installedVersions', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [{ key: 'NODE_VERSION', value: '20.11.0', action: 'set' }],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {}, {})
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('ignores envChanges without semver value', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [{ key: 'NODE_VERSION', value: 'lts', action: 'set' }],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { node: '18.0.0' })
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('ignores envChanges whose key does not match *_VERSION pattern', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [{ key: 'NODE_HOME', value: '20.11.0', action: 'set' }],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { node: '18.0.0' })
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('skips version_mismatch check when installedVersions is undefined', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [{ key: 'NODE_VERSION', value: '20.11.0', action: 'set' }],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {})
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('detects version_mismatch for java and python tool names', () => {
+    const plan = generateInstallPlan([
+      {
+        envChanges: [
+          { key: 'JAVA_VERSION', value: '17.0.1', action: 'set' },
+          { key: 'PYTHON_VERSION', value: '3.11.0', action: 'set' },
+        ],
+      },
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { java: '11.0.0', python: '3.9.0' })
+    expect(conflicts).toHaveLength(2)
+    expect(conflicts.map((c) => c.key)).toEqual(['java', 'python'])
+  })
+})
+
+describe('runPrecheck', () => {
+  afterEach(() => {
+    vi.mocked(existsSync).mockReset()
+  })
+
+  it('uses existsSync to detect existing paths – no conflicts when file absent', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+
+    const result = await runPrecheck([
+      { files: [{ path: '/tmp/new-file', action: 'create', size: 1024 }] },
+    ])
+    expect(result.canProceed).toBe(true)
+    expect(result.plan.pluginCount).toBe(1)
+  })
+
+  it('reports file_exists conflict when file is present on disk', async () => {
+    vi.mocked(existsSync).mockImplementation((p) => p === '/tmp/existing-file')
+
+    const result = await runPrecheck([
+      { files: [{ path: '/tmp/existing-file', action: 'create', size: 512 }] },
+    ])
+    expect(result.canProceed).toBe(false)
+    expect(result.conflicts[0].type).toBe('file_exists')
+    expect(result.conflicts[0].path).toBe('/tmp/existing-file')
+  })
+
+  it('passes installedVersions through to detectConflicts', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+
+    const result = await runPrecheck(
+      [
+        {
+          envChanges: [{ key: 'NODE_VERSION', value: '20.11.0', action: 'set' }],
+        },
+      ],
+      { node: '18.0.0' },
+    )
+    expect(result.conflicts).toHaveLength(1)
+    expect(result.conflicts[0].type).toBe('version_mismatch')
+  })
+
+  it('handles empty plugin results', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+
+    const result = await runPrecheck([])
+    expect(result.canProceed).toBe(true)
+    expect(result.conflicts).toHaveLength(0)
+    expect(result.plan.pluginCount).toBe(0)
   })
 })
