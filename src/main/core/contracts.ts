@@ -423,4 +423,13 @@ export type EnvSetupApi = {
   cleanupEnvironment: (detection: DetectedEnvironment) => Promise<CleanupEnvironmentResult>
   pickDirectory: (defaultPath?: string) => Promise<string | undefined>
   importPluginFromPath: (pluginPath: string) => Promise<ImportedPlugin>
+  // 快照管理
+  listSnapshots: () => Promise<SnapshotMeta>
+  createSnapshot: (payload: { taskId: string; label?: string }) => Promise<Snapshot>
+  deleteSnapshot: (snapshotId: string) => Promise<void>
+  // 回滚
+  suggestRollback: (payload: { taskId: string; failureAnalysis?: FailureAnalysis }) => Promise<RollbackSuggestion[]>
+  executeRollback: (payload: { snapshotId: string; trackedPaths?: string[] }) => Promise<RollbackResult>
+  // 增强预检
+  runEnhancedPrecheck: (pluginResults: PluginInstallResult[]) => Promise<EnhancedPrecheckResult>
 }

@@ -4,9 +4,16 @@ import { extname, join } from 'node:path'
 
 import { ensureAppPaths } from '../core/appPaths'
 import { cleanupDetectedEnvironment } from '../core/environment'
+import { runPrecheck as runEnhancedPrecheck } from '../core/enhancedPrecheck'
 import { listNodeLtsVersions } from '../core/nodeVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
 import { buildRuntimePrecheckInput, runPrecheck } from '../core/precheck'
+import { executeRollback, suggestRollbackSnapshots } from '../core/rollback'
+import {
+  createSnapshot,
+  deleteSnapshot,
+  loadSnapshotMeta,
+} from '../core/snapshot'
 import {
   createTask,
   executeTask,
@@ -16,7 +23,7 @@ import {
   type PluginRegistry,
 } from '../core/task'
 import { loadTemplatesFromDirectory, mapTemplateValuesToPluginParams } from '../core/template'
-import type { DetectedEnvironment, InstallTask, Primitive, ResolvedTemplate } from '../core/contracts'
+import type { DetectedEnvironment, FailureAnalysis, InstallTask, PluginInstallResult, Primitive, ResolvedTemplate } from '../core/contracts'
 import frontendEnvPlugin from '../plugins/frontendEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
@@ -163,4 +170,58 @@ export function registerIpcHandlers(): void {
 
     return result.canceled ? undefined : result.filePaths[0]
   })
+
+  // 快照管理
+  ipcMain.handle('snapshot:list', async () => {
+    const paths = await ensureAppPaths()
+    return loadSnapshotMeta(paths.snapshotsDir)
+  })
+
+  ipcMain.handle(
+    'snapshot:create',
+    async (_event, payload: { taskId: string; label?: string }) => {
+      const paths = await ensureAppPaths()
+      return createSnapshot({
+        baseDir: paths.snapshotsDir,
+        taskId: payload.taskId,
+        type: 'manual',
+        label: payload.label,
+        trackedPaths: [],
+      })
+    },
+  )
+
+  ipcMain.handle('snapshot:delete', async (_event, snapshotId: string) => {
+    const paths = await ensureAppPaths()
+    return deleteSnapshot(paths.snapshotsDir, snapshotId)
+  })
+
+  // 回滚
+  ipcMain.handle(
+    'rollback:suggest',
+    async (_event, payload: { taskId: string; failureAnalysis?: FailureAnalysis }) => {
+      const paths = await ensureAppPaths()
+      return suggestRollbackSnapshots(paths.snapshotsDir, payload.taskId, payload.failureAnalysis)
+    },
+  )
+
+  ipcMain.handle(
+    'rollback:execute',
+    async (_event, payload: { snapshotId: string; trackedPaths?: string[] }) => {
+      const paths = await ensureAppPaths()
+      return executeRollback({
+        baseDir: paths.snapshotsDir,
+        snapshotId: payload.snapshotId,
+        trackedPaths: payload.trackedPaths ?? [],
+      })
+    },
+  )
+
+  // 增强预检
+  ipcMain.handle(
+    'precheck:enhanced',
+    async (_event, pluginResults: PluginInstallResult[]) => {
+      return runEnhancedPrecheck(pluginResults)
+    },
+  )
 }
