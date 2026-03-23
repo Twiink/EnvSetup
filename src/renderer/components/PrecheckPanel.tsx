@@ -1,4 +1,4 @@
-import type { DetectedEnvironment, PrecheckResult } from '../../main/core/contracts'
+import type { DetectedEnvironment, EnhancedPrecheckResult, PrecheckResult } from '../../main/core/contracts'
 import type { AppLocale } from '../../shared/locale'
 import {
   getDetectedEnvironmentKindLabel,
@@ -11,6 +11,7 @@ import {
 type PrecheckPanelProps = {
   locale: AppLocale
   precheck?: PrecheckResult
+  enhancedPrecheck?: EnhancedPrecheckResult
   disabled?: boolean
   busy?: boolean
   onRun: () => void
@@ -27,9 +28,21 @@ function levelColor(level: PrecheckResult['level']) {
   return '#b91c1c'
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 export function PrecheckPanel({
   locale,
   precheck,
+  enhancedPrecheck,
   disabled,
   busy,
   onRun,
@@ -172,6 +185,67 @@ export function PrecheckPanel({
           <p style={{ margin: 0, color: '#64748b' }}>{getUiText(locale, 'precheckEmpty')}</p>
         )}
       </div>
+
+      {enhancedPrecheck && (
+        <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+          {/* 冲突警告 */}
+          {enhancedPrecheck.conflicts.length > 0 && (
+            <div
+              style={{
+                padding: '0.85rem 1rem',
+                borderRadius: '14px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+              }}
+            >
+              <strong style={{ color: '#b91c1c', fontSize: '0.9rem' }}>
+                {enhancedPrecheck.conflicts.length} conflict{enhancedPrecheck.conflicts.length > 1 ? 's' : ''} detected
+              </strong>
+              <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', display: 'grid', gap: '0.25rem' }}>
+                {enhancedPrecheck.conflicts.map((conflict, i) => (
+                  <li key={i} style={{ fontSize: '0.85rem', color: '#7f1d1d' }}>
+                    <strong>{conflict.type}</strong>: {conflict.detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 影响摘要卡片 */}
+          <div
+            style={{
+              padding: '0.85rem 1rem',
+              borderRadius: '14px',
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+              gap: '0.5rem',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Files created</span>
+              <strong style={{ fontSize: '1rem' }}>{enhancedPrecheck.impact.filesCreated}</strong>
+            </div>
+            <div style={{ display: 'grid', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Files modified</span>
+              <strong style={{ fontSize: '1rem' }}>{enhancedPrecheck.impact.filesModified}</strong>
+            </div>
+            <div style={{ display: 'grid', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Env vars changed</span>
+              <strong style={{ fontSize: '1rem' }}>{enhancedPrecheck.impact.envVarsChanged}</strong>
+            </div>
+            <div style={{ display: 'grid', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Disk usage</span>
+              <strong style={{ fontSize: '1rem' }}>{formatBytes(enhancedPrecheck.impact.totalDiskUsage)}</strong>
+            </div>
+            <div style={{ display: 'grid', gap: '0.15rem' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Est. duration</span>
+              <strong style={{ fontSize: '1rem' }}>{formatDuration(enhancedPrecheck.impact.estimatedDurationMs)}</strong>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
