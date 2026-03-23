@@ -1,0 +1,99 @@
+--- src/renderer/App.tsx
++++ src/renderer/App.tsx
+@@ -262,24 +262,23 @@
+     <main
+       style={{
+         minHeight: '100vh',
+-        padding: '2rem',
+-        background: 'radial-gradient(circle at top left, #fff7ed, #f8fafc 55%, #e2e8f0)',
+-        color: '#111827',
+-        fontFamily: '"IBM Plex Sans", "Avenir Next", "SF Pro Display", sans-serif',
++        padding: '2.5rem 2rem',
++        background: '#fcfbfa',
++        color: '#292524',
++        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+       }}
+     >
+       <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'grid', gap: '1.5rem' }}>
+         <header
+           style={{
+-            display: 'grid',
+-            gap: '0.6rem',
+-            padding: '1.5rem',
+-            borderRadius: '28px',
+-            background: 'linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,237,213,0.92))',
+-            boxShadow: '0 28px 80px rgba(15, 23, 42, 0.10)',
++            display: 'flex',
++            flexDirection: 'column',
++            gap: '0.5rem',
++            padding: '2rem',
++            borderRadius: '16px',
++            background: '#ffffff',
++            border: '1px solid #e7e5e4',
++            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02)',
+           }}
+         >
+           <p
+             style={{
+               margin: 0,
+-              fontSize: '0.82rem',
+-              letterSpacing: '0.18em',
++              fontSize: '0.85rem',
++              letterSpacing: '0.1em',
+               textTransform: 'uppercase',
+-              color: '#b45309',
++              fontWeight: 600,
++              color: '#a8a29e',
+             }}
+           >
+             {getUiText(locale, 'appBadge')}
+           </p>
+-          <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1 }}>
++          <h1 style={{ margin: '0.25rem 0', fontSize: '2.25rem', fontWeight: 600, color: '#1c1917', letterSpacing: '-0.02em' }}>
+             {getUiText(locale, 'appTitle')}
+           </h1>
+-          <p style={{ margin: 0, maxWidth: '54rem', color: '#475569', lineHeight: 1.7 }}>
++          <p style={{ margin: 0, maxWidth: '48rem', color: '#57534e', fontSize: '1.05rem', lineHeight: 1.6 }}>
+             {getUiText(locale, 'appDescription')}
+           </p>
+-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+-            <span style={{ fontSize: '0.85rem', color: '#475569' }}>
++          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '1rem' }}>
++            <span style={{ fontSize: '0.9rem', color: '#78716c', fontWeight: 500 }}>
+               {getUiText(locale, 'languageLabel')}
+             </span>
+             {(['zh-CN', 'en'] as const).map((targetLocale) => (
+@@ -290,14 +289,14 @@
+                 aria-pressed={locale === targetLocale}
+                 style={{
+-                  borderRadius: '999px',
+-                  border:
+-                    locale === targetLocale
+-                      ? '1px solid rgba(217, 119, 6, 0.45)'
+-                      : '1px solid rgba(148, 163, 184, 0.35)',
+-                  padding: '0.5rem 0.9rem',
+-                  background:
+-                    locale === targetLocale ? 'rgba(255, 237, 213, 0.9)' : 'rgba(255,255,255,0.76)',
++                  borderRadius: '8px',
++                  border: locale === targetLocale ? '1px solid #fca5a5' : '1px solid #e7e5e4',
++                  padding: '0.4rem 0.8rem',
++                  background: locale === targetLocale ? '#fef2f2' : '#f5f5f4',
++                  color: locale === targetLocale ? '#991b1b' : '#57534e',
++                  fontWeight: 500,
++                  fontSize: '0.9rem',
+                   cursor: 'pointer',
++                  transition: 'all 0.2s',
+                 }}
+               >
+@@ -312,11 +311,12 @@
+             style={{
+               padding: '1rem 1.2rem',
+-              borderRadius: '18px',
++              borderRadius: '12px',
+               background: '#fef2f2',
+               color: '#b91c1c',
+-              border: '1px solid rgba(248, 113, 113, 0.35)',
++              border: '1px solid #fecaca',
++              fontSize: '0.95rem',
+             }}
+           >
