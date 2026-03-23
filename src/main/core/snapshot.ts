@@ -1,9 +1,13 @@
+import { exec } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
+import { promisify } from 'node:util'
 import type { AppPlatform, ObjectRefs, Snapshot, SnapshotMeta } from './contracts'
+
+const execAsync = promisify(exec)
 
 // ============================================================
 // 对象存储（内容寻址）
@@ -293,4 +297,177 @@ export async function deleteSnapshot(baseDir: string, snapshotId: string): Promi
 
   // 删除快照索引文件
   await rm(join(baseDir, 'snapshots', `snapshot-${snapshotId}.json`))
+}
+
+// ============================================================
+// 快照应用与恢复
+// ============================================================
+
+export type ApplySnapshotOptions = {
+  baseDir: string
+  snapshotId: string
+  mode: 'full' | 'partial'
+  /** 部分恢复时指定要恢复的文件路径列表 */
+  filePaths?: string[]
+  /** 是否恢复环境变量 */
+  restoreEnv?: boolean
+}
+
+export type ApplySnapshotResult = {
+  filesRestored: number
+  filesSkipped: number
+  envVariablesRestored: number
+  errors: Array<{ path: string; error: string }>
+}
+
+/**
+ * 全量或部分恢复快照中的文件，可选恢复环境变量
+ */
+export async function applySnapshot(options: ApplySnapshotOptions): Promise<ApplySnapshotResult> {
+  const snapshot = await loadSnapshot(options.baseDir, options.snapshotId)
+  const objectsDir = join(options.baseDir, 'objects')
+
+  // 确定要恢复的文件列表
+  let filesToRestore: string[]
+  if (options.mode === 'full') {
+    filesToRestore = Object.keys(snapshot.files)
+  } else {
+    // partial：只恢复 filePaths 中同时存在于快照的文件
+    filesToRestore = (options.filePaths ?? []).filter((p) => p in snapshot.files)
+  }
+
+  const result: ApplySnapshotResult = {
+    filesRestored: 0,
+    filesSkipped: 0,
+    envVariablesRestored: 0,
+    errors: [],
+  }
+
+  // partial 模式下，filePaths 中不在快照里的路径计为 skipped
+  if (options.mode === 'partial') {
+    const skippedCount = (options.filePaths ?? []).filter((p) => !(p in snapshot.files)).length
+    result.filesSkipped += skippedCount
+  }
+
+  for (const filePath of filesToRestore) {
+    const fileEntry = snapshot.files[filePath]
+    if (!fileEntry) {
+      result.filesSkipped++
+      continue
+    }
+
+    try {
+      const content = await loadObject(objectsDir, fileEntry.hash)
+      await mkdir(dirname(filePath), { recursive: true })
+      await writeFile(filePath, content)
+      if (process.platform !== 'win32') {
+        await chmod(filePath, fileEntry.mode)
+      }
+      result.filesRestored++
+    } catch (error) {
+      result.errors.push({
+        path: filePath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  if (options.restoreEnv) {
+    try {
+      result.envVariablesRestored = await restoreEnvironment(
+        snapshot.environment,
+        snapshot.metadata.platform,
+      )
+    } catch (error) {
+      result.errors.push({
+        path: 'environment',
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return result
+}
+
+/**
+ * 将环境变量写入 shell 配置文件（macOS/Linux 写入 ~/.zshrc，Windows 调用 setx）
+ * 返回成功恢复的环境变量数量
+ */
+export async function restoreEnvironment(
+  environment: Snapshot['environment'],
+  platform: AppPlatform,
+): Promise<number> {
+  // 构建条目：非 PATH 变量 + 由 path 数组合并而来的 PATH
+  const entries: Array<[string, string]> = []
+  for (const [key, value] of Object.entries(environment.variables)) {
+    if (key === 'PATH') continue
+    entries.push([key, value])
+  }
+  const pathValue = environment.path.join(delimiter)
+  entries.push(['PATH', pathValue])
+
+  let count = 0
+
+  if (platform === 'win32') {
+    for (const [key, value] of entries) {
+      // 防止命令注入：key 只允许合法环境变量名，value 通过参数数组传入
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
+      try {
+        await execAsync(`setx ${key} "${value.replace(/"/g, '')}"`)
+        count++
+      } catch {
+        // 忽略单条失败，继续处理其余变量
+      }
+    }
+  } else {
+    const configPath = join(homedir(), '.zshrc')
+    const blockStart = '# EnvSetup managed block - begin'
+    const blockEnd = '# EnvSetup managed block - end'
+
+    const exportLines = entries.map(([key, value]) => `export ${key}="${value}"`)
+    const managedBlock = `${blockStart}\n${exportLines.join('\n')}\n${blockEnd}`
+
+    let existingContent = ''
+    try {
+      existingContent = await readFile(configPath, 'utf8')
+    } catch {
+      // 文件不存在时从空白开始
+    }
+
+    // 移除旧的 managed block
+    const escapedStart = blockStart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const escapedEnd = blockEnd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const blockRegex = new RegExp(`\\n?${escapedStart}[\\s\\S]*?${escapedEnd}\\n?`, 'g')
+    const cleaned = existingContent.replace(blockRegex, '')
+
+    await writeFile(configPath, `${cleaned.trimEnd()}\n${managedBlock}\n`)
+    count = entries.length
+  }
+
+  return count
+}
+
+/**
+ * 从对象存储读取每个 shell 配置文件内容并写回原路径
+ * 返回成功恢复的文件数量
+ */
+export async function restoreShellConfigs(
+  baseDir: string,
+  shellConfigs: Snapshot['shellConfigs'],
+): Promise<number> {
+  const objectsDir = join(baseDir, 'objects')
+  let count = 0
+
+  for (const [configPath, config] of Object.entries(shellConfigs)) {
+    try {
+      const content = await loadObject(objectsDir, config.hash)
+      await mkdir(dirname(configPath), { recursive: true })
+      await writeFile(configPath, content)
+      count++
+    } catch {
+      // 忽略单条失败
+    }
+  }
+
+  return count
 }
