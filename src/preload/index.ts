@@ -12,6 +12,15 @@ const api: EnvSetupApi = {
   cleanupEnvironment: (detection) => ipcRenderer.invoke('environment:cleanup', detection),
   pickDirectory: (defaultPath) => ipcRenderer.invoke('dialog:pick-directory', { defaultPath }),
   importPluginFromPath: (pluginPath) => ipcRenderer.invoke('plugin:import', { path: pluginPath }),
+  // 快照管理
+  listSnapshots: () => ipcRenderer.invoke('snapshot:list'),
+  createSnapshot: (payload) => ipcRenderer.invoke('snapshot:create', payload),
+  deleteSnapshot: (snapshotId) => ipcRenderer.invoke('snapshot:delete', snapshotId),
+  // 回滚
+  suggestRollback: (payload) => ipcRenderer.invoke('rollback:suggest', payload),
+  executeRollback: (payload) => ipcRenderer.invoke('rollback:execute', payload),
+  // 增强预检
+  runEnhancedPrecheck: (pluginResults) => ipcRenderer.invoke('precheck:enhanced', pluginResults),
 }
 
 contextBridge.exposeInMainWorld('envSetup', api)

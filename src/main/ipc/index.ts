@@ -247,11 +247,7 @@ export function registerIpcHandlers(): void {
     'rollback:execute',
     async (_event, payload: { snapshotId: string; trackedPaths?: string[] }) => {
       const paths = await ensureAppPaths()
-      return executeRollback({
-        baseDir: paths.snapshotsDir,
-        snapshotId: payload.snapshotId,
-        trackedPaths: payload.trackedPaths ?? [],
-      })
+      return executeRollback(paths.snapshotsDir, payload.snapshotId, payload.trackedPaths ?? [])
     },
   )
 
