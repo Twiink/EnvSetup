@@ -24,11 +24,12 @@ export function categorizeError(errorMessage: string): FailureCategory {
     return 'conflict'
   }
 
+  // dependency 优先：明确的依赖缺失上下文（在 network 检测之前）
   if (
-    msg.includes('not found') ||
     msg.includes('command not found') ||
     msg.includes('enoent') ||
-    msg.includes('missing')
+    msg.includes('missing') ||
+    msg.includes('not found:')
   ) {
     return 'dependency'
   }
@@ -43,6 +44,11 @@ export function categorizeError(errorMessage: string): FailureCategory {
     msg.includes('wget')
   ) {
     return 'network'
+  }
+
+  // 宽泛的 'not found'（无冒号，可能是 network 上下文中的 not found）
+  if (msg.includes('not found')) {
+    return 'dependency'
   }
 
   return 'unknown'
