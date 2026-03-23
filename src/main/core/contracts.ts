@@ -40,6 +40,7 @@ export const ERROR_CODES = [
   'ELEVATION_REQUIRED',
 ] as const
 
+export type AppPlatform = (typeof SUPPORTED_PLATFORMS)[number]
 export type Primitive = string | number | boolean | null
 export type TaskStatus = (typeof TASK_STATES)[number]
 export type PluginExecutionStatus = (typeof PLUGIN_STATES)[number]
@@ -304,7 +305,7 @@ export type Snapshot = {
   }
   // 元数据
   metadata: {
-    platform: 'darwin' | 'win32'
+    platform: AppPlatform
     diskUsage: number   // 快照占用磁盘空间（字节）
     fileCount: number   // 快照包含的文件数量
   }

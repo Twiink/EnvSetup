@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -22,22 +22,22 @@ describe('Snapshot - Object Storage', () => {
     await rm(testDir, { recursive: true, force: true })
   })
 
-  it('should compute SHA-256 hash correctly', async () => {
+  it('should compute SHA-256 hash correctly', () => {
     const content = 'test content'
-    const hash = await computeFileHash(Buffer.from(content))
+    const hash = computeFileHash(Buffer.from(content))
     expect(hash).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  it('should compute same hash for same content', async () => {
+  it('should compute same hash for same content', () => {
     const content = 'same content'
-    const hash1 = await computeFileHash(Buffer.from(content))
-    const hash2 = await computeFileHash(Buffer.from(content))
+    const hash1 = computeFileHash(Buffer.from(content))
+    const hash2 = computeFileHash(Buffer.from(content))
     expect(hash1).toBe(hash2)
   })
 
-  it('should compute different hash for different content', async () => {
-    const hash1 = await computeFileHash(Buffer.from('content a'))
-    const hash2 = await computeFileHash(Buffer.from('content b'))
+  it('should compute different hash for different content', () => {
+    const hash1 = computeFileHash(Buffer.from('content a'))
+    const hash2 = computeFileHash(Buffer.from('content b'))
     expect(hash1).not.toBe(hash2)
   })
 
@@ -55,6 +55,10 @@ describe('Snapshot - Object Storage', () => {
     const hash1 = await storeObject(objectsDir, content)
     const hash2 = await storeObject(objectsDir, content)
     expect(hash1).toBe(hash2)
+    // verify only one file exists in the subdirectory
+    const subDir = join(objectsDir, hash1.slice(0, 2))
+    const files = await readdir(subDir)
+    expect(files).toHaveLength(1)
   })
 
   it('should store objects in git-style subdirectories', async () => {
@@ -63,8 +67,17 @@ describe('Snapshot - Object Storage', () => {
     const hash = await storeObject(objectsDir, content)
     // hash 前两位作为子目录，其余作为文件名
     expect(hash.length).toBe(64)
-    const loaded = await loadObject(objectsDir, hash)
-    expect(loaded).toBeDefined()
+    const subDir = join(objectsDir, hash.slice(0, 2))
+    const objectPath = join(subDir, hash.slice(2))
+    // verify subdirectory and file actually exist
+    await expect(access(subDir)).resolves.toBeUndefined()
+    await expect(access(objectPath)).resolves.toBeUndefined()
+  })
+
+  it('should throw when loading non-existent object', async () => {
+    const objectsDir = join(testDir, 'objects')
+    const fakeHash = 'a'.repeat(64)
+    await expect(loadObject(objectsDir, fakeHash)).rejects.toThrow()
   })
 })
 

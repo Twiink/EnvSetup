@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ObjectRefs } from './contracts'
 
@@ -10,7 +11,7 @@ import type { ObjectRefs } from './contracts'
 /**
  * 计算 Buffer 内容的 SHA-256 哈希
  */
-export async function computeFileHash(content: Buffer): Promise<string> {
+export function computeFileHash(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
@@ -19,9 +20,16 @@ export async function computeFileHash(content: Buffer): Promise<string> {
  * 使用 Git-style 两级目录结构：objects/{hash[0:2]}/{hash[2:]}
  */
 export async function storeObject(objectsDir: string, content: Buffer): Promise<string> {
-  const hash = await computeFileHash(content)
+  const hash = computeFileHash(content)
   const subDir = join(objectsDir, hash.slice(0, 2))
   const objectPath = join(subDir, hash.slice(2))
+
+  try {
+    await access(objectPath, constants.F_OK)
+    return hash
+  } catch {
+    // file does not exist, proceed to write
+  }
 
   await mkdir(subDir, { recursive: true })
   await writeFile(objectPath, content)
@@ -50,8 +58,11 @@ export async function loadRefCounts(baseDir: string): Promise<ObjectRefs> {
   try {
     const content = await readFile(join(baseDir, REFS_FILE), 'utf8')
     return JSON.parse(content) as ObjectRefs
-  } catch {
-    return {}
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {}
+    }
+    throw error
   }
 }
 
