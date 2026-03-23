@@ -37,6 +37,7 @@
 - 创建、存储、加载、删除快照
 - 管理对象存储（内容寻址）
 - 快照数量限制和自动清理
+- 垃圾回收：删除快照时减少对象引用计数，引用计数为 0 时删除对象文件
 
 **存储结构**:
 ```
@@ -48,8 +49,18 @@
 ├── snapshots/         # 快照索引文件
 │   ├── snapshot-uuid-1.json
 │   └── snapshot-uuid-2.json
-└── snapshot-meta.json # 快照元数据（创建时间、关联任务、标签）
+├── snapshot-meta.json # 快照元数据（创建时间、关联任务、标签）
+└── objects-refs.json  # 对象引用计数（用于垃圾回收）
 ```
+
+**文件追踪策略**:
+1. 插件声明的安装路径（如 `~/.nvm`、`C:\Program Files\nodejs`）
+2. 修改的 shell 配置文件（`~/.bashrc`、`~/.zshrc`、`~/.bash_profile`）
+3. 环境变量（通过 `process.env` 读取）
+4. 排除规则：
+   - 大于 100MB 的单个文件（仅记录路径和哈希，不复制内容）
+   - 符号链接（记录链接目标，不追踪目标内容）
+   - 临时文件（`.tmp`、`.cache` 等）
 
 #### 2. 预检增强模块（Enhanced Precheck）
 
@@ -306,7 +317,39 @@ async function executeRollback(
 1. 根据 selectedScope 确定要回滚的插件列表
 2. 从快照中提取这些插件相关的文件和环境变量
 3. 调用 applySnapshot（partial 模式）恢复
-4. 更新任务状态（将回滚的插件标记为 'not_started'）
+4. 持久化环境变量：
+   - macOS: 修改 `~/.zshrc` 或 `~/.bash_profile`，添加 `export KEY=VALUE`
+   - Windows: 调用 `setx` 命令或修改注册表 `HKCU\Environment`
+   - 验证：重新读取环境变量确认生效
+5. 更新任务状态（将回滚的插件标记为 'not_started'）
+
+---
+
+## 技术风险与缓解措施
+
+### 风险 1：权限问题
+- **风险**：Windows 修改环境变量需要管理员权限
+- **缓解**：检测权限不足时，生成 PowerShell 脚本供用户手动执行
+
+### 风险 2：大文件处理
+- **风险**：快照 2GB 安装包导致磁盘空间不足
+- **缓解**：大于 100MB 的文件仅记录哈希，不复制内容
+
+### 风险 3：快照格式升级
+- **风险**：未来版本无法读取旧快照
+- **缓解**：在快照中添加 `version` 字段，实现向后兼容的加载器
+
+### 风险 4：macOS 系统完整性保护（SIP）
+- **风险**：SIP 可能阻止某些系统目录的快照
+- **缓解**：检测受保护路径，跳过快照并记录警告
+
+### 风险 5：并发任务冲突
+- **风险**：用户同时运行多个任务，快照可能相互干扰
+- **缓解**：使用任务 ID 隔离快照，每个任务独立管理
+
+### 风险 6：符号链接循环引用
+- **风险**：快照符号链接可能导致无限循环
+- **缓解**：记录符号链接目标但不追踪目标内容，检测循环引用
 
 ---
 
@@ -602,44 +645,49 @@ export type EnvSetupApi = {
 
 ### 实施路线图
 
-#### 阶段 1：核心基础设施（2-3 天）
-- [ ] 实现对象存储模块（SHA-256 哈希、内容寻址）
+#### 阶段 1：核心基础设施（4-5 天）
+- [ ] 实现对象存储模块（SHA-256 哈希、内容寻址、引用计数）
 - [ ] 实现快照索引的创建和加载
-- [ ] 实现快照元数据管理（数量限制、自动清理）
-- [ ] 单元测试：对象存储、快照创建/加载
+- [ ] 实现快照元数据管理（数量限制、自动清理、垃圾回收）
+- [ ] 实现文件追踪策略（大文件处理、符号链接、排除规则）
+- [ ] 单元测试：对象存储、快照创建/加载、垃圾回收
 
-#### 阶段 2：预检增强（1-2 天）
+#### 阶段 2：预检增强（2-3 天）
 - [ ] 扩展插件接口，支持返回结构化的 InstallPlan
 - [ ] 实现执行计划生成和汇总
-- [ ] 实现冲突检测逻辑
+- [ ] 实现冲突检测逻辑（文件、环境变量、版本）
 - [ ] 实现影响摘要计算
+- [ ] 处理边界情况（大文件、符号链接、并发任务）
 - [ ] 单元测试：计划生成、冲突检测
 
-#### 阶段 3：智能回滚（1-2 天）
-- [ ] 实现失败分析逻辑
-- [ ] 实现回滚建议生成
+#### 阶段 3：智能回滚（2-3 天）
+- [ ] 实现失败分析逻辑（依赖关系分析）
+- [ ] 实现回滚建议生成（minimal/plugin/full）
 - [ ] 实现快照应用（全量和部分）
+- [ ] 实现环境变量持久化（macOS/Windows）
+- [ ] 处理权限问题和 SIP 限制
 - [ ] 单元测试：失败分析、回滚建议、快照应用
 
-#### 阶段 4：系统集成（1 天）
+#### 阶段 4：系统集成（1-2 天）
 - [ ] 集成快照到任务执行流程
 - [ ] 集成增强预检到预检流程
 - [ ] 添加新的 IPC 通道
+- [ ] 处理快照版本兼容性
 - [ ] 集成测试：完整流程测试
 
-#### 阶段 5：UI 实现（1-2 天）
+#### 阶段 5：UI 实现（2-3 天）
 - [ ] 实现快照管理界面
-- [ ] 增强预检结果展示
-- [ ] 实现回滚对话框
+- [ ] 增强预检结果展示（分级展示）
+- [ ] 实现回滚对话框（智能推荐 + 用户调整）
 - [ ] E2E 测试：UI 交互测试
 
-#### 阶段 6：优化与文档（1 天）
+#### 阶段 6：优化与文档（1-2 天）
 - [ ] 性能优化（并行哈希计算、流式读写）
-- [ ] 错误处理完善
+- [ ] 错误处理完善（中断恢复、冲突处理）
 - [ ] 编写用户文档
 - [ ] 代码审查和重构
 
-**总计：7-11 天**
+**总计：12-18 天**
 
 ---
 
@@ -655,4 +703,63 @@ export type EnvSetupApi = {
 6. **模块化设计**：三个独立模块（快照、预检、回滚），易于扩展和维护
 
 该方案在功能完整性、存储效率、用户体验之间取得了良好的平衡，预计 7-11 天可完成实施。
+
+
+### 回滚数据结构（补充完整定义）
+
+#### 失败分析（FailureAnalysis）
+
+```typescript
+type FailureAnalysis = {
+  failedPlugins: Array<{
+    pluginId: string
+    error: string
+    affectedFiles: string[]
+    affectedEnvVars: string[]
+  }>
+  dependentPlugins: Array<{
+    pluginId: string
+    dependsOn: string[]  // 依赖的失败插件 ID
+  }>
+}
+```
+
+#### 回滚建议（RollbackSuggestion - 完整定义）
+
+```typescript
+type RollbackSuggestion = {
+  recommended: 'minimal' | 'plugin' | 'full'
+  options: {
+    minimal: RollbackOption
+    plugin: RollbackOption
+    full: RollbackOption
+  }
+  failureAnalysis: FailureAnalysis
+}
+
+type RollbackOption = {
+  scope: 'minimal' | 'plugin' | 'full'
+  pluginsToRollback: string[]
+  description: string
+  impact: {
+    filesRestored: number
+    envVariablesRestored: number
+    shellConfigsRestored: number
+  }
+}
+```
+
+#### 扩展任务类型（InstallTask）
+
+```typescript
+// 在现有 InstallTask 类型基础上扩展
+type InstallTask = {
+  // ... 现有字段
+  
+  // 新增字段
+  enhancedPrecheck?: EnhancedPrecheckResult
+  rollbackSuggestion?: RollbackSuggestion
+  snapshotId?: string  // 关联的快照 ID
+}
+```
 
