@@ -62,9 +62,17 @@ const REFS_FILE = 'objects-refs.json'
 export async function loadRefCounts(baseDir: string): Promise<ObjectRefs> {
   try {
     const content = await readFile(join(baseDir, REFS_FILE), 'utf8')
-    return JSON.parse(content) as ObjectRefs
+    const parsed = JSON.parse(content) as ObjectRefs
+    // 结构校验：损坏时恢复为空引用表
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return {}
+    }
+    return parsed
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (
+      (error as NodeJS.ErrnoException).code === 'ENOENT' ||
+      error instanceof SyntaxError
+    ) {
       return {}
     }
     throw error
@@ -81,6 +89,18 @@ async function saveRefCounts(baseDir: string, refs: ObjectRefs): Promise<void> {
 export async function incrementRefCount(baseDir: string, hash: string): Promise<void> {
   const refs = await loadRefCounts(baseDir)
   refs[hash] = (refs[hash] ?? 0) + 1
+  await saveRefCounts(baseDir, refs)
+}
+
+/**
+ * 批量增加对象引用计数（一次 load+save，避免串行多次 I/O）
+ */
+async function batchIncrementRefCounts(baseDir: string, hashes: string[]): Promise<void> {
+  if (hashes.length === 0) return
+  const refs = await loadRefCounts(baseDir)
+  for (const hash of hashes) {
+    refs[hash] = (refs[hash] ?? 0) + 1
+  }
   await saveRefCounts(baseDir, refs)
 }
 
@@ -116,20 +136,24 @@ export async function createSnapshot(options: {
   const objectsDir = join(options.baseDir, 'objects')
   const files: Snapshot['files'] = {}
 
-  for (const filePath of options.trackedPaths) {
-    try {
-      const content = await readFile(filePath)
-      const fileStat = await stat(filePath)
-      const hash = await storeObject(objectsDir, content)
-      await incrementRefCount(options.baseDir, hash)
-
-      files[filePath] = {
-        hash,
-        mode: fileStat.mode,
-        size: fileStat.size,
+  // 并行处理所有 trackedPaths
+  const fileResults = await Promise.all(
+    options.trackedPaths.map(async (filePath) => {
+      try {
+        const [content, fileStat] = await Promise.all([readFile(filePath), stat(filePath)])
+        const hash = await storeObject(objectsDir, content)
+        return { filePath, hash, mode: fileStat.mode, size: fileStat.size } as const
+      } catch {
+        return null
       }
-    } catch {
-      // 跳过无法读取的文件（不存在、权限问题等）
+    }),
+  )
+
+  const fileHashes: string[] = []
+  for (const r of fileResults) {
+    if (r) {
+      files[r.filePath] = { hash: r.hash, mode: r.mode, size: r.size }
+      fileHashes.push(r.hash)
     }
   }
 
@@ -138,7 +162,7 @@ export async function createSnapshot(options: {
     path: (process.env.PATH ?? '').split(delimiter),
   }
 
-  // 捕获 shell 配置文件
+  // 并行捕获 shell 配置文件
   const shellConfigs: Snapshot['shellConfigs'] = {}
   const homeDir = homedir()
   const configPaths =
@@ -146,17 +170,29 @@ export async function createSnapshot(options: {
       ? [join(homeDir, '.profile')]
       : [join(homeDir, '.zshrc'), join(homeDir, '.bash_profile'), join(homeDir, '.bashrc')]
 
-  for (const configPath of configPaths) {
-    try {
-      const content = await readFile(configPath)
-      const hash = await storeObject(objectsDir, content)
-      await incrementRefCount(options.baseDir, hash)
-      const lines = content.toString('utf8').split('\n').length
-      shellConfigs[configPath] = { hash, lines }
-    } catch {
-      // 配置文件不存在时跳过
+  const shellResults = await Promise.all(
+    configPaths.map(async (configPath) => {
+      try {
+        const content = await readFile(configPath)
+        const hash = await storeObject(objectsDir, content)
+        const lines = content.toString('utf8').split('\n').length
+        return { configPath, hash, lines } as const
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  const shellHashes: string[] = []
+  for (const r of shellResults) {
+    if (r) {
+      shellConfigs[r.configPath] = { hash: r.hash, lines: r.lines }
+      shellHashes.push(r.hash)
     }
   }
+
+  // 批量更新引用计数（一次 I/O）
+  await batchIncrementRefCounts(options.baseDir, [...fileHashes, ...shellHashes])
 
   const snapshot: Snapshot = {
     id: randomUUID(),
@@ -206,9 +242,17 @@ const DEFAULT_MAX_SNAPSHOTS = 5
 export async function loadSnapshotMeta(baseDir: string): Promise<SnapshotMeta> {
   try {
     const content = await readFile(join(baseDir, META_FILE), 'utf8')
-    return JSON.parse(content) as SnapshotMeta
+    const parsed = JSON.parse(content) as SnapshotMeta
+    // 结构校验：损坏时恢复为空 meta
+    if (!Array.isArray(parsed?.snapshots)) {
+      return { snapshots: [], maxSnapshots: DEFAULT_MAX_SNAPSHOTS }
+    }
+    return parsed
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (
+      (error as NodeJS.ErrnoException).code === 'ENOENT' ||
+      error instanceof SyntaxError
+    ) {
       return { snapshots: [], maxSnapshots: DEFAULT_MAX_SNAPSHOTS }
     }
     throw error
