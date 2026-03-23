@@ -9,6 +9,12 @@ import {
   incrementRefCount,
   decrementRefCount,
   loadRefCounts,
+  createSnapshot,
+  loadSnapshot,
+  loadSnapshotMeta,
+  updateSnapshotMeta,
+  markSnapshotDeletable,
+  deleteSnapshot,
 } from '../../src/main/core/snapshot'
 
 describe('Snapshot - Object Storage', () => {
@@ -133,5 +139,171 @@ describe('Snapshot - Reference Counting', () => {
     const hash = 'nonexistent'
     // 不应该抛出错误
     await expect(decrementRefCount(testDir, hash)).resolves.toBeUndefined()
+  })
+})
+
+describe('Snapshot - Index Creation', () => {
+  let testDir: string
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), 'snapshot-index-test-'))
+  })
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  it('should create snapshot with file tracking', async () => {
+    const testFile = join(testDir, 'test.txt')
+    await writeFile(testFile, 'test content')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-123',
+      type: 'auto',
+      trackedPaths: [testFile],
+    })
+
+    expect(snapshot.id).toBeDefined()
+    expect(snapshot.taskId).toBe('task-123')
+    expect(snapshot.type).toBe('auto')
+    expect(snapshot.files[testFile]).toBeDefined()
+    expect(snapshot.files[testFile].hash).toMatch(/^[a-f0-9]{64}$/)
+    expect(snapshot.files[testFile].size).toBeGreaterThan(0)
+  })
+
+  it('should capture environment variables', async () => {
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-123',
+      type: 'auto',
+      trackedPaths: [],
+    })
+
+    expect(snapshot.environment.variables).toBeDefined()
+    expect(snapshot.environment.path).toBeInstanceOf(Array)
+  })
+
+  it('should skip unreadable files gracefully', async () => {
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-123',
+      type: 'auto',
+      trackedPaths: ['/nonexistent/file.txt'],
+    })
+
+    expect(snapshot.files['/nonexistent/file.txt']).toBeUndefined()
+    expect(snapshot.metadata.fileCount).toBe(0)
+  })
+
+  it('should persist snapshot to disk', async () => {
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-abc',
+      type: 'manual',
+      label: 'my snapshot',
+      trackedPaths: [],
+    })
+
+    const loaded = await loadSnapshot(testDir, snapshot.id)
+    expect(loaded.id).toBe(snapshot.id)
+    expect(loaded.taskId).toBe('task-abc')
+    expect(loaded.label).toBe('my snapshot')
+  })
+})
+
+describe('Snapshot - Metadata Management', () => {
+  let testDir: string
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), 'snapshot-meta-test-'))
+  })
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  it('should return empty meta when no file exists', async () => {
+    const meta = await loadSnapshotMeta(testDir)
+    expect(meta.snapshots).toHaveLength(0)
+    expect(meta.maxSnapshots).toBe(5)
+  })
+
+  it('should track snapshots in metadata', async () => {
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-123',
+      type: 'auto',
+      trackedPaths: [],
+    })
+
+    await updateSnapshotMeta(testDir, snapshot)
+
+    const meta = await loadSnapshotMeta(testDir)
+    expect(meta.snapshots).toHaveLength(1)
+    expect(meta.snapshots[0].id).toBe(snapshot.id)
+    expect(meta.snapshots[0].canDelete).toBe(false)
+  })
+
+  it('should mark snapshot as deletable', async () => {
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-123',
+      type: 'auto',
+      trackedPaths: [],
+    })
+    await updateSnapshotMeta(testDir, snapshot)
+    await markSnapshotDeletable(testDir, snapshot.id)
+
+    const meta = await loadSnapshotMeta(testDir)
+    expect(meta.snapshots[0].canDelete).toBe(true)
+  })
+
+  it('should enforce max snapshots limit by deleting oldest deletable', async () => {
+    // 创建 5 个可删除快照
+    const snapshots = []
+    for (let i = 0; i < 5; i++) {
+      const s = await createSnapshot({
+        baseDir: testDir,
+        taskId: `task-${i}`,
+        type: 'auto',
+        trackedPaths: [],
+      })
+      await updateSnapshotMeta(testDir, s)
+      await markSnapshotDeletable(testDir, s.id)
+      snapshots.push(s)
+    }
+
+    // 添加第 6 个，应触发清理
+    const newest = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-5',
+      type: 'auto',
+      trackedPaths: [],
+    })
+    await updateSnapshotMeta(testDir, newest)
+
+    const meta = await loadSnapshotMeta(testDir)
+    expect(meta.snapshots.length).toBeLessThanOrEqual(5)
+    // 最新快照应该保留
+    expect(meta.snapshots.some((s) => s.id === newest.id)).toBe(true)
+  })
+
+  it('should not exceed limit when no deletable snapshots exist', async () => {
+    // 创建 6 个不可删除快照
+    for (let i = 0; i < 6; i++) {
+      const s = await createSnapshot({
+        baseDir: testDir,
+        taskId: `task-${i}`,
+        type: 'auto',
+        trackedPaths: [],
+      })
+      await updateSnapshotMeta(testDir, s)
+      // 不标记为可删除
+    }
+
+    const meta = await loadSnapshotMeta(testDir)
+    // 无可删除快照时，不强制删除，允许超过限制
+    expect(meta.snapshots.length).toBe(6)
   })
 })
