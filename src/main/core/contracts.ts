@@ -271,6 +271,10 @@ export type InstallTask = {
   updatedAt: string
   startedAt?: string
   finishedAt?: string
+  // 快照回滚集成
+  snapshotId?: string
+  enhancedPrecheck?: EnhancedPrecheckResult
+  rollbackSuggestions?: RollbackSuggestion[]
 }
 
 // ============================================================

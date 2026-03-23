@@ -13,6 +13,7 @@ import {
   createSnapshot,
   deleteSnapshot,
   loadSnapshotMeta,
+  markSnapshotDeletable,
 } from '../core/snapshot'
 import {
   createTask,
@@ -114,6 +115,21 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('task:start', async (_event, taskId: string) => {
     const paths = await ensureAppPaths()
     const task = await getTask(taskId, paths.tasksDir)
+
+    // 任务开始前创建快照
+    let snapshotId: string | undefined
+    try {
+      const snapshot = await createSnapshot({
+        baseDir: paths.snapshotsDir,
+        taskId: task.id,
+        type: 'auto',
+        trackedPaths: [],
+      })
+      snapshotId = snapshot.id
+    } catch {
+      // 快照创建失败不阻断任务执行
+    }
+
     const nextTask = await executeTask({
       task,
       registry: BUILTIN_PLUGINS,
@@ -121,8 +137,30 @@ export function registerIpcHandlers(): void {
       tasksDir: paths.tasksDir,
       dryRun: true,
     })
-    taskCache.set(nextTask.id, nextTask)
-    return nextTask
+
+    const taskWithSnapshot: typeof nextTask = { ...nextTask, snapshotId }
+
+    // 任务成功时标记快照可删除
+    if (nextTask.status === 'succeeded' && snapshotId) {
+      try {
+        await markSnapshotDeletable(paths.snapshotsDir, snapshotId)
+      } catch {
+        // 非关键操作，忽略错误
+      }
+    }
+
+    // 任务失败时生成回滚建议
+    if (nextTask.status === 'failed' && snapshotId) {
+      try {
+        const rollbackSuggestions = await suggestRollbackSnapshots(paths.snapshotsDir, task.id)
+        Object.assign(taskWithSnapshot, { rollbackSuggestions })
+      } catch {
+        // 非关键操作，忽略错误
+      }
+    }
+
+    taskCache.set(taskWithSnapshot.id, taskWithSnapshot)
+    return taskWithSnapshot
   })
 
   ipcMain.handle(
