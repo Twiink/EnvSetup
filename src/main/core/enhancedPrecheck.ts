@@ -1,0 +1,135 @@
+import type {
+  ConflictItem,
+  EnhancedPrecheckResult,
+  FileOperation,
+  ImpactSummary,
+  InstallPlan,
+} from './contracts'
+
+type PluginDryRunResult = {
+  downloads?: Array<{ url: string; size?: number }>
+  commands?: string[]
+  envChanges?: Array<{ key: string; value: string; action: 'set' | 'append' | 'remove' }>
+  files?: Array<{ path: string; action: 'create' | 'modify' | 'delete' | 'symlink'; size?: number }>
+}
+
+const DEFAULT_FILE_SIZE = 1_048_576   // 1 MB
+const DEFAULT_DOWNLOAD_SIZE = 10_485_760  // 10 MB
+const MS_PER_COMMAND = 5_000
+const MS_PER_10MB_DOWNLOAD = 3_000
+
+export function generateInstallPlan(pluginResults: PluginDryRunResult[]): InstallPlan {
+  const fileOperations: FileOperation[] = []
+  const envChanges: InstallPlan['envChanges'] = []
+  let estimatedDownloadSize = 0
+
+  for (const result of pluginResults) {
+    // Collect file operations
+    for (const f of result.files ?? []) {
+      fileOperations.push({ type: f.action, path: f.path, size: f.size })
+    }
+
+    // Collect env changes
+    for (const e of result.envChanges ?? []) {
+      envChanges.push({ key: e.key, value: e.value, action: e.action })
+    }
+
+    // Sum download sizes
+    for (const d of result.downloads ?? []) {
+      estimatedDownloadSize += d.size ?? DEFAULT_DOWNLOAD_SIZE
+    }
+  }
+
+  // Disk usage: sum of create/modify file sizes
+  const estimatedDiskUsage = fileOperations
+    .filter((f) => f.type === 'create' || f.type === 'modify')
+    .reduce((sum, f) => sum + (f.size ?? DEFAULT_FILE_SIZE), 0)
+
+  // Duration: commands * 5s + download chunks * 3s per 10MB
+  const totalCommands = pluginResults.reduce((sum, r) => sum + (r.commands?.length ?? 0), 0)
+  const downloadChunks = estimatedDownloadSize / (10 * 1_048_576)
+  const estimatedDurationMs =
+    totalCommands * MS_PER_COMMAND + Math.ceil(downloadChunks) * MS_PER_10MB_DOWNLOAD
+
+  return {
+    fileOperations,
+    envChanges,
+    estimatedDiskUsage,
+    estimatedDownloadSize,
+    estimatedDurationMs,
+    pluginCount: pluginResults.length,
+  }
+}
+
+export function detectConflicts(
+  plan: InstallPlan,
+  existingPaths: string[],
+  existingEnvVars: Record<string, string>,
+): ConflictItem[] {
+  const conflicts: ConflictItem[] = []
+  const existingPathSet = new Set(existingPaths)
+
+  // file_exists: create operations targeting existing paths
+  for (const op of plan.fileOperations) {
+    if (op.type === 'create' && existingPathSet.has(op.path)) {
+      conflicts.push({
+        type: 'file_exists',
+        path: op.path,
+        detail: `File already exists: ${op.path}`,
+      })
+    }
+  }
+
+  // env_conflict: set operations on already-defined env vars
+  for (const change of plan.envChanges) {
+    if (change.action === 'set' && change.key in existingEnvVars) {
+      conflicts.push({
+        type: 'env_conflict',
+        key: change.key,
+        detail: `Environment variable already set: ${change.key}=${existingEnvVars[change.key]}`,
+      })
+    }
+  }
+
+  // version_mismatch: not implemented yet
+
+  return conflicts
+}
+
+export function generateImpactSummary(plan: InstallPlan): ImpactSummary {
+  let filesCreated = 0
+  let filesModified = 0
+  let filesDeleted = 0
+
+  for (const op of plan.fileOperations) {
+    if (op.type === 'create' || op.type === 'symlink') filesCreated++
+    else if (op.type === 'modify') filesModified++
+    else if (op.type === 'delete') filesDeleted++
+  }
+
+  return {
+    filesCreated,
+    filesModified,
+    filesDeleted,
+    envVarsChanged: plan.envChanges.length,
+    totalDiskUsage: plan.estimatedDiskUsage,
+    estimatedDurationMs: plan.estimatedDurationMs,
+  }
+}
+
+export function runEnhancedPrecheck(
+  pluginResults: PluginDryRunResult[],
+  existingPaths: string[],
+  existingEnvVars: Record<string, string>,
+): EnhancedPrecheckResult {
+  const plan = generateInstallPlan(pluginResults)
+  const conflicts = detectConflicts(plan, existingPaths, existingEnvVars)
+  const impact = generateImpactSummary(plan)
+
+  return {
+    plan,
+    conflicts,
+    impact,
+    canProceed: conflicts.length === 0,
+  }
+}

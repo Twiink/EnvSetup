@@ -327,6 +327,48 @@ export type ObjectRefs = {
   [hash: string]: number  // hash -> 引用计数
 }
 
+// ============================================================
+// 增强预检类型
+// ============================================================
+
+export type FileOperation = {
+  type: 'create' | 'modify' | 'delete' | 'symlink'
+  path: string
+  size?: number  // 字节
+}
+
+export type InstallPlan = {
+  fileOperations: FileOperation[]
+  envChanges: Array<{ key: string; value: string; action: 'set' | 'append' | 'remove' }>
+  estimatedDiskUsage: number  // 字节
+  estimatedDownloadSize: number  // 字节
+  estimatedDurationMs: number
+  pluginCount: number
+}
+
+export type ConflictItem = {
+  type: 'file_exists' | 'env_conflict' | 'version_mismatch'
+  path?: string
+  key?: string
+  detail: string
+}
+
+export type ImpactSummary = {
+  filesCreated: number
+  filesModified: number
+  filesDeleted: number
+  envVarsChanged: number
+  totalDiskUsage: number
+  estimatedDurationMs: number
+}
+
+export type EnhancedPrecheckResult = {
+  plan: InstallPlan
+  conflicts: ConflictItem[]
+  impact: ImpactSummary
+  canProceed: boolean  // false 表示有阻断性冲突
+}
+
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
