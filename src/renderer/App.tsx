@@ -88,7 +88,11 @@ export default function App() {
           window.envSetup.listTemplates(),
           window.envSetup.listNodeLtsVersions(),
         ])
-        if (!active || nextTemplates.length === 0) {
+        if (!active) {
+          return
+        }
+        if (nextTemplates.length === 0) {
+          setError('No templates found — fixtures/templates may be missing or empty')
           return
         }
 
