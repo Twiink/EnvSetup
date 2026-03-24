@@ -17,6 +17,8 @@ test('user can select template and create task', async () => {
   const app = await electron.launch({ args: ['.'] })
   const page = await app.firstWindow()
 
+  // Wait for templates to load asynchronously before interacting
+  await expect(page.getByRole('button', { name: '前端开发环境' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: '前端开发环境' }).click()
   await page.locator('select[id="frontend.nodeVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
