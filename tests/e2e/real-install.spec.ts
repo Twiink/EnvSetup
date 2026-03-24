@@ -64,7 +64,8 @@ test.describe('real install', () => {
       await page.getByRole('button', { name: '开始执行' }).click()
 
       // Wait for task to reach terminal state (success or failure)
-      await expect(page.getByText(/verified_success|succeeded|全部完成|failed|失败/).first()).toBeVisible({
+      // UI renders zh-CN labels: 成功 (succeeded), 校验成功 (verified_success), 失败 (failed), 部分成功 (partially_succeeded)
+      await expect(page.getByText(/成功|失败|Succeeded|Failed|Verified/).first()).toBeVisible({
         timeout: 150_000,
       })
 
@@ -72,7 +73,7 @@ test.describe('real install', () => {
       await dumpTaskLogs(dataDir)
 
       // Fail the test if the task actually failed
-      const didFail = await page.getByText(/failed|失败/).first().isVisible()
+      const didFail = await page.getByText(/^失败$|^Failed$/).first().isVisible()
       if (didFail) {
         throw new Error('Task reached failed state — see task log output above for details')
       }
