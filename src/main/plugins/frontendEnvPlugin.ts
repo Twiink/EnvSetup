@@ -227,7 +227,7 @@ function buildDarwinNvmCommands(input: FrontendPluginParams): string[] {
     `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
     `cp -R ${quoteShell(`${extractedDir}/.`)} ${quoteShell(installPaths.nvmDir)}`,
     `rm -rf ${quoteShell(extractedDir)} ${quoteShell(archivePath)}`,
-    `unset npm_config_prefix; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm install ${input.nodeVersion} && nvm alias default ${input.nodeVersion} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
+    `unset npm_config_prefix npm_config_globalconfig; if command -v npm >/dev/null 2>&1; then npm config delete prefix 2>/dev/null || true; npm config delete globalconfig 2>/dev/null || true; fi; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm install ${input.nodeVersion} && nvm alias default ${input.nodeVersion} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
   ]
 }
 
@@ -266,13 +266,14 @@ function buildWindowsNvmCommands(input: FrontendPluginParams): string[] {
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.nvmDir)} | Out-Null`,
-    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)} | Out-Null`,
+    // Do NOT pre-create nvmWindowsSymlinkDir — nvm-windows creates it as a directory junction via `nvm use`.
+    // Pre-creating it as a real directory prevents the junction from being established.
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmCacheDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmGlobalPrefix)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.nvmDir)} -Force`,
     `@('root: ${installPaths.nvmDir}','path: ${installPaths.nvmWindowsSymlinkDir}','arch: 64','proxy: none','node_mirror: ${NODEJS_DIST_BASE_URL}/') | Set-Content -LiteralPath ${quotePowerShell(settingsPath)} -Encoding ASCII`,
-    `$_nvm = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmDir)}); $_sym = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}); $env:NVM_HOME = $_nvm; $env:NVM_SYMLINK = $_sym; $env:Path = $_nvm + ';' + $_sym + ';' + $env:Path; & "$_nvm\\nvm.exe" install ${input.nodeVersion}; & "$_nvm\\nvm.exe" use ${input.nodeVersion}; & "$_sym\\npm.cmd" config set cache ${quotePowerShell(input.npmCacheDir)}; & "$_sym\\npm.cmd" config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
+    `$ErrorActionPreference = 'Stop'; $_nvm = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmDir)}); $_sym = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}); $env:NVM_HOME = $_nvm; $env:NVM_SYMLINK = $_sym; $env:Path = $_nvm + ';' + $_sym + ';' + $env:Path; & "$_nvm\\nvm.exe" install ${input.nodeVersion}; if ($LASTEXITCODE -ne 0) { throw "nvm install failed (exit code $LASTEXITCODE)" }; & "$_nvm\\nvm.exe" use ${input.nodeVersion}; if ($LASTEXITCODE -ne 0) { throw "nvm use failed (exit code $LASTEXITCODE)" }; Start-Sleep -Seconds 2; & "$_sym\\npm.cmd" config set cache ${quotePowerShell(input.npmCacheDir)}; & "$_sym\\npm.cmd" config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
   ]
 }
 
@@ -293,8 +294,8 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 
   if (input.platform === 'darwin' && input.nodeManager === 'nvm') {
     return [
-      `unset npm_config_prefix; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm which ${input.nodeVersion}`,
-      `unset npm_config_prefix; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && npm config get cache && npm config get prefix`,
+      `unset npm_config_prefix npm_config_globalconfig; if command -v npm >/dev/null 2>&1; then npm config delete prefix 2>/dev/null || true; npm config delete globalconfig 2>/dev/null || true; fi; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm which ${input.nodeVersion}`,
+      `unset npm_config_prefix npm_config_globalconfig; if command -v npm >/dev/null 2>&1; then npm config delete prefix 2>/dev/null || true; npm config delete globalconfig 2>/dev/null || true; fi; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && npm config get cache && npm config get prefix`,
     ]
   }
 
@@ -334,7 +335,7 @@ async function runCommands(
               '-Command',
               command,
             ])
-          : await execFileAsync('sh', ['-lc', command])
+          : await execFileAsync('sh', ['-c', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
     } catch (err: unknown) {
