@@ -8,6 +8,7 @@ const api: EnvSetupApi = {
   runPrecheck: (payload) => ipcRenderer.invoke('task:precheck', payload),
   createTask: (payload) => ipcRenderer.invoke('task:create', payload),
   startTask: (taskId) => ipcRenderer.invoke('task:start', taskId),
+  cancelTask: (taskId) => ipcRenderer.invoke('task:cancel', taskId),
   retryPlugin: (taskId, pluginId) => ipcRenderer.invoke('task:retry-plugin', { taskId, pluginId }),
   cleanupEnvironment: (detection) => ipcRenderer.invoke('environment:cleanup', detection),
   pickDirectory: (defaultPath) => ipcRenderer.invoke('dialog:pick-directory', { defaultPath }),

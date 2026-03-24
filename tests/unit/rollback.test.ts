@@ -93,9 +93,7 @@ describe('suggestRollbackSnapshots', () => {
   it('assigns medium confidence to auto snapshots from different taskId', async () => {
     mockLoadSnapshotMeta.mockResolvedValue(
       makeMeta({
-        snapshots: [
-          makeSnapEntry('snap-other', 'task-other', 'auto', '2024-01-01T08:00:00Z'),
-        ],
+        snapshots: [makeSnapEntry('snap-other', 'task-other', 'auto', '2024-01-01T08:00:00Z')],
       }),
     )
 
@@ -189,9 +187,7 @@ describe('suggestRollbackSnapshots', () => {
 
     mockLoadSnapshotMeta.mockResolvedValue(
       makeMeta({
-        snapshots: [
-          makeSnapEntry('snap-current', 'task-1', 'auto', '2024-01-01T11:00:00Z'),
-        ],
+        snapshots: [makeSnapEntry('snap-current', 'task-1', 'auto', '2024-01-01T11:00:00Z')],
       }),
     )
 
@@ -311,8 +307,6 @@ describe('executeRollback', () => {
 
     await executeRollback('/base', 'snap-1', [])
 
-    expect(mockApplySnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ restoreEnv: false }),
-    )
+    expect(mockApplySnapshot).toHaveBeenCalledWith(expect.objectContaining({ restoreEnv: false }))
   })
 })

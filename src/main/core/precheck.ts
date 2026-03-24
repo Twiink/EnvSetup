@@ -73,6 +73,11 @@ export async function buildRuntimePrecheckInput(
       : process.cwd()
   const currentPlatform = process.platform === 'win32' ? 'win32' : 'darwin'
 
+  // Template-level checks: identify which declared tool checks have environment conflicts
+  const failedTemplateChecks = template.checks.filter((toolId) =>
+    detections.some((d) => d.tool === toolId),
+  )
+
   return {
     platformSupported: template.platforms.includes(currentPlatform),
     archSupported: isSupportedArchForPlatform(currentPlatform, process.arch),
@@ -89,6 +94,7 @@ export async function buildRuntimePrecheckInput(
     detections,
     networkAvailable: true,
     elevationRequired: false,
+    failedTemplateChecks: failedTemplateChecks.length > 0 ? failedTemplateChecks : undefined,
   }
 }
 
@@ -152,6 +158,19 @@ export async function runPrecheck(
       code: 'EXISTING_ENV_DETECTED',
       level: 'warn',
       message: getPrecheckMessage('EXISTING_ENV_DETECTED', locale),
+    })
+  }
+
+  if (input.failedTemplateChecks && input.failedTemplateChecks.length > 0) {
+    const toolList = input.failedTemplateChecks.join(', ')
+    const templateCheckMsg =
+      locale === 'zh-CN'
+        ? `模板声明的工具检查发现已有环境冲突：${toolList}`
+        : `Template-declared check found existing environment conflict for: ${toolList}`
+    items.push({
+      code: 'EXISTING_ENV_DETECTED',
+      level: 'warn',
+      message: templateCheckMsg,
     })
   }
 

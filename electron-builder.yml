@@ -1,0 +1,29 @@
+appId: com.envsetup.app
+productName: 开工吧
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+
+mac:
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+    - portable
+
+linux:
+  icon: build/icon.png
+  category: Development
+  target:
+    - AppImage
+    - deb

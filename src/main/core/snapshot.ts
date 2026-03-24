@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process'
+import { exec, execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
 import { access, chmod, mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises'
@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import type { AppPlatform, ObjectRefs, Snapshot, SnapshotMeta } from './contracts'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 // ============================================================
 // 对象存储（内容寻址）
@@ -69,10 +70,7 @@ export async function loadRefCounts(baseDir: string): Promise<ObjectRefs> {
     }
     return parsed
   } catch (error) {
-    if (
-      (error as NodeJS.ErrnoException).code === 'ENOENT' ||
-      error instanceof SyntaxError
-    ) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) {
       return {}
     }
     throw error
@@ -115,6 +113,21 @@ export async function decrementRefCount(baseDir: string, hash: string): Promise<
   refs[hash]--
   if (refs[hash] <= 0) {
     delete refs[hash]
+  }
+  await saveRefCounts(baseDir, refs)
+}
+
+/**
+ * 批量减少对象引用计数（一次 load+save，避免 N 次串行 I/O）
+ */
+async function batchDecrementRefCounts(baseDir: string, hashes: string[]): Promise<void> {
+  if (hashes.length === 0) return
+  const refs = await loadRefCounts(baseDir)
+  for (const hash of hashes) {
+    if (refs[hash] !== undefined) {
+      refs[hash]--
+      if (refs[hash] <= 0) delete refs[hash]
+    }
   }
   await saveRefCounts(baseDir, refs)
 }
@@ -249,17 +262,14 @@ export async function loadSnapshotMeta(baseDir: string): Promise<SnapshotMeta> {
     }
     return parsed
   } catch (error) {
-    if (
-      (error as NodeJS.ErrnoException).code === 'ENOENT' ||
-      error instanceof SyntaxError
-    ) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) {
       return { snapshots: [], maxSnapshots: DEFAULT_MAX_SNAPSHOTS }
     }
     throw error
   }
 }
 
-async function saveSnapshotMeta(baseDir: string, meta: SnapshotMeta): Promise<void> {
+export async function saveSnapshotMeta(baseDir: string, meta: SnapshotMeta): Promise<void> {
   await writeFile(join(baseDir, META_FILE), JSON.stringify(meta, null, 2))
 }
 
@@ -278,13 +288,18 @@ export async function updateSnapshotMeta(baseDir: string, snapshot: Snapshot): P
     canDelete: false,
   })
 
-  // 清理超过限制的可删除快照
+  // 清理超过限制的可删除快照（先删除物理文件，成功后再 splice，避免异常时 meta 提前变脏）
+  const failedIds = new Set<string>()
   while (meta.snapshots.length > meta.maxSnapshots) {
-    const deletableIdx = meta.snapshots.findIndex((s) => s.canDelete)
+    const deletableIdx = meta.snapshots.findIndex((s) => s.canDelete && !failedIds.has(s.id))
     if (deletableIdx === -1) break
     const toDelete = meta.snapshots[deletableIdx]
-    meta.snapshots.splice(deletableIdx, 1)
-    await deleteSnapshot(baseDir, toDelete.id)
+    try {
+      await deleteSnapshot(baseDir, toDelete.id)
+      meta.snapshots.splice(deletableIdx, 1)
+    } catch {
+      failedIds.add(toDelete.id)
+    }
   }
 
   await saveSnapshotMeta(baseDir, meta)
@@ -315,10 +330,8 @@ export async function deleteSnapshot(baseDir: string, snapshotId: string): Promi
     ...Object.values(snapshot.shellConfigs).map((c) => c.hash),
   ]
 
-  // 减少引用计数
-  for (const hash of hashes) {
-    await decrementRefCount(baseDir, hash)
-  }
+  // 批量减少引用计数（一次 load+save，避免 N 次串行 I/O）
+  await batchDecrementRefCounts(baseDir, hashes)
 
   // 加载更新后的引用计数，物理删除归零的对象文件
   const updatedRefs = await loadRefCounts(baseDir)
@@ -457,7 +470,7 @@ export async function restoreEnvironment(
       // 防止命令注入：key 只允许合法环境变量名，value 通过参数数组传入
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
       try {
-        await execAsync(`setx ${key} "${value.replace(/"/g, '')}"`)
+        await execFileAsync('setx', [key, value])
         count++
       } catch {
         // 忽略单条失败，继续处理其余变量

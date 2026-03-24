@@ -12,19 +12,20 @@
 
 ## File Map
 
-| File | Change |
-|------|--------|
-| `src/main/ipc/index.ts` | 2 lines: `dryRun: true` → reads `ENVSETUP_REAL_RUN` env var |
-| `src/main/plugins/frontendEnvPlugin.ts` | `toFrontendParams` reads `ENVSETUP_INSTALL_ROOT` to override `installRootDir` |
-| `playwright.config.ts` | Add `use: { screenshot: 'only-on-failure', video: 'retain-on-failure' }` |
-| `tests/e2e/real-install.spec.ts` | New: full install E2E, skipped unless `ENVSETUP_REAL_RUN=1` |
-| `.github/workflows/e2e-real-install.yml` | New: matrix CI workflow |
+| File                                     | Change                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/main/ipc/index.ts`                  | 2 lines: `dryRun: true` → reads `ENVSETUP_REAL_RUN` env var                   |
+| `src/main/plugins/frontendEnvPlugin.ts`  | `toFrontendParams` reads `ENVSETUP_INSTALL_ROOT` to override `installRootDir` |
+| `playwright.config.ts`                   | Add `use: { screenshot: 'only-on-failure', video: 'retain-on-failure' }`      |
+| `tests/e2e/real-install.spec.ts`         | New: full install E2E, skipped unless `ENVSETUP_REAL_RUN=1`                   |
+| `.github/workflows/e2e-real-install.yml` | New: matrix CI workflow                                                       |
 
 ---
 
 ## Task 1: Switch dryRun to read environment variable
 
 **Files:**
+
 - Modify: `src/main/ipc/index.ts:156` and `:203`
 
 - [ ] **Step 1: Open the file and locate the two dryRun lines**
@@ -34,13 +35,17 @@
 - [ ] **Step 2: Replace both occurrences**
 
   Change:
+
   ```ts
   dryRun: true,
   ```
+
   To:
+
   ```ts
   dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
   ```
+
   Apply to **both** locations (line ~156 in `task:start` and line ~203 in `task:retry-plugin`).
 
 - [ ] **Step 3: Verify existing tests still pass**
@@ -48,6 +53,7 @@
   ```bash
   npm test
   ```
+
   Expected: all existing unit tests pass. The env var is not set in test env, so `dryRun` remains `true` by default — no behavior change.
 
 - [ ] **Step 4: Commit**
@@ -62,6 +68,7 @@
 ## Task 2: Add ENVSETUP_INSTALL_ROOT override in frontendEnvPlugin
 
 **Files:**
+
 - Modify: `src/main/plugins/frontendEnvPlugin.ts` — `toFrontendParams` function (~line 134)
 
 Context: `installRootDir` is required but set via UI file picker. In CI, Playwright can't click the picker, so the plugin reads an env var override instead.
@@ -99,6 +106,7 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
   ```bash
   npx vitest run tests/unit/frontend-plugin.test.ts
   ```
+
   Expected: all pass. The override only activates when `installRootDir` is absent/empty, which doesn't happen in existing tests.
 
 - [ ] **Step 4: Commit**
@@ -113,11 +121,13 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
 ## Task 3: Update playwright.config.ts for failure artifacts
 
 **Files:**
+
 - Modify: `playwright.config.ts`
 
 - [ ] **Step 1: Add use block with screenshot and video**
 
   Current content:
+
   ```ts
   export default defineConfig({
     testDir: './tests/e2e',
@@ -127,6 +137,7 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
   ```
 
   Change to:
+
   ```ts
   export default defineConfig({
     testDir: './tests/e2e',
@@ -144,6 +155,7 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
   ```bash
   npm run build && npm run test:e2e
   ```
+
   Expected: existing `app.spec.ts` tests pass.
 
 - [ ] **Step 3: Commit**
@@ -158,6 +170,7 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
 ## Task 4: Write real-install E2E spec
 
 **Files:**
+
 - Create: `tests/e2e/real-install.spec.ts`
 
 - [ ] **Step 1: Create the spec file**
@@ -205,9 +218,9 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
       await page.getByRole('button', { name: '启动任务' }).click()
 
       // Wait for task to reach terminal state
-      await expect(
-        page.getByText(/verified_success|succeeded|全部完成/),
-      ).toBeVisible({ timeout: 150_000 })
+      await expect(page.getByText(/verified_success|succeeded|全部完成/)).toBeVisible({
+        timeout: 150_000,
+      })
 
       await app.close()
     })
@@ -219,6 +232,7 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
   ```bash
   npm run build && npm run test:e2e
   ```
+
   Expected: `real-install.spec.ts` shows as skipped, existing tests pass.
 
 - [ ] **Step 3: Commit**
@@ -233,6 +247,7 @@ Context: `installRootDir` is required but set via UI file picker. In CI, Playwri
 ## Task 5: Add GitHub Actions workflow
 
 **Files:**
+
 - Create: `.github/workflows/e2e-real-install.yml`
 
 - [ ] **Step 1: Create the .github/workflows directory if it doesn't exist**

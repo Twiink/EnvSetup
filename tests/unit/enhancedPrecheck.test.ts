@@ -1,6 +1,10 @@
 import { existsSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DownloadArtifact, EnvChange, PluginInstallResult } from '../../src/main/core/contracts'
+import type {
+  DownloadArtifact,
+  EnvChange,
+  PluginInstallResult,
+} from '../../src/main/core/contracts'
 import {
   detectConflicts,
   generateImpactSummary,
@@ -32,11 +36,7 @@ function makeResult(overrides: Partial<PluginInstallResult> = {}): PluginInstall
   }
 }
 
-function makeEnvChange(
-  key: string,
-  value: string,
-  kind: EnvChange['kind'] = 'env',
-): EnvChange {
+function makeEnvChange(key: string, value: string, kind: EnvChange['kind'] = 'env'): EnvChange {
   return { kind, key, value, scope: 'user', description: '' }
 }
 
@@ -284,13 +284,9 @@ describe('runPrecheck', () => {
 
   it('detects existing paths from plugin paths via existsSync', async () => {
     vi.mocked(existsSync).mockImplementation((p) => p === '/usr/local/bin/node')
-    const plan = generateInstallPlan([
-      makeResult({ paths: { bin: '/usr/local/bin/node' } }),
-    ])
+    const plan = generateInstallPlan([makeResult({ paths: { bin: '/usr/local/bin/node' } })])
     // file op for '/usr/local/bin/node' will be 'create' -> conflict since it exists
-    const result = await runPrecheck([
-      makeResult({ paths: { bin: '/usr/local/bin/node' } }),
-    ])
+    const result = await runPrecheck([makeResult({ paths: { bin: '/usr/local/bin/node' } })])
     expect(result.conflicts.some((c) => c.type === 'file_exists')).toBe(true)
     expect(result.canProceed).toBe(false)
   })

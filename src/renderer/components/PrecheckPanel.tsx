@@ -1,4 +1,8 @@
-import type { DetectedEnvironment, EnhancedPrecheckResult, PrecheckResult } from '../../main/core/contracts'
+import type {
+  DetectedEnvironment,
+  EnhancedPrecheckResult,
+  PrecheckResult,
+} from '../../main/core/contracts'
 import type { AppLocale } from '../../shared/locale'
 import {
   getDetectedEnvironmentKindLabel,
@@ -16,16 +20,6 @@ type PrecheckPanelProps = {
   busy?: boolean
   onRun: () => void
   onCleanup: (detection: DetectedEnvironment) => void
-}
-
-function levelColor(level: PrecheckResult['level']) {
-  if (level === 'pass') {
-    return '#166534'
-  }
-  if (level === 'warn') {
-    return '#b45309'
-  }
-  return '#b91c1c'
 }
 
 function formatBytes(bytes: number): string {
@@ -50,7 +44,13 @@ export function PrecheckPanel({
 }: PrecheckPanelProps) {
   return (
     <section
-      style={{ padding: '1.25rem', borderRadius: '24px', background: 'rgba(250, 250, 249, 0.92)' }}
+      style={{
+        padding: '2rem',
+        borderRadius: '16px',
+        background: '#FFFFFF',
+        border: '1px solid #EFEAE4',
+        boxShadow: '0 4px 16px rgba(169, 132, 103, 0.04)',
+      }}
     >
       <header
         style={{
@@ -58,11 +58,14 @@ export function PrecheckPanel({
           justifyContent: 'space-between',
           gap: '1rem',
           alignItems: 'center',
+          marginBottom: '1.5rem',
         }}
       >
-        <div style={{ display: 'grid', gap: '0.35rem' }}>
-          <h2 style={{ margin: 0 }}>{getUiText(locale, 'precheckTitle')}</h2>
-          <p style={{ margin: 0, color: '#64748b', lineHeight: 1.6 }}>
+        <div style={{ display: 'grid', gap: '0.4rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#2A2421', fontWeight: 500 }}>
+            {getUiText(locale, 'precheckTitle')}
+          </h2>
+          <p style={{ margin: 0, color: '#7D746D', lineHeight: 1.6 }}>
             {getUiText(locale, 'precheckDescription')}
           </p>
         </div>
@@ -71,38 +74,60 @@ export function PrecheckPanel({
           disabled={disabled}
           onClick={onRun}
           style={{
-            borderRadius: '999px',
+            borderRadius: '6px',
             border: 'none',
-            padding: '0.8rem 1.2rem',
-            background: disabled ? '#cbd5e1' : '#111827',
-            color: '#fff',
+            padding: '0.6rem 1.25rem',
+            background: disabled ? '#F5F0EA' : '#2A2421',
+            color: disabled ? '#A49C95' : '#FFFFFF',
             cursor: disabled ? 'not-allowed' : 'pointer',
+            fontWeight: 500,
+            fontSize: '0.95rem',
+            transition: 'background 0.2s',
           }}
         >
           {getUiText(locale, 'runPrecheck')}
         </button>
       </header>
 
-      <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+      <div style={{ display: 'grid', gap: '1rem' }}>
         {precheck ? (
           <>
             <div
               style={{
                 display: 'inline-flex',
                 width: 'fit-content',
-                borderRadius: '999px',
-                padding: '0.3rem 0.8rem',
-                background: `${levelColor(precheck.level)}18`,
-                color: levelColor(precheck.level),
+                borderRadius: '6px',
+                padding: '0.35rem 0.75rem',
+                background:
+                  precheck.level === 'pass'
+                    ? '#EDF5EC'
+                    : precheck.level === 'warn'
+                      ? '#FFF5EA'
+                      : '#FFF0F0',
+                color:
+                  precheck.level === 'pass'
+                    ? '#4B7340'
+                    : precheck.level === 'warn'
+                      ? '#C27628'
+                      : '#C65D5D',
                 textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                fontSize: '0.82rem',
-                fontWeight: 700,
+                letterSpacing: '0.05em',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: `1px solid ${precheck.level === 'pass' ? '#D5E8D1' : precheck.level === 'warn' ? '#F7DDBE' : '#F5D5D5'}`,
               }}
             >
               {getPrecheckLevelLabel(locale, precheck.level)}
             </div>
-            <ul style={{ margin: 0, paddingLeft: '1.1rem', color: '#334155', lineHeight: 1.7 }}>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: '1.25rem',
+                color: '#4A403A',
+                lineHeight: 1.7,
+                fontSize: '0.95rem',
+              }}
+            >
               {precheck.items.length > 0 ? (
                 precheck.items.map((item) => (
                   <li key={`${item.code}-${item.message}`}>
@@ -114,19 +139,28 @@ export function PrecheckPanel({
               )}
             </ul>
             {precheck.detections.length > 0 ? (
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <strong>{getUiText(locale, 'detectedEnvironmentTitle')}</strong>
-                <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gap: '1rem', marginTop: '0.5rem' }}>
+                <strong style={{ color: '#2A2421', fontWeight: 600 }}>
+                  {getUiText(locale, 'detectedEnvironmentTitle')}
+                </strong>
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '1rem',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                    alignItems: 'start',
+                  }}
+                >
                   {precheck.detections.map((detection) => (
                     <article
                       key={detection.id}
                       style={{
-                        borderRadius: '18px',
-                        border: '1px solid rgba(148,163,184,0.24)',
-                        background: '#fff',
-                        padding: '0.9rem 1rem',
+                        borderRadius: '8px',
+                        border: '1px solid #EFEAE4',
+                        background: '#FDFBF7',
+                        padding: '1rem 1.25rem',
                         display: 'grid',
-                        gap: '0.5rem',
+                        gap: '0.75rem',
                       }}
                     >
                       <div
@@ -138,41 +172,48 @@ export function PrecheckPanel({
                           flexWrap: 'wrap',
                         }}
                       >
-                        <strong>{getDetectedEnvironmentKindLabel(locale, detection)}</strong>
+                        <strong style={{ color: '#3D3531' }}>
+                          {getDetectedEnvironmentKindLabel(locale, detection)}
+                        </strong>
                         {detection.cleanupSupported ? (
                           <button
                             type="button"
                             disabled={busy}
                             onClick={() => onCleanup(detection)}
                             style={{
-                              borderRadius: '999px',
-                              border: '1px solid rgba(185, 28, 28, 0.18)',
-                              padding: '0.45rem 0.8rem',
-                              background: busy ? '#cbd5e1' : '#fef2f2',
-                              color: '#b91c1c',
+                              borderRadius: '6px',
+                              border: '1px solid #D47A6A',
+                              padding: '0.4rem 0.85rem',
+                              background: busy ? '#F5F0EA' : '#FFF0EE',
+                              color: busy ? '#A49C95' : '#D47A6A',
                               cursor: busy ? 'not-allowed' : 'pointer',
+                              fontSize: '0.85rem',
+                              fontWeight: 500,
+                              transition: 'all 0.2s',
                             }}
                           >
                             {getUiText(locale, 'cleanupEnvironment')}
                           </button>
                         ) : (
-                          <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                          <span style={{ fontSize: '0.85rem', color: '#A49C95' }}>
                             {getUiText(locale, 'cleanupUnavailable')}
                           </span>
                         )}
                       </div>
                       <code
                         style={{
-                          padding: '0.65rem 0.75rem',
-                          borderRadius: '14px',
-                          background: '#0f172a',
-                          color: '#e2e8f0',
+                          padding: '0.75rem 1rem',
+                          borderRadius: '6px',
+                          background: '#2A2421',
+                          color: '#F4EFEA',
                           overflowX: 'auto',
+                          fontSize: '0.85rem',
+                          fontFamily: 'Menlo, Monaco, Consolas, monospace',
                         }}
                       >
                         {detection.path}
                       </code>
-                      <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem' }}>
+                      <p style={{ margin: 0, color: '#7D746D', fontSize: '0.9rem' }}>
                         {getDetectedEnvironmentSourceLabel(locale, detection)}
                       </p>
                     </article>
@@ -182,66 +223,138 @@ export function PrecheckPanel({
             ) : null}
           </>
         ) : (
-          <p style={{ margin: 0, color: '#64748b' }}>{getUiText(locale, 'precheckEmpty')}</p>
+          <p
+            style={{
+              margin: 0,
+              color: '#7D746D',
+              padding: '1rem',
+              background: '#F9F7F5',
+              borderRadius: '8px',
+              border: '1px solid #EFEAE4',
+            }}
+          >
+            {getUiText(locale, 'precheckEmpty')}
+          </p>
         )}
       </div>
 
       {enhancedPrecheck && (
-        <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
-          {/* 冲突警告 */}
+        <div style={{ marginTop: '1.5rem', display: 'grid', gap: '1rem' }}>
           {enhancedPrecheck.conflicts.length > 0 && (
             <div
               style={{
-                padding: '0.85rem 1rem',
-                borderRadius: '14px',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
+                padding: '1rem 1.25rem',
+                borderRadius: '8px',
+                background: '#FFF0F0',
+                border: '1px solid #F5D5D5',
               }}
             >
-              <strong style={{ color: '#b91c1c', fontSize: '0.9rem' }}>
-                {enhancedPrecheck.conflicts.length} conflict{enhancedPrecheck.conflicts.length > 1 ? 's' : ''} detected
+              <strong style={{ color: '#C65D5D', fontSize: '0.95rem' }}>
+                {enhancedPrecheck.conflicts.length} conflict
+                {enhancedPrecheck.conflicts.length > 1 ? 's' : ''} detected
               </strong>
-              <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem', display: 'grid', gap: '0.25rem' }}>
+              <ul
+                style={{
+                  margin: '0.5rem 0 0',
+                  paddingLeft: '1.25rem',
+                  display: 'grid',
+                  gap: '0.4rem',
+                }}
+              >
                 {enhancedPrecheck.conflicts.map((conflict, i) => (
-                  <li key={i} style={{ fontSize: '0.85rem', color: '#7f1d1d' }}>
-                    <strong>{conflict.type}</strong>: {conflict.detail}
+                  <li key={i} style={{ fontSize: '0.9rem', color: '#A54646' }}>
+                    <strong style={{ fontWeight: 600 }}>{conflict.type}</strong>: {conflict.detail}
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* 影响摘要卡片 */}
           <div
             style={{
-              padding: '0.85rem 1rem',
-              borderRadius: '14px',
-              background: '#f0fdf4',
-              border: '1px solid #bbf7d0',
+              padding: '1rem 1.25rem',
+              borderRadius: '8px',
+              background: '#FDFBF7',
+              border: '1px solid #EFEAE4',
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-              gap: '0.5rem',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: '1rem',
             }}
           >
-            <div style={{ display: 'grid', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Files created</span>
-              <strong style={{ fontSize: '1rem' }}>{enhancedPrecheck.impact.filesCreated}</strong>
+            <div style={{ display: 'grid', gap: '0.2rem' }}>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#7D746D',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Files created
+              </span>
+              <strong style={{ fontSize: '1.1rem', color: '#2A2421' }}>
+                {enhancedPrecheck.impact.filesCreated}
+              </strong>
             </div>
-            <div style={{ display: 'grid', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Files modified</span>
-              <strong style={{ fontSize: '1rem' }}>{enhancedPrecheck.impact.filesModified}</strong>
+            <div style={{ display: 'grid', gap: '0.2rem' }}>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#7D746D',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Files modified
+              </span>
+              <strong style={{ fontSize: '1.1rem', color: '#2A2421' }}>
+                {enhancedPrecheck.impact.filesModified}
+              </strong>
             </div>
-            <div style={{ display: 'grid', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Env vars changed</span>
-              <strong style={{ fontSize: '1rem' }}>{enhancedPrecheck.impact.envVarsChanged}</strong>
+            <div style={{ display: 'grid', gap: '0.2rem' }}>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#7D746D',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Env vars changed
+              </span>
+              <strong style={{ fontSize: '1.1rem', color: '#2A2421' }}>
+                {enhancedPrecheck.impact.envVarsChanged}
+              </strong>
             </div>
-            <div style={{ display: 'grid', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Disk usage</span>
-              <strong style={{ fontSize: '1rem' }}>{formatBytes(enhancedPrecheck.impact.totalDiskUsage)}</strong>
+            <div style={{ display: 'grid', gap: '0.2rem' }}>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#7D746D',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Disk usage
+              </span>
+              <strong style={{ fontSize: '1.1rem', color: '#2A2421' }}>
+                {formatBytes(enhancedPrecheck.impact.totalDiskUsage)}
+              </strong>
             </div>
-            <div style={{ display: 'grid', gap: '0.15rem' }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Est. duration</span>
-              <strong style={{ fontSize: '1rem' }}>{formatDuration(enhancedPrecheck.impact.estimatedDurationMs)}</strong>
+            <div style={{ display: 'grid', gap: '0.2rem' }}>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#7D746D',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Est. duration
+              </span>
+              <strong style={{ fontSize: '1.1rem', color: '#2A2421' }}>
+                {formatDuration(enhancedPrecheck.impact.estimatedDurationMs)}
+              </strong>
             </div>
           </div>
         </div>

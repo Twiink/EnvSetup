@@ -88,7 +88,8 @@ function isCleanupAllowedPath(targetPath: string): boolean {
 
   return !protectedRoots.some(
     (protectedRoot) =>
-      normalizedPath === protectedRoot || normalizedPath.startsWith(`${protectedRoot}${process.platform === 'win32' ? '\\' : '/'}`),
+      normalizedPath === protectedRoot ||
+      normalizedPath.startsWith(`${protectedRoot}${process.platform === 'win32' ? '\\' : '/'}`),
   )
 }
 
@@ -99,7 +100,9 @@ function buildDetection(input: Omit<DetectedEnvironment, 'id'>): DetectedEnviron
   }
 }
 
-async function detectNodeEnvironment(values: Record<string, Primitive>): Promise<DetectedEnvironment[]> {
+async function detectNodeEnvironment(
+  values: Record<string, Primitive>,
+): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
   const installRootDir =
     typeof values.installRootDir === 'string'
@@ -251,8 +254,8 @@ async function detectPythonEnvironment(): Promise<DetectedEnvironment[]> {
 }
 
 function resolveEnvironmentTargets(template: ResolvedTemplate): EnvironmentTool[] {
-  const configuredChecks = template.checks.filter(
-    (check): check is EnvironmentTool => SUPPORTED_ENVIRONMENT_CHECKS.has(check as EnvironmentTool),
+  const configuredChecks = template.checks.filter((check): check is EnvironmentTool =>
+    SUPPORTED_ENVIRONMENT_CHECKS.has(check as EnvironmentTool),
   )
 
   if (configuredChecks.length > 0) {

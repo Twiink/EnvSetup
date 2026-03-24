@@ -10,16 +10,16 @@ import { resolveLocalizedText } from '../shared/locale'
 
 const uiText = {
   documentTitle: {
-    'zh-CN': '开发环境配置',
-    en: 'Environment Setup',
+    'zh-CN': '开工吧',
+    en: 'EnvSetup',
   },
   appBadge: {
     'zh-CN': '环境配置平台',
     en: 'Environment Platform',
   },
   appTitle: {
-    'zh-CN': '开发环境配置',
-    en: 'Environment Setup',
+    'zh-CN': '开工吧',
+    en: 'EnvSetup',
   },
   appDescription: {
     'zh-CN': '用模板驱动的方式交付团队开发环境，先跑预检，再冻结参数，最后按插件顺序执行。',
@@ -124,6 +124,18 @@ const uiText = {
   retryPlugin: {
     'zh-CN': '重试插件',
     en: 'Retry Plugin',
+  },
+  cancelTask: {
+    'zh-CN': '取消任务',
+    en: 'Cancel Task',
+  },
+  importPlugin: {
+    'zh-CN': '导入插件',
+    en: 'Import Plugin',
+  },
+  importPluginSuccess: {
+    'zh-CN': '插件导入成功',
+    en: 'Plugin imported successfully',
   },
   noTask: {
     'zh-CN': '还没有任务。先运行预检，再创建任务。',

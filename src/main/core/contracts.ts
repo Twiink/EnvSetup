@@ -149,6 +149,8 @@ export type PrecheckInput = {
   detections?: DetectedEnvironment[]
   networkAvailable?: boolean
   elevationRequired?: boolean
+  /** Template-declared checks that failed (e.g. required tools not found) */
+  failedTemplateChecks?: string[]
 }
 
 export type PrecheckItem = {
@@ -235,7 +237,14 @@ export type FrontendPluginParams = PluginExecutionInput & {
   npmGlobalPrefix: string
 }
 
+export type PluginCheckResult = {
+  pass: boolean
+  message?: string
+}
+
 export type PluginLifecycle = {
+  check?: (input: PluginExecutionInput) => Promise<PluginCheckResult>
+  prepare?: (input: PluginExecutionInput) => Promise<void>
   install: (input: PluginExecutionInput) => Promise<PluginInstallResult>
   verify: (
     input: PluginExecutionInput & { installResult: PluginInstallResult },
@@ -290,9 +299,9 @@ export type Snapshot = {
   // 文件系统快照
   files: {
     [filePath: string]: {
-      hash: string   // SHA-256 哈希，对应对象存储中的内容
-      mode: number   // 文件权限（如 0o755）
-      size: number   // 文件大小（字节）
+      hash: string // SHA-256 哈希，对应对象存储中的内容
+      mode: number // 文件权限（如 0o755）
+      size: number // 文件大小（字节）
     }
   }
   // 环境变量快照
@@ -310,8 +319,8 @@ export type Snapshot = {
   // 元数据
   metadata: {
     platform: AppPlatform
-    diskUsage: number   // 快照占用磁盘空间（字节）
-    fileCount: number   // 快照包含的文件数量
+    diskUsage: number // 快照占用磁盘空间（字节）
+    fileCount: number // 快照包含的文件数量
   }
 }
 
@@ -322,13 +331,13 @@ export type SnapshotMeta = {
     createdAt: string
     type: 'auto' | 'manual'
     label?: string
-    canDelete: boolean  // 成功任务的快照可删除
+    canDelete: boolean // 成功任务的快照可删除
   }>
-  maxSnapshots: number  // 最大保留数量（默认 5）
+  maxSnapshots: number // 最大保留数量（默认 5）
 }
 
 export type ObjectRefs = {
-  [hash: string]: number  // hash -> 引用计数
+  [hash: string]: number // hash -> 引用计数
 }
 
 // ============================================================
@@ -338,14 +347,14 @@ export type ObjectRefs = {
 export type FileOperation = {
   type: 'create' | 'modify' | 'delete' | 'symlink'
   path: string
-  size?: number  // 字节
+  size?: number // 字节
 }
 
 export type InstallPlan = {
   fileOperations: FileOperation[]
   envChanges: Array<{ key: string; value: string; action: 'set' | 'append' | 'remove' }>
-  estimatedDiskUsage: number  // 字节
-  estimatedDownloadSize: number  // 字节
+  estimatedDiskUsage: number // 字节
+  estimatedDownloadSize: number // 字节
   estimatedDurationMs: number
   pluginCount: number
 }
@@ -370,7 +379,7 @@ export type EnhancedPrecheckResult = {
   plan: InstallPlan
   conflicts: ConflictItem[]
   impact: ImpactSummary
-  canProceed: boolean  // false 表示有阻断性冲突
+  canProceed: boolean // false 表示有阻断性冲突
 }
 
 // ============================================================
@@ -378,11 +387,11 @@ export type EnhancedPrecheckResult = {
 // ============================================================
 
 export type FailureCategory =
-  | 'network'       // 网络下载失败
-  | 'permission'    // 权限不足
-  | 'conflict'      // 文件/环境冲突
-  | 'dependency'    // 依赖缺失
-  | 'unknown'       // 未知原因
+  | 'network' // 网络下载失败
+  | 'permission' // 权限不足
+  | 'conflict' // 文件/环境冲突
+  | 'dependency' // 依赖缺失
+  | 'unknown' // 未知原因
 
 export type FailureAnalysis = {
   category: FailureCategory
@@ -396,7 +405,7 @@ export type RollbackSuggestion = {
   snapshotId: string
   snapshotLabel?: string
   createdAt: string
-  reason: string  // 为什么建议这个快照
+  reason: string // 为什么建议这个快照
   confidence: 'high' | 'medium' | 'low'
 }
 
@@ -423,6 +432,7 @@ export type EnvSetupApi = {
     locale: AppLocale
   }) => Promise<InstallTask>
   startTask: (taskId: string) => Promise<InstallTask>
+  cancelTask: (taskId: string) => Promise<InstallTask>
   retryPlugin: (taskId: string, pluginId: string) => Promise<InstallTask>
   cleanupEnvironment: (detection: DetectedEnvironment) => Promise<CleanupEnvironmentResult>
   pickDirectory: (defaultPath?: string) => Promise<string | undefined>
@@ -432,8 +442,14 @@ export type EnvSetupApi = {
   createSnapshot: (payload: { taskId: string; label?: string }) => Promise<Snapshot>
   deleteSnapshot: (snapshotId: string) => Promise<void>
   // 回滚
-  suggestRollback: (payload: { taskId: string; failureAnalysis?: FailureAnalysis }) => Promise<RollbackSuggestion[]>
-  executeRollback: (payload: { snapshotId: string; trackedPaths?: string[] }) => Promise<RollbackResult>
+  suggestRollback: (payload: {
+    taskId: string
+    failureAnalysis?: FailureAnalysis
+  }) => Promise<RollbackSuggestion[]>
+  executeRollback: (payload: {
+    snapshotId: string
+    trackedPaths?: string[]
+  }) => Promise<RollbackResult>
   // 增强预检
   runEnhancedPrecheck: (pluginResults: PluginInstallResult[]) => Promise<EnhancedPrecheckResult>
 }

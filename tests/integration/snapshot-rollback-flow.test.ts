@@ -33,9 +33,7 @@ function makeTask(overrides: Partial<InstallTask> = {}): InstallTask {
     templateId: 'test-template',
     templateVersion: '1.0.0',
     params: {},
-    plugins: [
-      { pluginId: 'test-plugin', version: '1.0.0', params: {} },
-    ],
+    plugins: [{ pluginId: 'test-plugin', version: '1.0.0', params: {} }],
     ...overrides,
   })
 }

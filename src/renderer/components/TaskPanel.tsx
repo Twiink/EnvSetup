@@ -10,6 +10,7 @@ type TaskPanelProps = {
   onCreateTask: () => void
   onStartTask: () => void
   onRetryPlugin: (pluginId: string) => void
+  onCancelTask: () => void
 }
 
 export function TaskPanel({
@@ -20,13 +21,16 @@ export function TaskPanel({
   onCreateTask,
   onStartTask,
   onRetryPlugin,
+  onCancelTask,
 }: TaskPanelProps) {
   return (
     <section
       style={{
-        padding: '1.25rem',
-        borderRadius: '24px',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.9), rgba(241,245,249,0.95))',
+        padding: '2rem',
+        borderRadius: '16px',
+        background: '#FFFFFF',
+        border: '1px solid #EFEAE4',
+        boxShadow: '0 4px 16px rgba(169, 132, 103, 0.04)',
       }}
     >
       <header
@@ -34,13 +38,16 @@ export function TaskPanel({
           display: 'flex',
           justifyContent: 'space-between',
           gap: '1rem',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           flexWrap: 'wrap',
+          marginBottom: '1.5rem',
         }}
       >
-        <div style={{ display: 'grid', gap: '0.35rem' }}>
-          <h2 style={{ margin: 0 }}>{getUiText(locale, 'taskTitle')}</h2>
-          <p style={{ margin: 0, color: '#64748b', lineHeight: 1.6 }}>
+        <div style={{ display: 'grid', gap: '0.4rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#2A2421', fontWeight: 500 }}>
+            {getUiText(locale, 'taskTitle')}
+          </h2>
+          <p style={{ margin: 0, color: '#7D746D', lineHeight: 1.6 }}>
             {getUiText(locale, 'taskDescription')}
           </p>
         </div>
@@ -50,11 +57,15 @@ export function TaskPanel({
             onClick={onCreateTask}
             disabled={!canCreate || busy}
             style={{
-              borderRadius: '999px',
-              border: '1px solid rgba(17, 24, 39, 0.12)',
-              padding: '0.8rem 1.2rem',
-              background: !canCreate || busy ? '#cbd5e1' : '#fff',
+              borderRadius: '6px',
+              border: '1px solid #EFEAE4',
+              padding: '0.6rem 1.25rem',
+              background: !canCreate || busy ? '#F5F0EA' : '#FFFFFF',
+              color: !canCreate || busy ? '#A49C95' : '#4A403A',
               cursor: !canCreate || busy ? 'not-allowed' : 'pointer',
+              fontWeight: 500,
+              fontSize: '0.95rem',
+              transition: 'all 0.2s',
             }}
           >
             {getUiText(locale, 'createTask')}
@@ -64,46 +75,86 @@ export function TaskPanel({
             onClick={onStartTask}
             disabled={!task || busy}
             style={{
-              borderRadius: '999px',
+              borderRadius: '6px',
               border: 'none',
-              padding: '0.8rem 1.2rem',
-              background: !task || busy ? '#cbd5e1' : '#0f766e',
-              color: '#fff',
+              padding: '0.6rem 1.25rem',
+              background: !task || busy ? '#EFEAE4' : '#C27628',
+              color: !task || busy ? '#A49C95' : '#FFFFFF',
               cursor: !task || busy ? 'not-allowed' : 'pointer',
+              fontWeight: 500,
+              fontSize: '0.95rem',
+              transition: 'background 0.2s',
             }}
           >
             {getUiText(locale, 'startTask')}
           </button>
+          {task?.status === 'running' && (
+            <button
+              type="button"
+              onClick={onCancelTask}
+              disabled={busy}
+              style={{
+                borderRadius: '6px',
+                border: '1px solid #F5D5D5',
+                padding: '0.6rem 1.25rem',
+                background: busy ? '#F5F0EA' : '#FFF0F0',
+                color: busy ? '#A49C95' : '#C65D5D',
+                cursor: busy ? 'not-allowed' : 'pointer',
+                fontWeight: 500,
+                fontSize: '0.95rem',
+              }}
+            >
+              {getUiText(locale, 'cancelTask')}
+            </button>
+          )}
         </div>
       </header>
 
-      <div style={{ marginTop: '1rem', display: 'grid', gap: '0.85rem' }}>
+      <div style={{ display: 'grid', gap: '1rem' }}>
         {task ? (
           <>
-            <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <strong>{getUiText(locale, 'taskStatus')}</strong>
+            <div
+              style={{
+                display: 'flex',
+                gap: '0.8rem',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <strong style={{ color: '#2A2421' }}>{getUiText(locale, 'taskStatus')}</strong>
               <span
                 style={{
-                  borderRadius: '999px',
-                  padding: '0.3rem 0.7rem',
-                  background: '#e2e8f0',
+                  borderRadius: '6px',
+                  padding: '0.35rem 0.75rem',
+                  background: '#F9F7F5',
+                  color: '#4A403A',
                   textTransform: 'uppercase',
                   fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid #EFEAE4',
                 }}
               >
                 {getTaskStatusLabel(locale, task.status)}
               </span>
             </div>
 
-            <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div
+              style={{
+                display: 'grid',
+                gap: '1rem',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                alignItems: 'start',
+              }}
+            >
               {task.plugins.map((plugin) => (
                 <article
                   key={plugin.pluginId}
                   style={{
-                    borderRadius: '18px',
-                    border: '1px solid rgba(148,163,184,0.25)',
-                    padding: '1rem',
-                    background: '#fff',
+                    borderRadius: '8px',
+                    border: '1px solid #EFEAE4',
+                    padding: '1.25rem',
+                    background: '#FDFBF7',
                   }}
                 >
                   <div
@@ -116,8 +167,12 @@ export function TaskPanel({
                     }}
                   >
                     <div>
-                      <strong>{plugin.pluginId}</strong>
-                      <p style={{ margin: '0.35rem 0 0', color: '#64748b' }}>v{plugin.version}</p>
+                      <strong style={{ color: '#3D3531', fontSize: '1.05rem' }}>
+                        {plugin.pluginId}
+                      </strong>
+                      <p style={{ margin: '0.35rem 0 0', color: '#A49C95', fontSize: '0.85rem' }}>
+                        v{plugin.version}
+                      </p>
                     </div>
                     <div
                       style={{
@@ -129,10 +184,22 @@ export function TaskPanel({
                     >
                       <span
                         style={{
-                          borderRadius: '999px',
-                          padding: '0.3rem 0.7rem',
-                          background: '#f1f5f9',
+                          borderRadius: '4px',
+                          padding: '0.3rem 0.6rem',
+                          background:
+                            plugin.status === 'failed'
+                              ? '#FFF0F0'
+                              : plugin.status === 'success'
+                                ? '#EDF5EC'
+                                : '#EFEAE4',
+                          color:
+                            plugin.status === 'failed'
+                              ? '#C65D5D'
+                              : plugin.status === 'success'
+                                ? '#4B7340'
+                                : '#7D746D',
                           fontSize: '0.8rem',
+                          fontWeight: 500,
                         }}
                       >
                         {getPluginStatusLabel(locale, plugin.status)}
@@ -143,12 +210,15 @@ export function TaskPanel({
                           onClick={() => onRetryPlugin(plugin.pluginId)}
                           disabled={busy}
                           style={{
-                            borderRadius: '999px',
-                            border: '1px solid rgba(239, 68, 68, 0.35)',
-                            padding: '0.45rem 0.8rem',
-                            background: '#fff',
-                            color: '#b91c1c',
+                            borderRadius: '6px',
+                            border: '1px solid #D47A6A',
+                            padding: '0.4rem 0.85rem',
+                            background: '#FFF0EE',
+                            color: '#D47A6A',
                             cursor: busy ? 'not-allowed' : 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            transition: 'all 0.2s',
                           }}
                         >
                           {getUiText(locale, 'retryPlugin')}
@@ -157,7 +227,14 @@ export function TaskPanel({
                     </div>
                   </div>
                   {plugin.lastResult ? (
-                    <div style={{ marginTop: '0.85rem', color: '#334155', lineHeight: 1.6 }}>
+                    <div
+                      style={{
+                        marginTop: '1rem',
+                        color: '#4A403A',
+                        lineHeight: 1.6,
+                        fontSize: '0.95rem',
+                      }}
+                    >
                       <p style={{ margin: 0 }}>
                         {getPluginSummary(
                           locale,
@@ -166,7 +243,7 @@ export function TaskPanel({
                           plugin.lastResult.summary,
                         )}
                       </p>
-                      <p style={{ margin: '0.45rem 0 0' }}>
+                      <p style={{ margin: '0.5rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
                         Node {plugin.lastResult.version} · {getUiText(locale, 'cacheLabel')}{' '}
                         {plugin.lastResult.paths.npmCacheDir}
                       </p>
@@ -175,13 +252,14 @@ export function TaskPanel({
                   {plugin.logs.length > 0 ? (
                     <pre
                       style={{
-                        margin: '0.85rem 0 0',
-                        padding: '0.85rem',
-                        borderRadius: '14px',
-                        background: '#0f172a',
-                        color: '#e2e8f0',
+                        margin: '1rem 0 0',
+                        padding: '1rem',
+                        borderRadius: '6px',
+                        background: '#2A2421',
+                        color: '#F4EFEA',
                         overflowX: 'auto',
-                        fontSize: '0.82rem',
+                        fontSize: '0.85rem',
+                        fontFamily: 'Menlo, Monaco, Consolas, monospace',
                       }}
                     >
                       {plugin.logs.join('\n')}
@@ -192,7 +270,18 @@ export function TaskPanel({
             </div>
           </>
         ) : (
-          <p style={{ margin: 0, color: '#64748b' }}>{getUiText(locale, 'noTask')}</p>
+          <p
+            style={{
+              margin: 0,
+              color: '#7D746D',
+              padding: '1rem',
+              background: '#F9F7F5',
+              borderRadius: '8px',
+              border: '1px solid #EFEAE4',
+            }}
+          >
+            {getUiText(locale, 'noTask')}
+          </p>
         )}
       </div>
     </section>

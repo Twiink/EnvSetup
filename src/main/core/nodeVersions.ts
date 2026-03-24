@@ -52,10 +52,20 @@ export function normalizeNodeLtsVersions(input: unknown): string[] {
   return [...latestPerMajor.values()].sort(compareSemverDescending)
 }
 
+const FETCH_TIMEOUT_MS = 8000
+
 export async function fetchOfficialNodeLtsVersions(
   fetchImpl: typeof fetch = fetch,
 ): Promise<string[]> {
-  const response = await fetchImpl(NODE_DIST_INDEX_URL)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetchImpl(NODE_DIST_INDEX_URL, { signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to load Node.js releases from ${NODE_DIST_INDEX_URL}`)

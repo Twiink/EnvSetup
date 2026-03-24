@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { analyzeFailure, categorizeError, isRetryable, suggestAction } from '../../src/main/core/failureAnalysis'
+import {
+  analyzeFailure,
+  categorizeError,
+  isRetryable,
+  suggestAction,
+} from '../../src/main/core/failureAnalysis'
 import type { PluginInstallResult } from '../../src/main/core/contracts'
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
-function makeResult(
-  overrides: Partial<PluginInstallResult> = {},
-): PluginInstallResult {
+function makeResult(overrides: Partial<PluginInstallResult> = {}): PluginInstallResult {
   return {
     status: 'failed',
     executionMode: 'dry_run',

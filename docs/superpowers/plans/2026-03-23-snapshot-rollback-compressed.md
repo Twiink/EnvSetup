@@ -25,6 +25,7 @@
 - [ ] 提交：`feat(snapshot): implement object storage with reference counting`
 
 **关键文件:**
+
 - `src/main/core/contracts.ts`
 - `src/main/core/snapshot.ts`
 - `tests/unit/snapshot.test.ts`
@@ -44,6 +45,7 @@
 - [ ] 提交：`feat(snapshot): implement snapshot index and metadata management`
 
 **关键功能:**
+
 - 文件追踪策略（大文件、符号链接、排除规则）
 - 环境变量和 PATH 捕获
 - Shell 配置文件快照
@@ -62,6 +64,7 @@
 - [ ] 提交：`feat(snapshot): implement snapshot restore functionality`
 
 **平台差异处理:**
+
 - macOS: 修改 ~/.zshrc 或 ~/.bash_profile
 - Windows: 使用 setx 或修改注册表
 
@@ -83,6 +86,7 @@
 - [ ] 提交：`feat(precheck): implement install plan generation`
 
 **关键文件:**
+
 - `src/main/core/enhancedPrecheck.ts`
 - `tests/unit/enhancedPrecheck.test.ts`
 
@@ -99,6 +103,7 @@
 - [ ] 提交：`feat(precheck): implement conflict detection and impact summary`
 
 **冲突类型:**
+
 - file_exists: 文件已存在
 - env_conflict: 环境变量冲突
 - version_mismatch: 版本不匹配
@@ -119,6 +124,7 @@
 - [ ] 提交：`feat(rollback): implement failure analysis`
 
 **关键文件:**
+
 - `src/main/core/rollback.ts`
 - `tests/unit/rollback.test.ts`
 
@@ -137,6 +143,7 @@
 - [ ] 提交：`feat(rollback): implement rollback suggestion and execution`
 
 **回滚策略:**
+
 - minimal: 只回滚失败插件
 - plugin: 回滚失败插件 + 依赖插件
 - full: 完全回滚到快照状态
@@ -170,6 +177,7 @@
 - [ ] 提交：`feat(integration): integrate snapshot and rollback into task flow`
 
 **关键文件:**
+
 - `src/main/ipc/index.ts`
 - `tests/integration/snapshot-rollback-flow.test.ts`
 
@@ -225,6 +233,7 @@
 - [ ] 提交：`feat(ui): implement rollback dialog`
 
 **关键文件:**
+
 - `src/renderer/components/RollbackDialog.tsx`
 - `tests/e2e/snapshot-ui.spec.ts`
 
@@ -295,10 +304,12 @@
 ## 执行建议
 
 **推荐执行方式**: Subagent-Driven Development
+
 - 每个任务派发一个新的子代理
 - 任务间进行两阶段审查
 - 快速迭代，频繁提交
 
 **替代方式**: Inline Execution
+
 - 在当前会话中批量执行
 - 在关键检查点进行审查

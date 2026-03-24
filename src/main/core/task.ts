@@ -61,22 +61,22 @@ function finalizeTaskStatus(task: InstallTask): TaskStatus {
     return 'succeeded'
   }
 
+  // installed_unverified means verify was never called — treat as failed for finalization
+  const terminallyFailed = (status: string) =>
+    status === 'failed' || status === 'installed_unverified'
+
   if (
-    pluginStates.some((status) => status === 'failed') &&
+    pluginStates.some(terminallyFailed) &&
     pluginStates.some((status) => status === 'verified_success')
   ) {
     return 'partially_succeeded'
   }
 
-  if (pluginStates.some((status) => status === 'failed')) {
+  if (pluginStates.some(terminallyFailed)) {
     return 'failed'
   }
 
   if (pluginStates.some((status) => status === 'running')) {
-    return 'running'
-  }
-
-  if (pluginStates.some((status) => status === 'installed_unverified')) {
     return 'running'
   }
 
@@ -121,7 +121,17 @@ function buildExecutionInput(
   platform: AppPlatform,
   dryRun: boolean,
 ): PluginExecutionInput {
+  // Merge context from all preceding verified plugins so later plugins can consume outputs
+  const precedingContext: Record<string, Primitive> = {}
+  for (const p of task.plugins) {
+    if (p.pluginId === plugin.pluginId) break
+    if (p.status === 'verified_success') {
+      Object.assign(precedingContext, p.context)
+    }
+  }
+
   return {
+    ...precedingContext,
     ...plugin.params,
     platform,
     dryRun,
@@ -267,6 +277,18 @@ export async function executeTask(options: {
       }
 
       const executionInput = buildExecutionInput(nextTask, draftPlugin, options.platform, dryRun)
+
+      if (runner.check) {
+        const checkResult = await runner.check(executionInput)
+        if (!checkResult.pass) {
+          throw new Error(checkResult.message ?? 'Plugin pre-check failed')
+        }
+      }
+
+      if (runner.prepare) {
+        await runner.prepare(executionInput)
+      }
+
       const installResult = await runner.install(executionInput)
       const verifyResult = await runner.verify({
         ...executionInput,
@@ -314,6 +336,36 @@ export async function executeTask(options: {
   })
   await persistTask(nextTask, options.tasksDir)
   return nextTask
+}
+
+export async function cancelTask(options: {
+  task: InstallTask
+  tasksDir: string
+}): Promise<InstallTask> {
+  if (
+    options.task.status === 'succeeded' ||
+    options.task.status === 'failed' ||
+    options.task.status === 'partially_succeeded' ||
+    options.task.status === 'cancelled'
+  ) {
+    return options.task
+  }
+
+  const cancelledTask = withTaskUpdate(options.task, (draft) => {
+    draft.status = 'cancelled'
+    draft.finishedAt = timestamp()
+    for (const plugin of draft.plugins) {
+      if (plugin.status === 'not_started' || plugin.status === 'needs_rerun') {
+        plugin.status = 'failed'
+        plugin.errorCode = 'USER_CANCELLED'
+        plugin.error = 'Task cancelled by user'
+        plugin.finishedAt = timestamp()
+      }
+    }
+  })
+
+  await persistTask(cancelledTask, options.tasksDir)
+  return cancelledTask
 }
 
 export async function retryTaskPlugin(options: {

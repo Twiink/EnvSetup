@@ -41,11 +41,7 @@ function buildFieldOptions(
   const currentNodeVersion =
     typeof values['frontend.nodeVersion'] === 'string' ? values['frontend.nodeVersion'] : undefined
   const versions =
-    nodeLtsVersions.length > 0
-      ? nodeLtsVersions
-      : currentNodeVersion
-        ? [currentNodeVersion]
-        : []
+    nodeLtsVersions.length > 0 ? nodeLtsVersions : currentNodeVersion ? [currentNodeVersion] : []
 
   return {
     'frontend.nodeVersion': versions,
@@ -75,6 +71,7 @@ export default function App() {
   const [task, setTask] = useState<InstallTask>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [importMessage, setImportMessage] = useState<string>()
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -212,6 +209,43 @@ export default function App() {
     }
   }
 
+  async function handleCancelTask() {
+    if (!task) {
+      return
+    }
+
+    setBusy(true)
+    setError(undefined)
+
+    try {
+      const nextTask = await window.envSetup.cancelTask(task.id)
+      setTask(nextTask)
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : String(cancelError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleImportPlugin() {
+    setBusy(true)
+    setError(undefined)
+    setImportMessage(undefined)
+
+    try {
+      const pluginPath = await window.envSetup.pickDirectory()
+      if (!pluginPath) {
+        return
+      }
+      await window.envSetup.importPluginFromPath(pluginPath)
+      setImportMessage(getUiText(locale, 'importPluginSuccess'))
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : String(importError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleRetryPlugin(pluginId: string) {
     if (!task) {
       return
@@ -269,42 +303,60 @@ export default function App() {
     <main
       style={{
         minHeight: '100vh',
-        padding: '2rem',
-        background: 'radial-gradient(circle at top left, #fff7ed, #f8fafc 55%, #e2e8f0)',
-        color: '#111827',
-        fontFamily: '"IBM Plex Sans", "Avenir Next", "SF Pro Display", sans-serif',
+        padding: '2.5rem 2rem',
+        background: 'linear-gradient(135deg, #FFFDFB 0%, #F7F3EE 100%)',
+        color: '#3D3531',
+        fontFamily: '"Inter", "Helvetica Neue", sans-serif',
       }}
     >
-      <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'grid', gap: '1.5rem' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gap: '2rem' }}>
         <header
           style={{
             display: 'grid',
-            gap: '0.6rem',
-            padding: '1.5rem',
-            borderRadius: '28px',
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,237,213,0.92))',
-            boxShadow: '0 28px 80px rgba(15, 23, 42, 0.10)',
+            gap: '0.75rem',
+            padding: '2rem',
+            borderRadius: '16px',
+            background: '#FFFFFF',
+            border: '1px solid #EFEAE4',
+            boxShadow: '0 4px 16px rgba(169, 132, 103, 0.04)',
           }}
         >
           <p
             style={{
               margin: 0,
-              fontSize: '0.82rem',
-              letterSpacing: '0.18em',
+              fontSize: '0.8rem',
+              letterSpacing: '0.15em',
               textTransform: 'uppercase',
-              color: '#b45309',
+              color: '#D47A6A',
+              fontWeight: 600,
             }}
           >
             {getUiText(locale, 'appBadge')}
           </p>
-          <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1 }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 'clamp(2rem, 4vw, 3rem)',
+              fontWeight: 500,
+              letterSpacing: '-0.02em',
+              color: '#2A2421',
+            }}
+          >
             {getUiText(locale, 'appTitle')}
           </h1>
-          <p style={{ margin: 0, maxWidth: '54rem', color: '#475569', lineHeight: 1.7 }}>
+          <p style={{ margin: 0, maxWidth: '54rem', color: '#7D746D', lineHeight: 1.6 }}>
             {getUiText(locale, 'appDescription')}
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: '#475569' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              marginTop: '0.5rem',
+            }}
+          >
+            <span style={{ fontSize: '0.85rem', color: '#7D746D' }}>
               {getUiText(locale, 'languageLabel')}
             </span>
             {(['zh-CN', 'en'] as const).map((targetLocale) => (
@@ -314,15 +366,15 @@ export default function App() {
                 onClick={() => setLocale(targetLocale)}
                 aria-pressed={locale === targetLocale}
                 style={{
-                  borderRadius: '999px',
-                  border:
-                    locale === targetLocale
-                      ? '1px solid rgba(217, 119, 6, 0.45)'
-                      : '1px solid rgba(148, 163, 184, 0.35)',
-                  padding: '0.5rem 0.9rem',
-                  background:
-                    locale === targetLocale ? 'rgba(255, 237, 213, 0.9)' : 'rgba(255,255,255,0.76)',
+                  borderRadius: '6px',
+                  border: locale === targetLocale ? '1px solid #D47A6A' : '1px solid #EFEAE4',
+                  padding: '0.4rem 0.8rem',
+                  background: locale === targetLocale ? '#FFF0EE' : '#FFFFFF',
+                  color: locale === targetLocale ? '#D47A6A' : '#7D746D',
                   cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: locale === targetLocale ? 500 : 400,
+                  transition: 'all 0.2s',
                 }}
               >
                 {getLocaleButtonLabel(targetLocale)}
@@ -335,25 +387,56 @@ export default function App() {
           <div
             role="alert"
             style={{
-              padding: '1rem 1.2rem',
-              borderRadius: '18px',
-              background: '#fef2f2',
-              color: '#b91c1c',
-              border: '1px solid rgba(248, 113, 113, 0.35)',
+              padding: '1.25rem',
+              borderRadius: '12px',
+              background: '#FFF0F0',
+              color: '#C65D5D',
+              border: '1px solid #F5D5D5',
+              fontSize: '0.95rem',
             }}
           >
             {error}
           </div>
         ) : null}
 
-        <div
-          style={{
-            display: 'grid',
-            gap: '1.25rem',
-            gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)',
-            alignItems: 'start',
-          }}
-        >
+        {importMessage ? (
+          <div
+            role="status"
+            style={{
+              padding: '1.25rem',
+              borderRadius: '12px',
+              background: '#F2F6ED',
+              color: '#6B8E53',
+              border: '1px solid #DEE8D5',
+              fontSize: '0.95rem',
+            }}
+          >
+            {importMessage}
+          </div>
+        ) : null}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={handleImportPlugin}
+            disabled={busy}
+            style={{
+              borderRadius: '6px',
+              border: '1px solid #EFEAE4',
+              padding: '0.5rem 1.25rem',
+              background: busy ? '#F7F3EE' : '#FFFFFF',
+              color: busy ? '#A49C95' : '#4A403A',
+              cursor: busy ? 'not-allowed' : 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+            }}
+          >
+            {getUiText(locale, 'importPlugin')}
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           <TemplatePanel
             locale={locale}
             templates={templates}
@@ -361,35 +444,36 @@ export default function App() {
             onSelect={handleSelectTemplate}
           />
 
-          <div style={{ display: 'grid', gap: '1rem' }}>
-        <OverrideForm
-          locale={locale}
-          template={selectedTemplate}
-          values={values}
-          errors={validationErrors}
-          busy={busy}
-          fieldOptions={buildFieldOptions(values, nodeLtsVersions)}
-          onChange={handleChange}
-          onPickDirectory={handlePickDirectory}
-        />
-            <PrecheckPanel
-              locale={locale}
-              precheck={precheck}
-              disabled={!selectedTemplate || busy || Object.keys(validationErrors).length > 0}
-              busy={busy}
-              onRun={handleRunPrecheck}
-              onCleanup={handleCleanupDetection}
-            />
-            <TaskPanel
-              locale={locale}
-              task={task}
-              busy={busy}
-              canCreate={canCreateTask}
-              onCreateTask={handleCreateTask}
-              onStartTask={handleStartTask}
-              onRetryPlugin={handleRetryPlugin}
-            />
-          </div>
+          <OverrideForm
+            locale={locale}
+            template={selectedTemplate}
+            values={values}
+            errors={validationErrors}
+            busy={busy}
+            fieldOptions={buildFieldOptions(values, nodeLtsVersions)}
+            onChange={handleChange}
+            onPickDirectory={handlePickDirectory}
+          />
+
+          <PrecheckPanel
+            locale={locale}
+            precheck={precheck}
+            disabled={!selectedTemplate || busy || Object.keys(validationErrors).length > 0}
+            busy={busy}
+            onRun={handleRunPrecheck}
+            onCleanup={handleCleanupDetection}
+          />
+
+          <TaskPanel
+            locale={locale}
+            task={task}
+            busy={busy}
+            canCreate={canCreateTask}
+            onCreateTask={handleCreateTask}
+            onStartTask={handleStartTask}
+            onCancelTask={handleCancelTask}
+            onRetryPlugin={handleRetryPlugin}
+          />
         </div>
       </div>
     </main>

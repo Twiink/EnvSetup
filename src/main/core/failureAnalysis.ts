@@ -16,11 +16,7 @@ export function categorizeError(errorMessage: string): FailureCategory {
     return 'permission'
   }
 
-  if (
-    msg.includes('already exists') ||
-    msg.includes('eexist') ||
-    msg.includes('conflict')
-  ) {
+  if (msg.includes('already exists') || msg.includes('eexist') || msg.includes('conflict')) {
     return 'conflict'
   }
 
@@ -93,8 +89,7 @@ export function analyzeFailure(result: PluginInstallResult): FailureAnalysis {
   }
 
   // 优先使用 result.error，其次检查 logs 末尾几行
-  const errorText =
-    result.error ?? result.logs.slice(-5).join('\n')
+  const errorText = result.error ?? result.logs.slice(-5).join('\n')
 
   if (!errorText) {
     return {

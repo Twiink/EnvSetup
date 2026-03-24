@@ -143,7 +143,10 @@ export function buildFrontendEnvChanges(input: FrontendPluginParams): EnvChange[
   return envChanges
 }
 
-export function buildNvmInitSnippet(nvmDir: string, nodeMirror = 'https://nodejs.org/dist'): string {
+export function buildNvmInitSnippet(
+  nvmDir: string,
+  nodeMirror = 'https://nodejs.org/dist',
+): string {
   return [
     '# envsetup: frontend-env:start',
     `export NVM_DIR="${nvmDir}"`,

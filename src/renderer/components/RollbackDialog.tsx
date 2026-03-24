@@ -101,7 +101,9 @@ export function RollbackDialog({
           <p style={{ margin: 0, color: '#64748b' }}>No rollback snapshots available.</p>
         ) : (
           <div style={{ display: 'grid', gap: '0.5rem' }}>
-            <p style={{ margin: 0, fontSize: '0.88rem', color: '#64748b' }}>Select a snapshot to restore:</p>
+            <p style={{ margin: 0, fontSize: '0.88rem', color: '#64748b' }}>
+              Select a snapshot to restore:
+            </p>
             {suggestions.map((s) => (
               <label
                 key={s.snapshotId}
@@ -111,9 +113,7 @@ export function RollbackDialog({
                   alignItems: 'flex-start',
                   padding: '0.85rem',
                   borderRadius: '14px',
-                  border: `2px solid ${
-                    selected === s.snapshotId ? '#111827' : 'rgba(0,0,0,0.08)'
-                  }`,
+                  border: `2px solid ${selected === s.snapshotId ? '#111827' : 'rgba(0,0,0,0.08)'}`,
                   cursor: 'pointer',
                   background: selected === s.snapshotId ? '#f8fafc' : '#fff',
                 }}

@@ -1,0 +1,13 @@
+@font-face {
+  font-family: 'FZSJ-ZHUZAYTE';
+  src: url('../assets/font/FZSJ-ZHUZAYTE.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+*,
+*::before,
+*::after {
+  font-family: 'FZSJ-ZHUZAYTE', sans-serif;
+}

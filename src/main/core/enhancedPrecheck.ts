@@ -28,8 +28,13 @@ export function generateInstallPlan(pluginResults: PluginInstallResult[]): Insta
     // 从 downloads 推断文件操作（create 操作，从 URL 提取文件名）
     for (const d of result.downloads) {
       estimatedDownloadSize += DEFAULT_DOWNLOAD_SIZE
-      // 从 URL 推断目标文件名
-      const fileName = basename(new URL(d.url).pathname)
+      // 从 URL 推断目标文件名（URL 无效时跳过）
+      let fileName = ''
+      try {
+        fileName = basename(new URL(d.url).pathname)
+      } catch {
+        // 无效 URL，跳过文件名推断
+      }
       if (fileName) {
         fileOperations.push({ type: 'create', path: fileName, size: DEFAULT_DOWNLOAD_SIZE })
       }
@@ -192,7 +197,9 @@ export async function runPrecheck(
   const existingPaths = allPaths.filter((p) => p && existsSync(p))
 
   const existingEnvVars = Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
   )
 
   return runEnhancedPrecheck(pluginResults, existingPaths, existingEnvVars, installedVersions)

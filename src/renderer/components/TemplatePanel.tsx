@@ -11,12 +11,13 @@ type TemplatePanelProps = {
 }
 
 const cardStyle = {
-  borderRadius: '18px',
-  border: '1px solid rgba(15, 23, 42, 0.12)',
-  background: 'rgba(255, 252, 247, 0.92)',
-  padding: '1rem',
+  borderRadius: '12px',
+  border: '1px solid #EFEAE4',
+  background: '#FFFFFF',
+  padding: '1.25rem',
   textAlign: 'left' as const,
   cursor: 'pointer',
+  transition: 'all 0.2s ease',
 }
 
 export function TemplatePanel({
@@ -28,36 +29,44 @@ export function TemplatePanel({
   return (
     <section
       style={{
-        display: 'grid',
-        gap: '1rem',
-        alignContent: 'start',
-        padding: '1.25rem',
-        borderRadius: '24px',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,245,230,0.9))',
-        boxShadow: '0 24px 60px rgba(15, 23, 42, 0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.25rem',
+        padding: '2rem',
+        borderRadius: '16px',
+        background: '#FFFFFF',
+        border: '1px solid #EFEAE4',
+        boxShadow: '0 4px 16px rgba(169, 132, 103, 0.04)',
       }}
     >
-      <header style={{ display: 'grid', gap: '0.35rem' }}>
+      <header style={{ display: 'grid', gap: '0.4rem' }}>
         <p
           style={{
             margin: 0,
             fontSize: '0.8rem',
-            letterSpacing: '0.14em',
+            letterSpacing: '0.15em',
             textTransform: 'uppercase',
-            color: '#b45309',
+            color: '#D47A6A',
+            fontWeight: 600,
           }}
         >
           {getUiText(locale, 'templatesEyebrow')}
         </p>
-        <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#111827' }}>
+        <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#2A2421', fontWeight: 500 }}>
           {getUiText(locale, 'templatesTitle')}
         </h2>
-        <p style={{ margin: 0, color: '#475569', lineHeight: 1.6 }}>
+        <p style={{ margin: 0, color: '#7D746D', lineHeight: 1.6 }}>
           {getUiText(locale, 'templatesDescription')}
         </p>
       </header>
 
-      <div style={{ display: 'grid', gap: '0.85rem' }}>
+      <div
+        style={{
+          display: 'grid',
+          gap: '1rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        }}
+      >
         {templates.map((template) => {
           const selected = template.id === selectedTemplateId
 
@@ -69,11 +78,10 @@ export function TemplatePanel({
               aria-pressed={selected}
               style={{
                 ...cardStyle,
-                borderColor: selected ? '#d97706' : 'rgba(15, 23, 42, 0.12)',
-                background: selected
-                  ? 'linear-gradient(135deg, #fff7ed, #ffedd5)'
-                  : cardStyle.background,
-                boxShadow: selected ? '0 12px 30px rgba(217, 119, 6, 0.18)' : 'none',
+                borderColor: selected ? '#D47A6A' : '#EFEAE4',
+                background: selected ? '#FFF6F4' : cardStyle.background,
+                boxShadow: selected ? '0 4px 12px rgba(212, 122, 106, 0.12)' : 'none',
+                transform: selected ? 'translateY(-2px)' : 'none',
               }}
             >
               <div
@@ -84,16 +92,41 @@ export function TemplatePanel({
                   alignItems: 'center',
                 }}
               >
-                <strong style={{ fontSize: '1rem', color: '#111827' }}>
+                <strong style={{ fontSize: '1.05rem', color: '#2A2421', fontWeight: 600 }}>
                   {resolveLocalizedText(template.name, locale)}
                 </strong>
-                <span style={{ fontSize: '0.75rem', color: '#7c2d12' }}>v{template.version}</span>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    color: '#D47A6A',
+                    fontWeight: 500,
+                    background: '#FFF0EE',
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '4px',
+                  }}
+                >
+                  v{template.version}
+                </span>
               </div>
-              <p style={{ margin: '0.6rem 0 0', color: '#475569', lineHeight: 1.55 }}>
+              <p
+                style={{
+                  margin: '0.75rem 0 0',
+                  color: '#7D746D',
+                  lineHeight: 1.6,
+                  fontSize: '0.9rem',
+                }}
+              >
                 {resolveLocalizedText(template.description, locale)}
               </p>
-              <p style={{ margin: '0.8rem 0 0', fontSize: '0.8rem', color: '#92400e' }}>
-                {template.platforms.join(' / ')}
+              <p
+                style={{
+                  margin: '1rem 0 0',
+                  fontSize: '0.8rem',
+                  color: '#A49C95',
+                  fontWeight: 500,
+                }}
+              >
+                {template.platforms.join(' • ')}
               </p>
             </button>
           )
