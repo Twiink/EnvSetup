@@ -272,7 +272,7 @@ function buildWindowsNvmCommands(input: FrontendPluginParams): string[] {
     `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.nvmDir)} -Force`,
     `@('root: ${installPaths.nvmDir}','path: ${installPaths.nvmWindowsSymlinkDir}','arch: 64','proxy: none','node_mirror: ${NODEJS_DIST_BASE_URL}/') | Set-Content -LiteralPath ${quotePowerShell(settingsPath)} -Encoding ASCII`,
-    `$env:NVM_HOME = ${quotePowerShell(installPaths.nvmDir)}; $env:NVM_SYMLINK = ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}; $env:Path = ${quotePowerShell(installPaths.nvmDir)} + ';' + ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.nvmDir}\\nvm.exe`)} install ${input.nodeVersion}; & ${quotePowerShell(`${installPaths.nvmDir}\\nvm.exe`)} use ${input.nodeVersion}; & ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config set cache ${quotePowerShell(input.npmCacheDir)}; & ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
+    `$_nvm = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmDir)}); $_sym = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}); $env:NVM_HOME = $_nvm; $env:NVM_SYMLINK = $_sym; $env:Path = $_nvm + ';' + $_sym + ';' + $env:Path; & "$_nvm\\nvm.exe" install ${input.nodeVersion}; & "$_nvm\\nvm.exe" use ${input.nodeVersion}; & "$_sym\\npm.cmd" config set cache ${quotePowerShell(input.npmCacheDir)}; & "$_sym\\npm.cmd" config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
   ]
 }
 
@@ -293,8 +293,8 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 
   if (input.platform === 'darwin' && input.nodeManager === 'nvm') {
     return [
-      `export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm which ${input.nodeVersion}`,
-      `export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && npm config get cache && npm config get prefix`,
+      `unset npm_config_prefix; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm which ${input.nodeVersion}`,
+      `unset npm_config_prefix; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && npm config get cache && npm config get prefix`,
     ]
   }
 
@@ -308,16 +308,12 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 
   if (input.nodeManager === 'nvm') {
     return [
-      `$env:NVM_HOME = ${quotePowerShell(installPaths.nvmDir)}; $env:NVM_SYMLINK = ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}; $env:Path = ${quotePowerShell(installPaths.nvmDir)} + ';' + ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\node.exe`)} --version`,
-      `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config get cache`,
-      `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config get prefix`,
+      `$_nvm = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmDir)}); $_sym = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}); $env:NVM_HOME = $_nvm; $env:NVM_SYMLINK = $_sym; $env:Path = $_nvm + ';' + $_sym + ';' + $env:Path; & "$_sym\\node.exe" --version; & "$_sym\\npm.cmd" config get cache; & "$_sym\\npm.cmd" config get prefix`,
     ]
   }
 
   return [
-    `& ${quotePowerShell(`${installPaths.standaloneNodeBinDir}\\node.exe`)} --version`,
-    `& ${quotePowerShell(`${installPaths.standaloneNodeBinDir}\\npm.cmd`)} config get cache`,
-    `& ${quotePowerShell(`${installPaths.standaloneNodeBinDir}\\npm.cmd`)} config get prefix`,
+    `$_bin = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneNodeBinDir)}); & "$_bin\\node.exe" --version; & "$_bin\\npm.cmd" config get cache; & "$_bin\\npm.cmd" config get prefix`,
   ]
 }
 
