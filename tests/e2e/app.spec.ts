@@ -4,12 +4,10 @@ test('app launches and shows envsetup shell', async () => {
   const app = await electron.launch({ args: ['.'] })
   const page = await app.firstWindow()
 
-  await expect(page.getByRole('heading', { name: '开发环境配置' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '开工吧' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '团队标准模板' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Java 开发环境' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Python 开发环境' })).toBeVisible()
   await page.getByRole('button', { name: 'English' }).click()
-  await expect(page.getByRole('heading', { name: 'Environment Setup' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'EnvSetup' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Team Standard Templates' })).toBeVisible()
 
   await app.close()

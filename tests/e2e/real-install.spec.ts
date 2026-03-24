@@ -58,7 +58,7 @@ test.describe('real install', () => {
       await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
 
       // Start task
-      await page.getByRole('button', { name: '启动任务' }).click()
+      await page.getByRole('button', { name: '开始执行' }).click()
 
       // Wait for task to reach terminal state (success or failure)
       await expect(page.getByText(/verified_success|succeeded|全部完成|failed|失败/)).toBeVisible({
