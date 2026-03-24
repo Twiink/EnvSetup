@@ -227,7 +227,7 @@ function buildDarwinNvmCommands(input: FrontendPluginParams): string[] {
     `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
     `cp -R ${quoteShell(`${extractedDir}/.`)} ${quoteShell(installPaths.nvmDir)}`,
     `rm -rf ${quoteShell(extractedDir)} ${quoteShell(archivePath)}`,
-    `export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm install ${input.nodeVersion} && nvm alias default ${input.nodeVersion} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
+    `unset npm_config_prefix; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm install ${input.nodeVersion} && nvm alias default ${input.nodeVersion} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
   ]
 }
 
@@ -272,13 +272,7 @@ function buildWindowsNvmCommands(input: FrontendPluginParams): string[] {
     `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.nvmDir)} -Force`,
     `@('root: ${installPaths.nvmDir}','path: ${installPaths.nvmWindowsSymlinkDir}','arch: 64','proxy: none','node_mirror: ${NODEJS_DIST_BASE_URL}/') | Set-Content -LiteralPath ${quotePowerShell(settingsPath)} -Encoding ASCII`,
-    `$env:NVM_HOME = ${quotePowerShell(installPaths.nvmDir)}`,
-    `$env:NVM_SYMLINK = ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}`,
-    `$env:Path = ${quotePowerShell(`${installPaths.nvmDir};${installPaths.nvmWindowsSymlinkDir};$env:Path`)}`,
-    `& ${quotePowerShell(`${installPaths.nvmDir}\\nvm.exe`)} install ${input.nodeVersion}`,
-    `& ${quotePowerShell(`${installPaths.nvmDir}\\nvm.exe`)} use ${input.nodeVersion}`,
-    `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config set cache ${quotePowerShell(input.npmCacheDir)}`,
-    `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
+    `$env:NVM_HOME = ${quotePowerShell(installPaths.nvmDir)}; $env:NVM_SYMLINK = ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}; $env:Path = ${quotePowerShell(installPaths.nvmDir)} + ';' + ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.nvmDir}\\nvm.exe`)} install ${input.nodeVersion}; & ${quotePowerShell(`${installPaths.nvmDir}\\nvm.exe`)} use ${input.nodeVersion}; & ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config set cache ${quotePowerShell(input.npmCacheDir)}; & ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
   ]
 }
 
@@ -314,10 +308,7 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 
   if (input.nodeManager === 'nvm') {
     return [
-      `$env:NVM_HOME = ${quotePowerShell(installPaths.nvmDir)}`,
-      `$env:NVM_SYMLINK = ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}`,
-      `$env:Path = ${quotePowerShell(`${installPaths.nvmDir};${installPaths.nvmWindowsSymlinkDir};$env:Path`)}`,
-      `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\node.exe`)} --version`,
+      `$env:NVM_HOME = ${quotePowerShell(installPaths.nvmDir)}; $env:NVM_SYMLINK = ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}; $env:Path = ${quotePowerShell(installPaths.nvmDir)} + ';' + ${quotePowerShell(installPaths.nvmWindowsSymlinkDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\node.exe`)} --version`,
       `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config get cache`,
       `& ${quotePowerShell(`${installPaths.nvmWindowsSymlinkDir}\\npm.cmd`)} config get prefix`,
     ]
