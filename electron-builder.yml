@@ -1,6 +1,11 @@
 appId: com.envsetup.app
 productName: 开工吧
 
+artifactName: "EnvSetup-${version}-${os}-${arch}.${ext}"
+
+publish:
+  provider: github
+
 directories:
   output: dist
   buildResources: build
