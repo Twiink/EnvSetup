@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { stat } from 'node:fs/promises'
-import { extname, join } from 'node:path'
+import { dirname, extname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { ensureAppPaths } from '../core/appPaths'
 import { cleanupDetectedEnvironment } from '../core/environment'
@@ -37,7 +38,7 @@ import type {
 import frontendEnvPlugin from '../plugins/frontendEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
-const BUILTIN_TEMPLATE_DIR = join(process.cwd(), 'fixtures', 'templates')
+const BUILTIN_TEMPLATE_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures/templates')
 const BUILTIN_PLUGINS: PluginRegistry = {
   'frontend-env': frontendEnvPlugin,
 }
