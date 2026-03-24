@@ -14,8 +14,10 @@ import {
   deleteSnapshot,
   loadSnapshotMeta,
   markSnapshotDeletable,
+  saveSnapshotMeta,
 } from '../core/snapshot'
 import {
+  cancelTask,
   createTask,
   executeTask,
   loadTask,
@@ -24,7 +26,14 @@ import {
   type PluginRegistry,
 } from '../core/task'
 import { loadTemplatesFromDirectory, mapTemplateValuesToPluginParams } from '../core/template'
-import type { DetectedEnvironment, FailureAnalysis, InstallTask, PluginInstallResult, Primitive, ResolvedTemplate } from '../core/contracts'
+import type {
+  DetectedEnvironment,
+  FailureAnalysis,
+  InstallTask,
+  PluginInstallResult,
+  Primitive,
+  ResolvedTemplate,
+} from '../core/contracts'
 import frontendEnvPlugin from '../plugins/frontendEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
@@ -116,14 +125,23 @@ export function registerIpcHandlers(): void {
     const paths = await ensureAppPaths()
     const task = await getTask(taskId, paths.tasksDir)
 
-    // 任务开始前创建快照
+    // 任务开始前创建快照，收集各插件会写入的路径
+    const pluginTrackedPaths = task.plugins.flatMap((plugin) => {
+      const candidates = [
+        plugin.params.installRootDir,
+        plugin.params.npmCacheDir,
+        plugin.params.npmGlobalPrefix,
+      ]
+      return candidates.filter((p): p is string => typeof p === 'string' && p.length > 0)
+    })
+
     let snapshotId: string | undefined
     try {
       const snapshot = await createSnapshot({
         baseDir: paths.snapshotsDir,
         taskId: task.id,
         type: 'auto',
-        trackedPaths: [],
+        trackedPaths: [...new Set(pluginTrackedPaths)],
       })
       snapshotId = snapshot.id
     } catch {
@@ -135,7 +153,7 @@ export function registerIpcHandlers(): void {
       registry: BUILTIN_PLUGINS,
       platform: process.platform === 'win32' ? 'win32' : 'darwin',
       tasksDir: paths.tasksDir,
-      dryRun: true,
+      dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
     })
 
     const taskWithSnapshot: typeof nextTask = { ...nextTask, snapshotId }
@@ -163,6 +181,14 @@ export function registerIpcHandlers(): void {
     return taskWithSnapshot
   })
 
+  ipcMain.handle('task:cancel', async (_event, taskId: string) => {
+    const paths = await ensureAppPaths()
+    const task = await getTask(taskId, paths.tasksDir)
+    const nextTask = await cancelTask({ task, tasksDir: paths.tasksDir })
+    taskCache.set(nextTask.id, nextTask)
+    return nextTask
+  })
+
   ipcMain.handle(
     'task:retry-plugin',
     async (_event, payload: { taskId: string; pluginId: string }) => {
@@ -174,7 +200,7 @@ export function registerIpcHandlers(): void {
         registry: BUILTIN_PLUGINS,
         platform: process.platform === 'win32' ? 'win32' : 'darwin',
         tasksDir: paths.tasksDir,
-        dryRun: true,
+        dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
       })
       taskCache.set(nextTask.id, nextTask)
       return nextTask
@@ -217,21 +243,44 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'snapshot:create',
-    async (_event, payload: { taskId: string; label?: string }) => {
+    async (_event, payload: { taskId?: string; label?: string }) => {
+      if (!payload.taskId) {
+        throw new Error('taskId is required to create a snapshot')
+      }
       const paths = await ensureAppPaths()
+      // Collect tracked paths from the cached task if available
+      const cachedTask = taskCache.get(payload.taskId)
+      const manualTrackedPaths = cachedTask
+        ? [
+            ...new Set(
+              cachedTask.plugins.flatMap((plugin) => {
+                const candidates = [
+                  plugin.params.installRootDir,
+                  plugin.params.npmCacheDir,
+                  plugin.params.npmGlobalPrefix,
+                ]
+                return candidates.filter((p): p is string => typeof p === 'string' && p.length > 0)
+              }),
+            ),
+          ]
+        : []
       return createSnapshot({
         baseDir: paths.snapshotsDir,
         taskId: payload.taskId,
         type: 'manual',
         label: payload.label,
-        trackedPaths: [],
+        trackedPaths: manualTrackedPaths,
       })
     },
   )
 
   ipcMain.handle('snapshot:delete', async (_event, snapshotId: string) => {
     const paths = await ensureAppPaths()
-    return deleteSnapshot(paths.snapshotsDir, snapshotId)
+    await deleteSnapshot(paths.snapshotsDir, snapshotId)
+    // 同步移除 meta 中的条目，保证列表与磁盘一致
+    const meta = await loadSnapshotMeta(paths.snapshotsDir)
+    meta.snapshots = meta.snapshots.filter((s) => s.id !== snapshotId)
+    await saveSnapshotMeta(paths.snapshotsDir, meta)
   })
 
   // 回滚
@@ -252,10 +301,7 @@ export function registerIpcHandlers(): void {
   )
 
   // 增强预检
-  ipcMain.handle(
-    'precheck:enhanced',
-    async (_event, pluginResults: PluginInstallResult[]) => {
-      return runEnhancedPrecheck(pluginResults)
-    },
-  )
+  ipcMain.handle('precheck:enhanced', async (_event, pluginResults: PluginInstallResult[]) => {
+    return runEnhancedPrecheck(pluginResults)
+  })
 }
