@@ -3,6 +3,8 @@ import { test, expect, _electron as electron } from '@playwright/test'
 test('app launches and shows envsetup shell', async () => {
   const app = await electron.launch({ args: ['.'] })
   const page = await app.firstWindow()
+  await page.evaluate(() => localStorage.setItem('envsetup.locale', 'zh-CN'))
+  await page.reload()
 
   await expect(page.getByRole('heading', { name: '开工吧' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '团队标准模板' })).toBeVisible()
@@ -16,6 +18,8 @@ test('app launches and shows envsetup shell', async () => {
 test('user can select template and create task', async () => {
   const app = await electron.launch({ args: ['.'] })
   const page = await app.firstWindow()
+  await page.evaluate(() => localStorage.setItem('envsetup.locale', 'zh-CN'))
+  await page.reload()
 
   // Wait for templates to load asynchronously before interacting
   await expect(page.getByRole('button', { name: '前端开发环境' })).toBeVisible({ timeout: 15_000 })

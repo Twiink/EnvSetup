@@ -41,6 +41,8 @@ test.describe('real install', () => {
     })
 
     const page = await app.firstWindow()
+    await page.evaluate(() => localStorage.setItem('envsetup.locale', 'zh-CN'))
+    await page.reload()
 
     try {
       // Wait for templates to load asynchronously, then select frontend template
