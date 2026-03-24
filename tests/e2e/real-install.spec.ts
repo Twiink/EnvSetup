@@ -22,28 +22,30 @@ test.describe('real install', () => {
 
     const page = await app.firstWindow()
 
-    // Select frontend template
-    await page.getByRole('button', { name: '前端开发环境' }).click()
+    try {
+      // Select frontend template
+      await page.getByRole('button', { name: '前端开发环境' }).click()
 
-    // Select first LTS version from dropdown
-    await page.locator('select[id="frontend.nodeVersion"]').selectOption({ index: 0 })
+      // Select first LTS version from dropdown
+      await page.locator('select[id="frontend.nodeVersion"]').selectOption({ index: 0 })
 
-    // Run precheck
-    await page.getByRole('button', { name: '运行预检' }).click()
-    await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+      // Run precheck
+      await page.getByRole('button', { name: '运行预检' }).click()
+      await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
 
-    // Create task
-    await page.getByRole('button', { name: '创建任务' }).click()
-    await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+      // Create task
+      await page.getByRole('button', { name: '创建任务' }).click()
+      await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
 
-    // Start task
-    await page.getByRole('button', { name: '启动任务' }).click()
+      // Start task
+      await page.getByRole('button', { name: '启动任务' }).click()
 
-    // Wait for task to reach terminal state
-    await expect(page.getByText(/verified_success|succeeded|全部完成/)).toBeVisible({
-      timeout: 150_000,
-    })
-
-    await app.close()
+      // Wait for task to reach terminal state
+      await expect(page.getByText(/verified_success|succeeded|全部完成/)).toBeVisible({
+        timeout: 150_000,
+      })
+    } finally {
+      await app.close()
+    }
   })
 })
