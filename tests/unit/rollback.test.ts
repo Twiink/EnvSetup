@@ -297,7 +297,7 @@ describe('executeRollback', () => {
     expect(result.snapshotId).toBe('snap-abc')
   })
 
-  it('passes restoreEnv: false to applySnapshot', async () => {
+  it('passes restoreEnv: true to applySnapshot', async () => {
     mockApplySnapshot.mockResolvedValue({
       filesRestored: 0,
       filesSkipped: 0,
@@ -307,6 +307,6 @@ describe('executeRollback', () => {
 
     await executeRollback('/base', 'snap-1', [])
 
-    expect(mockApplySnapshot).toHaveBeenCalledWith(expect.objectContaining({ restoreEnv: false }))
+    expect(mockApplySnapshot).toHaveBeenCalledWith(expect.objectContaining({ restoreEnv: true }))
   })
 })

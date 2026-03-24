@@ -1,7 +1,23 @@
+import fs from 'node:fs/promises'
 import os from 'node:os'
+import path from 'node:path'
 import { test, expect, _electron as electron } from '@playwright/test'
 
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
+
+async function dumpTaskLogs(dataDir: string): Promise<void> {
+  const tasksDir = path.join(dataDir, 'tasks')
+  try {
+    const files = await fs.readdir(tasksDir)
+    const logFiles = files.filter((f) => f.endsWith('.log'))
+    for (const f of logFiles) {
+      const content = await fs.readFile(path.join(tasksDir, f), 'utf8')
+      console.log(`\n=== Task log: ${f} ===\n${content}\n=== end ${f} ===`)
+    }
+  } catch {
+    console.log(`(no task logs found in ${tasksDir})`)
+  }
+}
 
 test.describe('real install', () => {
   test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
@@ -9,7 +25,11 @@ test.describe('real install', () => {
   test('frontend env installs nvm and node successfully', async () => {
     test.setTimeout(180_000)
 
-    const installRoot = process.env.RUNNER_TEMP ?? os.tmpdir()
+    const installRoot = process.env.RUNNER_TEMP
+      ? path.join(process.env.RUNNER_TEMP, 'envsetup-e2e')
+      : path.join(os.tmpdir(), 'envsetup-e2e')
+
+    const dataDir = path.join(process.cwd(), '.envsetup-data')
 
     const app = await electron.launch({
       args: ['.'],
@@ -40,11 +60,22 @@ test.describe('real install', () => {
       // Start task
       await page.getByRole('button', { name: '启动任务' }).click()
 
-      // Wait for task to reach terminal state
-      await expect(page.getByText(/verified_success|succeeded|全部完成/)).toBeVisible({
+      // Wait for task to reach terminal state (success or failure)
+      await expect(page.getByText(/verified_success|succeeded|全部完成|failed|失败/)).toBeVisible({
         timeout: 150_000,
       })
+
+      // Dump logs regardless of outcome so CI artifacts contain full details
+      await dumpTaskLogs(dataDir)
+
+      // Fail the test if the task actually failed
+      const failText = page.getByText(/failed|失败/)
+      const didFail = await failText.isVisible()
+      if (didFail) {
+        throw new Error('Task reached failed state — see task log output above for details')
+      }
     } finally {
+      await dumpTaskLogs(dataDir)
       await app.close()
     }
   })

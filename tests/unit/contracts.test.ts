@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ERROR_CODES, PLUGIN_STATES, TASK_STATES } from '../../src/main/core/contracts'
+import { ERROR_CODES, PLUGIN_STATES, SUPPORTED_PLATFORMS, TASK_STATES } from '../../src/main/core/contracts'
 
 describe('contracts', () => {
   it('defines task states from spec', () => {
@@ -16,13 +16,38 @@ describe('contracts', () => {
     ])
   })
 
-  it('defines plugin states from spec', () => {
-    expect(PLUGIN_STATES).toContain('installed_unverified')
-    expect(PLUGIN_STATES).toContain('needs_rerun')
+  it('defines supported platforms', () => {
+    expect(SUPPORTED_PLATFORMS).toEqual(['darwin', 'win32'])
   })
 
-  it('defines error codes used by mvp', () => {
-    expect(ERROR_CODES).toContain('PLUGIN_PACKAGE_INVALID')
-    expect(ERROR_CODES).toContain('USER_CANCELLED')
+  it('defines all plugin states', () => {
+    expect(PLUGIN_STATES).toEqual([
+      'not_started',
+      'running',
+      'installed_unverified',
+      'verified_success',
+      'failed',
+      'needs_rerun',
+    ])
+  })
+
+  it('defines all error codes', () => {
+    expect(ERROR_CODES).toEqual([
+      'PLATFORM_UNSUPPORTED',
+      'PERMISSION_DENIED',
+      'PARAM_INVALID',
+      'PATH_NOT_WRITABLE',
+      'NETWORK_UNAVAILABLE',
+      'DOWNLOAD_CHECKSUM_FAILED',
+      'EXISTING_ENV_DETECTED',
+      'PLUGIN_PACKAGE_INVALID',
+      'PLUGIN_DEPENDENCY_MISSING',
+      'PLUGIN_EXECUTION_FAILED',
+      'VERIFY_FAILED',
+      'USER_CANCELLED',
+      'VERSION_INCOMPATIBLE',
+      'ARCH_UNSUPPORTED',
+      'ELEVATION_REQUIRED',
+    ])
   })
 })

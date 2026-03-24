@@ -122,7 +122,7 @@ export async function executeRollback(
       snapshotId,
       mode,
       filePaths: trackedPaths.length > 0 ? trackedPaths : undefined,
-      restoreEnv: false,
+      restoreEnv: true,
     })
 
     const hasErrors = result.errors.length > 0

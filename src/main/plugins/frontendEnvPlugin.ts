@@ -333,15 +333,32 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 async function runCommands(
   commands: string[],
   platform: FrontendPluginParams['platform'],
-): Promise<void> {
+): Promise<string[]> {
+  const output: string[] = []
   for (const command of commands) {
-    if (platform === 'win32') {
-      await execFileAsync('powershell', ['-NoProfile', '-Command', command])
-      continue
+    output.push(`$ ${command}`)
+    try {
+      const result =
+        platform === 'win32'
+          ? await execFileAsync('powershell', [
+              '-NoProfile',
+              '-ExecutionPolicy',
+              'Bypass',
+              '-Command',
+              command,
+            ])
+          : await execFileAsync('sh', ['-lc', command])
+      if (result.stdout.trim()) output.push(result.stdout.trim())
+      if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; message?: string }
+      if (e.stdout?.trim()) output.push(e.stdout.trim())
+      if (e.stderr?.trim()) output.push(`stderr: ${e.stderr.trim()}`)
+      output.push(`error: ${e.message ?? String(err)}`)
+      throw Object.assign(new Error(e.message ?? String(err)), { commandOutput: output })
     }
-
-    await execFileAsync('sh', ['-lc', command])
   }
+  return output
 }
 
 const frontendEnvPlugin = {
@@ -365,7 +382,8 @@ const frontendEnvPlugin = {
     ]
 
     if (!params.dryRun) {
-      await runCommands(commands, params.platform)
+      const cmdOutput = await runCommands(commands, params.platform)
+      logs.push(...cmdOutput)
     }
 
     return {
@@ -424,12 +442,12 @@ const frontendEnvPlugin = {
       }
     }
 
-    await runCommands(buildVerifyCommands(params), params.platform)
+    const verifyOutput = await runCommands(buildVerifyCommands(params), params.platform)
 
     return {
       status: 'verified_success',
-      checks:
-        locale === 'zh-CN'
+      checks: [
+        ...(locale === 'zh-CN'
           ? [
               `已校验 Node 版本：${params.nodeVersion}`,
               `已校验工具安装根目录：${params.installRootDir}`,
@@ -441,7 +459,9 @@ const frontendEnvPlugin = {
               `Verified tool install root: ${params.installRootDir}`,
               `Verified npm cache directory: ${params.npmCacheDir}`,
               `Verified npm global install directory: ${params.npmGlobalPrefix}`,
-            ],
+            ]),
+        ...verifyOutput,
+      ],
     }
   },
 }

@@ -23,19 +23,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Build Electron app
         run: npm run build
 
       - name: Run E2E real install
         env:
           ENVSETUP_REAL_RUN: '1'
-        run: npm run test:e2e
+        run: npx playwright test
         timeout-minutes: 15
 
-      - name: Upload test artifacts on failure
+      - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.os }}
+          name: playwright-results-${{ matrix.os }}
           path: test-results/
+          retention-days: 7
+
+      - name: Upload task logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-logs-${{ matrix.os }}
+          path: .envsetup-data/tasks/
+          if-no-files-found: ignore
           retention-days: 7

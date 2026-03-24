@@ -290,4 +290,56 @@ describe('runPrecheck', () => {
     expect(result.conflicts.some((c) => c.type === 'file_exists')).toBe(true)
     expect(result.canProceed).toBe(false)
   })
+
+  it('passes installedVersions through to detectConflicts', async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    const result = await runPrecheck(
+      [
+        makeResult({
+          envChanges: [makeEnvChange('NODE_VERSION', '18.0.0')],
+        }),
+      ],
+      { node: '20.0.0' },
+    )
+    expect(result.conflicts.some((c) => c.type === 'version_mismatch')).toBe(true)
+    // version_mismatch is non-blocking
+    expect(result.canProceed).toBe(true)
+  })
+})
+
+// ============================================================
+// detectConflicts with installedVersions
+// ============================================================
+
+describe('detectConflicts with installedVersions', () => {
+  it('produces version_mismatch when installed version differs from requested', () => {
+    const plan = generateInstallPlan([
+      makeResult({ envChanges: [makeEnvChange('NODE_VERSION', '18.0.0')] }),
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { node: '20.0.0' })
+    expect(conflicts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'version_mismatch', key: 'node' }),
+      ]),
+    )
+  })
+
+  it('does not produce version_mismatch when versions match', () => {
+    const plan = generateInstallPlan([
+      makeResult({ envChanges: [makeEnvChange('NODE_VERSION', '20.0.0')] }),
+    ])
+    const conflicts = detectConflicts(plan, [], {}, { node: '20.0.0' })
+    expect(conflicts.some((c) => c.type === 'version_mismatch')).toBe(false)
+  })
+
+  it('version_mismatch does not block proceed in runEnhancedPrecheck', () => {
+    const result = runEnhancedPrecheck(
+      [makeResult({ envChanges: [makeEnvChange('NODE_VERSION', '18.0.0')] })],
+      [],
+      {},
+      { node: '20.0.0' },
+    )
+    expect(result.conflicts.some((c) => c.type === 'version_mismatch')).toBe(true)
+    expect(result.canProceed).toBe(true)
+  })
 })

@@ -100,4 +100,44 @@ describe('environment detection', () => {
     expect(result.removedPath).toBe(cleanupPath)
     expect(process.env.PYENV_ROOT).toBeUndefined()
   })
+
+  it('detects NVM_HOME (nvm-windows) when env var is set', async () => {
+    const nvmHome = await mkdtemp(join(tmpdir(), 'envsetup-nvmhome-'))
+    process.env.NVM_HOME = nvmHome
+
+    const template = resolveTemplate({
+      id: 'frontend-template',
+      name: { 'zh-CN': '前端', en: 'Frontend' },
+      version: '0.1.0',
+      platforms: ['darwin', 'win32'],
+      description: { 'zh-CN': '前端', en: 'Frontend' },
+      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+      defaults: {},
+      overrides: {},
+      checks: ['node'],
+    })
+
+    const detections = await detectTemplateEnvironments(template, {})
+    expect(detections.some((d) => d.source === 'NVM_HOME')).toBe(true)
+  })
+
+  it('detects npm_config_prefix when env var is set', async () => {
+    const globalPrefix = await mkdtemp(join(tmpdir(), 'envsetup-npmprefix-'))
+    process.env.npm_config_prefix = globalPrefix
+
+    const template = resolveTemplate({
+      id: 'frontend-template',
+      name: { 'zh-CN': '前端', en: 'Frontend' },
+      version: '0.1.0',
+      platforms: ['darwin'],
+      description: { 'zh-CN': '前端', en: 'Frontend' },
+      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+      defaults: {},
+      overrides: {},
+      checks: ['node'],
+    })
+
+    const detections = await detectTemplateEnvironments(template, {})
+    expect(detections.some((d) => d.source === 'npm_config_prefix')).toBe(true)
+  })
 })

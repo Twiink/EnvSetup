@@ -201,7 +201,7 @@ describe('App', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'English' }))
 
-    expect(await screen.findByRole('heading', { name: 'Environment Setup' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'EnvSetup' })).toBeInTheDocument()
     expect(await screen.findByText('Templates')).toBeInTheDocument()
     expect(await screen.findByText('Frontend Environment')).toBeInTheDocument()
   })

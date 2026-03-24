@@ -1,0 +1,45 @@
+import { mkdir, mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { stat } from 'node:fs/promises'
+
+import { describe, expect, it } from 'vitest'
+
+import { ensureAppPaths, getAppPaths } from '../../src/main/core/appPaths'
+
+describe('getAppPaths', () => {
+  it('returns correct sub-paths under baseDir', () => {
+    const base = '/some/base'
+    const paths = getAppPaths(base)
+    expect(paths.rootDir).toBe(base)
+    expect(paths.tasksDir).toBe(join(base, 'tasks'))
+    expect(paths.pluginsDir).toBe(join(base, 'plugins'))
+    expect(paths.pluginStagingDir).toBe(join(base, 'plugin-staging'))
+    expect(paths.snapshotsDir).toBe(join(base, 'snapshots'))
+  })
+})
+
+describe('ensureAppPaths', () => {
+  it('creates all required subdirectories', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'envsetup-apppaths-'))
+    const paths = await ensureAppPaths(base)
+
+    for (const dir of [
+      paths.rootDir,
+      paths.tasksDir,
+      paths.pluginsDir,
+      paths.pluginStagingDir,
+      paths.snapshotsDir,
+    ]) {
+      const s = await stat(dir)
+      expect(s.isDirectory()).toBe(true)
+    }
+  })
+
+  it('is idempotent when directories already exist', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'envsetup-apppaths-idem-'))
+    await ensureAppPaths(base)
+    // second call must not throw
+    await expect(ensureAppPaths(base)).resolves.toBeDefined()
+  })
+})

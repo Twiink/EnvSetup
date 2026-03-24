@@ -301,7 +301,13 @@ export function registerIpcHandlers(): void {
   )
 
   // 增强预检
-  ipcMain.handle('precheck:enhanced', async (_event, pluginResults: PluginInstallResult[]) => {
-    return runEnhancedPrecheck(pluginResults)
-  })
+  ipcMain.handle(
+    'precheck:enhanced',
+    async (
+      _event,
+      payload: { pluginResults: PluginInstallResult[]; installedVersions?: Record<string, string> },
+    ) => {
+      return runEnhancedPrecheck(payload.pluginResults, payload.installedVersions)
+    },
+  )
 }
