@@ -16,8 +16,7 @@ const execFileAsync = promisify(execFile)
 
 const NODEJS_DIST_BASE_URL = 'https://nodejs.org/dist'
 const NVM_ARCHIVE_BASE_URL = 'https://github.com/nvm-sh/nvm/archive/refs/tags'
-const NVM_WINDOWS_RELEASE_BASE_URL =
-  'https://github.com/coreybutler/nvm-windows/releases/download'
+const NVM_WINDOWS_RELEASE_BASE_URL = 'https://github.com/coreybutler/nvm-windows/releases/download'
 const PINNED_NVM_VERSION = '0.40.4'
 const PINNED_NVM_WINDOWS_VERSION = '1.2.2'
 
@@ -153,7 +152,12 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
     )
   }
 
-  if (typeof input.installRootDir !== 'string' || input.installRootDir.length === 0) {
+  const installRootDir =
+    typeof input.installRootDir === 'string' && input.installRootDir.length > 0
+      ? input.installRootDir
+      : process.env.ENVSETUP_INSTALL_ROOT ?? ''
+
+  if (installRootDir.length === 0) {
     throw new Error(
       translate(locale, {
         'zh-CN': 'frontend-env 缺少工具安装根目录',
@@ -183,7 +187,7 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
   return {
     nodeManager: input.nodeManager,
     nodeVersion: input.nodeVersion,
-    installRootDir: input.installRootDir,
+    installRootDir,
     npmCacheDir: input.npmCacheDir,
     npmGlobalPrefix: input.npmGlobalPrefix,
     platform: input.platform,
