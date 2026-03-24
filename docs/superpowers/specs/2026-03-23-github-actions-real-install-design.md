@@ -53,17 +53,18 @@ dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
 **文件**: `tests/e2e/real-install.spec.ts`
 
 测试流程：
-1. `electron.launch({ args: ['.'] })` 启动打包后的应用
+1. `electron.launch({ args: ['.'], env: { ...process.env, ENVSETUP_REAL_RUN: '1', ENVSETUP_INSTALL_ROOT: process.env.RUNNER_TEMP ?? os.tmpdir() } })` 启动打包后的应用，通过环境变量传入安装目录（主进程读取此环境变量作为 installRootDir 默认值，绕过 UI 文件选择器）
 2. 点击「前端开发环境」模板
 3. 选择第一个 Node LTS 版本
-4. 覆盖安装目录为 runner 临时目录（`process.env.RUNNER_TEMP ?? os.tmpdir()`）
-5. 点击「运行预检」，等待结果
-6. 点击「创建任务」
-7. 点击「启动任务」
-8. 轮询/等待任务状态变为 `succeeded`
-9. 断言插件状态全部为 `verified_success`
+4. 点击「运行预检」，等待结果可见
+5. 点击「创建任务」
+6. 点击「启动任务」
+7. 等待 UI 上任务状态文本变为表示成功的标识（`verified_success` / `succeeded`）
+8. 断言至少一个插件的状态文本可见
 
-**超时设置**：单个测试 timeout = 180,000ms（nvm 从 GitHub 下载约需 1-3 分钟）
+**超时设置**：通过 `test.setTimeout(180_000)` 在测试内设置（不修改全局配置），nvm 从 GitHub 下载约需 1-3 分钟。
+
+**安装目录传入机制**：UI 的安装目录通过文件选择器设置，Playwright 无法模拟。解决方案：`frontendEnvPlugin`（或 IPC 层的 `mapTemplateValuesToPluginParams`）读取 `ENVSETUP_INSTALL_ROOT` 环境变量，当该变量非空时覆盖 `installRootDir` 默认值。E2E 启动 Electron 时通过 `electron.launch({ env: { ENVSETUP_INSTALL_ROOT: ... } })` 注入。
 
 **仅在 real-run 模式下运行**：通过 `test.skip(process.env.ENVSETUP_REAL_RUN !== '1', 'Only runs in CI real-install mode')` 保护本地开发不意外执行真实安装。
 
@@ -73,7 +74,8 @@ dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
 
 **文件**: `playwright.config.ts`
 
-- 将 `timeout` 从 30,000 提升至 180,000（real-run 场景需要）
+- **不修改**全局 `timeout`（30,000ms 保持不变，避免影响现有快速测试）
+- 在 `real-install.spec.ts` 内通过 `test.setTimeout(180_000)` 设置单测超时
 - 开启 `screenshot: 'only-on-failure'` 和 `video: 'retain-on-failure'`，失败时上传 artifacts
 
 ---
@@ -107,9 +109,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
 
       - name: Build Electron app
         run: npm run build
@@ -148,10 +147,11 @@ jobs:
 ## 文件变更清单
 
 ```
-.github/workflows/e2e-real-install.yml   # 新增
-tests/e2e/real-install.spec.ts           # 新增
-src/main/ipc/index.ts                    # 修改 2 行
-playwright.config.ts                     # 修改 timeout 和 reporter 配置
+.github/workflows/e2e-real-install.yml       # 新增
+tests/e2e/real-install.spec.ts               # 新增
+src/main/ipc/index.ts                        # 修改 2 行（dryRun 读环境变量）
+src/main/plugins/frontendEnvPlugin.ts        # 修改：读 ENVSETUP_INSTALL_ROOT 覆盖 installRootDir 默认值
+playwright.config.ts                         # 修改：开启 screenshot/video on failure
 ```
 
 ---
