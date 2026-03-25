@@ -23,21 +23,21 @@ describe('environment detection', () => {
     process.env.NVM_DIR = await mkdtemp(join(tmpdir(), 'envsetup-nvm-'))
 
     const template = resolveTemplate({
-      id: 'frontend-template',
-      name: { 'zh-CN': '前端开发环境', en: 'Frontend Environment' },
+      id: 'node-template',
+      name: { 'zh-CN': 'Node.js 开发环境', en: 'Node.js Environment'},
       version: '0.1.0',
       platforms: ['darwin'],
-      description: { 'zh-CN': '前端', en: 'Frontend' },
-      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
-      defaults: { 'frontend.installRootDir': installRootDir },
+      description: { 'zh-CN': '前端', en: 'Node.js' },
+      plugins: [{ pluginId: 'node-env', version: '0.1.0' }],
+      defaults: { 'node.installRootDir': installRootDir },
       overrides: {
-        'frontend.installRootDir': { editable: true, type: 'path' },
+        'node.installRootDir': { editable: true, type: 'path' },
       },
       checks: ['node'],
     })
 
     const detections = await detectTemplateEnvironments(template, {
-      'frontend.installRootDir': installRootDir,
+      'node.installRootDir': installRootDir,
     })
 
     expect(detections.some((detection) => detection.kind === 'managed_root')).toBe(true)
@@ -106,12 +106,12 @@ describe('environment detection', () => {
     process.env.NVM_HOME = nvmHome
 
     const template = resolveTemplate({
-      id: 'frontend-template',
-      name: { 'zh-CN': '前端', en: 'Frontend' },
+      id: 'node-template',
+      name: { 'zh-CN': '前端', en: 'Node.js' },
       version: '0.1.0',
       platforms: ['darwin', 'win32'],
-      description: { 'zh-CN': '前端', en: 'Frontend' },
-      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+      description: { 'zh-CN': '前端', en: 'Node.js' },
+      plugins: [{ pluginId: 'node-env', version: '0.1.0' }],
       defaults: {},
       overrides: {},
       checks: ['node'],
@@ -126,12 +126,12 @@ describe('environment detection', () => {
     process.env.npm_config_prefix = globalPrefix
 
     const template = resolveTemplate({
-      id: 'frontend-template',
-      name: { 'zh-CN': '前端', en: 'Frontend' },
+      id: 'node-template',
+      name: { 'zh-CN': '前端', en: 'Node.js' },
       version: '0.1.0',
       platforms: ['darwin'],
-      description: { 'zh-CN': '前端', en: 'Frontend' },
-      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+      description: { 'zh-CN': '前端', en: 'Node.js' },
+      plugins: [{ pluginId: 'node-env', version: '0.1.0' }],
       defaults: {},
       overrides: {},
       checks: ['node'],
@@ -139,5 +139,28 @@ describe('environment detection', () => {
 
     const detections = await detectTemplateEnvironments(template, {})
     expect(detections.some((d) => d.source === 'npm_config_prefix')).toBe(true)
+  })
+
+  it('detects git executable and managed root for git template', async () => {
+    const installRootDir = await mkdtemp(join(tmpdir(), 'envsetup-git-'))
+
+    const template = resolveTemplate({
+      id: 'git-template',
+      name: { 'zh-CN': 'Git', en: 'Git' },
+      version: '0.1.0',
+      platforms: ['darwin', 'win32'],
+      description: { 'zh-CN': 'Git', en: 'Git' },
+      plugins: [{ pluginId: 'git-env', version: '0.1.0' }],
+      defaults: { 'git.installRootDir': installRootDir },
+      overrides: {},
+      checks: ['git'],
+    })
+
+    const detections = await detectTemplateEnvironments(template, {
+      'git.installRootDir': installRootDir,
+    })
+
+    expect(detections.some((d) => d.tool === 'git' && d.source === 'git.installRootDir')).toBe(true)
+    expect(detections.some((d) => d.tool === 'git' && d.source === 'PATH')).toBe(true)
   })
 })

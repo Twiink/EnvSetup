@@ -1,0 +1,67 @@
+{
+  "id": "node-template",
+  "name": {
+    "zh-CN": "Node.js 开发环境",
+    "en": "Node.js Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "面向团队标准化交付的 Node.js 环境模板，覆盖 Node、npm 缓存和用户级全局目录。",
+    "en": "A team-managed Node.js environment template covering Node, npm cache, and user-level global directories."
+  },
+  "plugins": [
+    {
+      "pluginId": "node-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "node.nodeManager": "nvm",
+    "node.nodeVersion": "20.11.1",
+    "node.installRootDir": "./.envsetup-data/toolchain",
+    "node.npmCacheDir": "./.envsetup-data/npm-cache",
+    "node.npmGlobalPrefix": "./.envsetup-data/npm-global"
+  },
+  "overrides": {
+    "node.nodeManager": {
+      "type": "enum",
+      "editable": true,
+      "required": true,
+      "enum": ["node", "nvm"],
+      "affects": ["node-env"]
+    },
+    "node.nodeVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "dependsOn": {
+        "field": "node.nodeManager",
+        "in": ["node", "nvm"]
+      }
+    },
+    "node.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["node-env"]
+    },
+    "node.npmCacheDir": {
+      "type": "path",
+      "editable": true,
+      "required": true
+    },
+    "node.npmGlobalPrefix": {
+      "type": "path",
+      "editable": true,
+      "required": true
+    }
+  },
+  "checks": ["node"],
+  "maintainer": {
+    "zh-CN": "环境配置团队",
+    "en": "Environment Setup Team"
+  },
+  "recommended": true
+}

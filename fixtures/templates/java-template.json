@@ -7,16 +7,48 @@
   "version": "0.1.0",
   "platforms": ["darwin", "win32"],
   "description": {
-    "zh-CN": "占位模板，用于预检当前机器上的 Java 运行时与 JAVA_HOME。",
-    "en": "Placeholder template for checking Java runtimes and JAVA_HOME on the current machine."
+    "zh-CN": "面向团队标准化交付的 Java 环境模板，支持 Eclipse Temurin JDK 直接安装或 SDKMAN 版本管理。",
+    "en": "A team-managed Java environment template supporting Eclipse Temurin JDK direct install or SDKMAN version management."
   },
-  "plugins": [],
-  "defaults": {},
-  "overrides": {},
+  "plugins": [
+    {
+      "pluginId": "java-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "java.javaManager": "sdkman",
+    "java.javaVersion": "21",
+    "java.installRootDir": "./.envsetup-data/toolchain"
+  },
+  "overrides": {
+    "java.javaManager": {
+      "type": "enum",
+      "editable": true,
+      "required": true,
+      "enum": ["jdk", "sdkman"],
+      "affects": ["java-env"]
+    },
+    "java.javaVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "dependsOn": {
+        "field": "java.javaManager",
+        "in": ["jdk", "sdkman"]
+      }
+    },
+    "java.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["java-env"]
+    }
+  },
   "checks": ["java"],
   "maintainer": {
     "zh-CN": "环境配置团队",
     "en": "Environment Setup Team"
   },
-  "recommended": false
+  "recommended": true
 }

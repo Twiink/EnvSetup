@@ -1,12 +1,12 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-import { buildFrontendEnvChanges, resolveFrontendInstallPaths } from '../core/platform'
+import { buildNodeEnvChanges, resolveNodeInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import type {
   AppLocale,
   DownloadArtifact,
-  FrontendPluginParams,
+  NodePluginParams,
   PluginExecutionInput,
   PluginInstallResult,
   PluginVerifyResult,
@@ -38,7 +38,7 @@ function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
-function resolveNodeArchiveBasename(input: FrontendPluginParams): string {
+function resolveNodeArchiveBasename(input: NodePluginParams): string {
   const architecture = input.platform === 'win32' ? 'x64' : process.arch === 'x64' ? 'x64' : 'arm64'
 
   return input.platform === 'win32'
@@ -46,16 +46,16 @@ function resolveNodeArchiveBasename(input: FrontendPluginParams): string {
     : `node-v${input.nodeVersion}-darwin-${architecture}.tar.gz`
 }
 
-function buildNodeArchiveUrl(input: FrontendPluginParams): string {
+function buildNodeArchiveUrl(input: NodePluginParams): string {
   const archiveName = resolveNodeArchiveBasename(input)
   return `${NODEJS_DIST_BASE_URL}/v${input.nodeVersion}/${archiveName}`
 }
 
-function buildNodeChecksumUrl(input: FrontendPluginParams): string {
+function buildNodeChecksumUrl(input: NodePluginParams): string {
   return `${NODEJS_DIST_BASE_URL}/v${input.nodeVersion}/SHASUMS256.txt`
 }
 
-function buildDownloadPlan(input: FrontendPluginParams): DownloadArtifact[] {
+function buildDownloadPlan(input: NodePluginParams): DownloadArtifact[] {
   if (input.nodeManager === 'node') {
     return [
       {
@@ -112,14 +112,14 @@ function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
   validateOfficialDownloads(downloads)
 }
 
-function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
+function toNodeParams(input: PluginExecutionInput): NodePluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
   if (input.nodeManager !== 'node' && input.nodeManager !== 'nvm') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'frontend-env 需要 nodeManager=node|nvm',
-        en: 'frontend-env requires nodeManager=node|nvm',
+        'zh-CN': 'node-env 需要 nodeManager=node|nvm',
+        en: 'node-env requires nodeManager=node|nvm',
       }),
     )
   }
@@ -127,8 +127,8 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
   if (typeof input.nodeVersion !== 'string' || input.nodeVersion.length === 0) {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'frontend-env 缺少 nodeVersion',
-        en: 'frontend-env requires nodeVersion',
+        'zh-CN': 'node-env 缺少 nodeVersion',
+        en: 'node-env requires nodeVersion',
       }),
     )
   }
@@ -141,8 +141,8 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
   if (installRootDir.length === 0) {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'frontend-env 缺少工具安装根目录',
-        en: 'frontend-env requires an install root directory',
+        'zh-CN': 'node-env 缺少工具安装根目录',
+        en: 'node-env requires an install root directory',
       }),
     )
   }
@@ -150,8 +150,8 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
   if (typeof input.npmCacheDir !== 'string' || typeof input.npmGlobalPrefix !== 'string') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'frontend-env 缺少 npm 缓存目录或全局安装目录',
-        en: 'frontend-env requires npm cache and global prefix paths',
+        'zh-CN': 'node-env 缺少 npm 缓存目录或全局安装目录',
+        en: 'node-env requires npm cache and global prefix paths',
       }),
     )
   }
@@ -159,8 +159,8 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
   if (input.platform !== 'darwin' && input.platform !== 'win32') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'frontend-env 仅支持 darwin 和 win32',
-        en: 'frontend-env supports only darwin and win32',
+        'zh-CN': 'node-env 仅支持 darwin 和 win32',
+        en: 'node-env supports only darwin and win32',
       }),
     )
   }
@@ -177,8 +177,8 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
   }
 }
 
-function buildDarwinStandaloneCommands(input: FrontendPluginParams): string[] {
-  const installPaths = resolveFrontendInstallPaths(input)
+function buildDarwinStandaloneCommands(input: NodePluginParams): string[] {
+  const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = buildNodeArchiveUrl(input)
   const checksumUrl = buildNodeChecksumUrl(input)
   const archiveName = resolveNodeArchiveBasename(input)
@@ -197,8 +197,8 @@ function buildDarwinStandaloneCommands(input: FrontendPluginParams): string[] {
   ]
 }
 
-function buildDarwinNvmCommands(input: FrontendPluginParams): string[] {
-  const installPaths = resolveFrontendInstallPaths(input)
+function buildDarwinNvmCommands(input: NodePluginParams): string[] {
+  const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = `${NVM_ARCHIVE_BASE_URL}/v${PINNED_NVM_VERSION}.tar.gz`
   const archivePath = `${installPaths.installRootDir}/nvm-v${PINNED_NVM_VERSION}.tar.gz`
   const extractedDir = `${installPaths.installRootDir}/nvm-${PINNED_NVM_VERSION}`
@@ -213,8 +213,8 @@ function buildDarwinNvmCommands(input: FrontendPluginParams): string[] {
   ]
 }
 
-function buildWindowsStandaloneCommands(input: FrontendPluginParams): string[] {
-  const installPaths = resolveFrontendInstallPaths(input)
+function buildWindowsStandaloneCommands(input: NodePluginParams): string[] {
+  const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = buildNodeArchiveUrl(input)
   const checksumUrl = buildNodeChecksumUrl(input)
   const archiveName = resolveNodeArchiveBasename(input)
@@ -239,8 +239,8 @@ function buildWindowsStandaloneCommands(input: FrontendPluginParams): string[] {
   ]
 }
 
-function buildWindowsNvmCommands(input: FrontendPluginParams): string[] {
-  const installPaths = resolveFrontendInstallPaths(input)
+function buildWindowsNvmCommands(input: NodePluginParams): string[] {
+  const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = `${NVM_WINDOWS_RELEASE_BASE_URL}/${PINNED_NVM_WINDOWS_VERSION}/nvm-noinstall.zip`
   const archivePath = `${installPaths.installRootDir}\\nvm-noinstall.zip`
   const settingsPath = `${installPaths.nvmDir}\\settings.txt`
@@ -259,7 +259,7 @@ function buildWindowsNvmCommands(input: FrontendPluginParams): string[] {
   ]
 }
 
-export function buildInstallCommands(input: FrontendPluginParams): string[] {
+export function buildInstallCommands(input: NodePluginParams): string[] {
   if (input.platform === 'darwin') {
     return input.nodeManager === 'nvm'
       ? buildDarwinNvmCommands(input)
@@ -271,8 +271,8 @@ export function buildInstallCommands(input: FrontendPluginParams): string[] {
     : buildWindowsStandaloneCommands(input)
 }
 
-function buildVerifyCommands(input: FrontendPluginParams): string[] {
-  const installPaths = resolveFrontendInstallPaths(input)
+function buildVerifyCommands(input: NodePluginParams): string[] {
+  const installPaths = resolveNodeInstallPaths(input)
 
   if (input.platform === 'darwin' && input.nodeManager === 'nvm') {
     return [
@@ -302,9 +302,9 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 
 async function runCommands(
   commands: string[],
-  platform: FrontendPluginParams['platform'],
+  platform: NodePluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
-  pluginId = 'frontend-env',
+  pluginId = 'node-env',
 ): Promise<string[]> {
   const output: string[] = []
   for (const [index, command] of commands.entries()) {
@@ -362,13 +362,13 @@ async function runCommands(
   return output
 }
 
-const frontendEnvPlugin = {
+const nodeEnvPlugin = {
   async install(input: PluginExecutionInput): Promise<PluginInstallResult> {
-    const params = toFrontendParams(input)
-    const installPaths = resolveFrontendInstallPaths(params)
+    const params = toNodeParams(input)
+    const installPaths = resolveNodeInstallPaths(params)
     const downloads = buildDownloadPlan(params)
     const commands = buildInstallCommands(params)
-    const envChanges = buildFrontendEnvChanges(params)
+    const envChanges = buildNodeEnvChanges(params)
 
     assertOfficialDownloadPlan(downloads)
 
@@ -427,7 +427,7 @@ const frontendEnvPlugin = {
   async verify(
     input: PluginExecutionInput & { installResult: PluginInstallResult },
   ): Promise<PluginVerifyResult> {
-    const params = toFrontendParams(input)
+    const params = toNodeParams(input)
     const downloads = buildDownloadPlan(params)
     const locale = input.locale ?? DEFAULT_LOCALE
 
@@ -479,4 +479,4 @@ const frontendEnvPlugin = {
   },
 }
 
-export default frontendEnvPlugin
+export default nodeEnvPlugin

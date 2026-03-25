@@ -12,21 +12,21 @@ import type { ResolvedTemplate } from '../../src/main/core/contracts'
 describe('template', () => {
   it('resolves plugin parameter defaults and overrides', () => {
     const template = resolveTemplate({
-      id: 'frontend-template',
-      name: 'Frontend Env',
+      id: 'node-template',
+      name: 'Node.js Env',
       version: '0.1.0',
       platforms: ['darwin'],
-      description: 'Frontend template',
-      plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
-      defaults: { 'frontend.nodeManager': 'nvm' },
+      description: 'Node.js template',
+      plugins: [{ pluginId: 'node-env', version: '0.1.0' }],
+      defaults: { 'node.nodeManager': 'nvm' },
       overrides: {
-        'frontend.nodeManager': { editable: true, enum: ['node', 'nvm'] },
+        'node.nodeManager': { editable: true, enum: ['node', 'nvm'] },
       },
       checks: [],
     })
 
-    expect(template.fields['frontend.nodeManager'].value).toBe('nvm')
-    expect(template.fields['frontend.nodeManager'].enum).toEqual(['node', 'nvm'])
+    expect(template.fields['node.nodeManager'].value).toBe('nvm')
+    expect(template.fields['node.nodeManager'].enum).toEqual(['node', 'nvm'])
   })
 
   it('rejects override for undefined field', () => {
@@ -37,12 +37,12 @@ describe('template', () => {
         version: '0.1.0',
         platforms: ['darwin'],
         description: 'Broken template',
-        plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+        plugins: [{ pluginId: 'node-env', version: '0.1.0' }],
         defaults: {},
-        overrides: { 'frontend.missing': { editable: true } },
+        overrides: { 'node.missing': { editable: true } },
         checks: [],
       }),
-    ).toThrowError('Undefined template field: frontend.missing')
+    ).toThrowError('Undefined template field: node.missing')
   })
 
   it('marks non-editable fields as not editable', () => {
@@ -69,7 +69,7 @@ describe('template', () => {
 
 describe('inferTemplateFieldPrefix', () => {
   it('strips -env suffix from pluginId', () => {
-    expect(inferTemplateFieldPrefix('frontend-env')).toBe('frontend')
+    expect(inferTemplateFieldPrefix('node-env')).toBe('node')
   })
 
   it('returns pluginId unchanged when it does not end with -env', () => {
@@ -219,9 +219,9 @@ describe('validateResolvedTemplateValues', () => {
 
 describe('mapTemplateValuesToPluginParams', () => {
   it('strips the plugin prefix from keys', () => {
-    const params = mapTemplateValuesToPluginParams('frontend-env', {
-      'frontend.nodeVersion': '20.11.1',
-      'frontend.installRootDir': '/tools',
+    const params = mapTemplateValuesToPluginParams('node-env', {
+      'node.nodeVersion': '20.11.1',
+      'node.installRootDir': '/tools',
       'other.key': 'ignored',
     })
 
@@ -232,7 +232,7 @@ describe('mapTemplateValuesToPluginParams', () => {
   })
 
   it('returns empty object when no keys match the prefix', () => {
-    const params = mapTemplateValuesToPluginParams('frontend-env', {
+    const params = mapTemplateValuesToPluginParams('node-env', {
       'java.home': '/usr/lib/jvm',
     })
     expect(params).toEqual({})

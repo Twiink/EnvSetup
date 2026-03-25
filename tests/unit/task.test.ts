@@ -42,9 +42,9 @@ function makeVerifyResult(overrides: Partial<PluginVerifyResult> = {}): PluginVe
   return { status: 'verified_success', checks: [], ...overrides }
 }
 
-function makeTask(pluginIds: string[] = ['frontend-env']): InstallTask {
+function makeTask(pluginIds: string[] = ['node-env']): InstallTask {
   return createTask({
-    templateId: 'frontend-template',
+    templateId: 'node-template',
     templateVersion: '0.1.0',
     locale: 'zh-CN',
     params: {},
@@ -55,11 +55,11 @@ function makeTask(pluginIds: string[] = ['frontend-env']): InstallTask {
 describe('task', () => {
   it('creates task with draft status and plugin snapshots', () => {
     const task = createTask({
-      templateId: 'frontend-template',
+      templateId: 'node-template',
       templateVersion: '0.1.0',
       locale: 'zh-CN',
       params: {},
-      plugins: [{ pluginId: 'frontend-env', version: '0.1.0', params: { nodeVersion: '20.11.1' } }],
+      plugins: [{ pluginId: 'node-env', version: '0.1.0', params: { nodeVersion: '20.11.1' } }],
     })
 
     expect(task.status).toBe('draft')
@@ -77,16 +77,16 @@ describe('task', () => {
 
   it('aggregates successful plugin verification into succeeded task', () => {
     const task = createTask({
-      templateId: 'frontend-template',
+      templateId: 'node-template',
       templateVersion: '0.1.0',
       locale: 'zh-CN',
       params: {},
-      plugins: [{ pluginId: 'frontend-env', version: '0.1.0', params: { nodeVersion: '20.11.1' } }],
+      plugins: [{ pluginId: 'node-env', version: '0.1.0', params: { nodeVersion: '20.11.1' } }],
     })
 
     const nextTask = applyPluginResult(
       task,
-      'frontend-env',
+      'node-env',
       {
         status: 'installed_unverified',
         executionMode: 'dry_run',
@@ -158,7 +158,7 @@ describe('task', () => {
     const task = makeTask()
     const updated = applyPluginResult(
       task,
-      'frontend-env',
+      'node-env',
       makeInstallResult(),
       makeVerifyResult({ status: 'verify_failed', error: 'binary not found' }),
     )
@@ -171,7 +171,7 @@ describe('task', () => {
     const task = makeTask()
     const updated = applyPluginResult(
       task,
-      'frontend-env',
+      'node-env',
       makeInstallResult({ status: 'failed', error: 'install error' }),
       makeVerifyResult({ status: 'verify_failed' }),
     )
@@ -217,7 +217,7 @@ describe('task', () => {
     const task = makeTask()
     const updated = applyPluginResult(
       task,
-      'frontend-env',
+      'node-env',
       makeInstallResult({ logs: ['token=supersecret', 'password=abc123'] }),
       makeVerifyResult({ checks: ['ok'] }),
     )
@@ -267,7 +267,7 @@ describe('cancelTask', () => {
 
   it('does not cancel an already-succeeded task', async () => {
     let task = makeTask()
-    task = applyPluginResult(task, 'frontend-env', makeInstallResult(), makeVerifyResult())
+    task = applyPluginResult(task, 'node-env', makeInstallResult(), makeVerifyResult())
     expect(task.status).toBe('succeeded')
 
     const result = await cancelTask({ task, tasksDir })

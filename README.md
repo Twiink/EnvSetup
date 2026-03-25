@@ -85,7 +85,7 @@ src/
 │   │   └── ...
 │   ├── ipc/            # IPC 通信层
 │   └── plugins/        # 内置插件
-│       └── frontendEnvPlugin.ts
+│       └── nodeEnvPlugin.ts
 ├── preload/            # Electron preload 桥接
 ├── renderer/           # React UI
 │   ├── App.tsx

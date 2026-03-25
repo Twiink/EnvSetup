@@ -12,7 +12,7 @@ import type {
 } from './contracts'
 import { mapTemplateValuesToPluginParams } from './template'
 
-const SUPPORTED_ENVIRONMENT_CHECKS = new Set<EnvironmentTool>(['node', 'java', 'python'])
+const SUPPORTED_ENVIRONMENT_CHECKS = new Set<EnvironmentTool>(['node', 'java', 'python', 'git'])
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -182,8 +182,44 @@ async function detectNodeEnvironment(
   return detections
 }
 
-async function detectJavaEnvironment(): Promise<DetectedEnvironment[]> {
+async function detectJavaEnvironment(
+  values: Record<string, Primitive>,
+): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
+
+  const installRootDir =
+    typeof values.installRootDir === 'string'
+      ? values.installRootDir
+      : typeof values['java.installRootDir'] === 'string'
+        ? values['java.installRootDir']
+        : undefined
+
+  if (installRootDir && (await pathExists(installRootDir))) {
+    detections.push(
+      buildDetection({
+        tool: 'java',
+        kind: 'managed_root',
+        path: installRootDir,
+        source: 'java.installRootDir',
+        cleanupSupported: isCleanupAllowedPath(installRootDir),
+        cleanupPath: installRootDir,
+      }),
+    )
+  }
+
+  if (process.env.SDKMAN_DIR) {
+    detections.push(
+      buildDetection({
+        tool: 'java',
+        kind: 'manager_root',
+        path: process.env.SDKMAN_DIR,
+        source: 'SDKMAN_DIR',
+        cleanupSupported: isCleanupAllowedPath(process.env.SDKMAN_DIR),
+        cleanupPath: process.env.SDKMAN_DIR,
+        cleanupEnvKey: 'SDKMAN_DIR',
+      }),
+    )
+  }
 
   if (process.env.JAVA_HOME) {
     detections.push(
@@ -215,8 +251,30 @@ async function detectJavaEnvironment(): Promise<DetectedEnvironment[]> {
   return detections
 }
 
-async function detectPythonEnvironment(): Promise<DetectedEnvironment[]> {
+async function detectPythonEnvironment(
+  values: Record<string, Primitive>,
+): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
+
+  const installRootDir =
+    typeof values.installRootDir === 'string'
+      ? values.installRootDir
+      : typeof values['python.installRootDir'] === 'string'
+        ? values['python.installRootDir']
+        : undefined
+
+  if (installRootDir && (await pathExists(installRootDir))) {
+    detections.push(
+      buildDetection({
+        tool: 'python',
+        kind: 'managed_root',
+        path: installRootDir,
+        source: 'python.installRootDir',
+        cleanupSupported: isCleanupAllowedPath(installRootDir),
+        cleanupPath: installRootDir,
+      }),
+    )
+  }
 
   for (const envKey of ['VIRTUAL_ENV', 'PYENV_ROOT', 'CONDA_PREFIX'] as const) {
     const envPath = process.env[envKey]
@@ -253,6 +311,64 @@ async function detectPythonEnvironment(): Promise<DetectedEnvironment[]> {
   return detections
 }
 
+async function detectGitEnvironment(values: Record<string, Primitive>): Promise<DetectedEnvironment[]> {
+  const detections: DetectedEnvironment[] = []
+
+  const installRootDir =
+    typeof values.installRootDir === 'string'
+      ? values.installRootDir
+      : typeof values['git.installRootDir'] === 'string'
+        ? values['git.installRootDir']
+        : undefined
+
+  if (installRootDir && (await pathExists(installRootDir))) {
+    detections.push(
+      buildDetection({
+        tool: 'git',
+        kind: 'managed_root',
+        path: installRootDir,
+        source: 'git.installRootDir',
+        cleanupSupported: isCleanupAllowedPath(installRootDir),
+        cleanupPath: installRootDir,
+      }),
+    )
+  }
+
+  for (const envKey of ['GIT_HOME', 'SCOOP'] as const) {
+    const envPath = process.env[envKey]
+    if (!envPath) {
+      continue
+    }
+
+    detections.push(
+      buildDetection({
+        tool: 'git',
+        kind: 'manager_root',
+        path: envPath,
+        source: envKey,
+        cleanupSupported: isCleanupAllowedPath(envPath),
+        cleanupPath: envPath,
+        cleanupEnvKey: envKey,
+      }),
+    )
+  }
+
+  const gitExecutable = await findExecutable(['git'])
+  if (gitExecutable) {
+    detections.push(
+      buildDetection({
+        tool: 'git',
+        kind: 'runtime_executable',
+        path: gitExecutable,
+        source: 'PATH',
+        cleanupSupported: false,
+      }),
+    )
+  }
+
+  return detections
+}
+
 function resolveEnvironmentTargets(template: ResolvedTemplate): EnvironmentTool[] {
   const configuredChecks = template.checks.filter((check): check is EnvironmentTool =>
     SUPPORTED_ENVIRONMENT_CHECKS.has(check as EnvironmentTool),
@@ -262,36 +378,58 @@ function resolveEnvironmentTargets(template: ResolvedTemplate): EnvironmentTool[
     return configuredChecks
   }
 
-  if (template.plugins.some((plugin) => plugin.pluginId === 'frontend-env')) {
-    return ['node']
+  const targets: EnvironmentTool[] = []
+
+  if (template.plugins.some((plugin) => plugin.pluginId === 'node-env')) {
+    targets.push('node')
   }
 
-  return []
+  if (template.plugins.some((plugin) => plugin.pluginId === 'java-env')) {
+    targets.push('java')
+  }
+
+  if (template.plugins.some((plugin) => plugin.pluginId === 'python-env')) {
+    targets.push('python')
+  }
+
+  if (template.plugins.some((plugin) => plugin.pluginId === 'git-env')) {
+    targets.push('git')
+  }
+
+  return targets
 }
 
 export async function detectTemplateEnvironments(
   template: ResolvedTemplate,
   values: Record<string, Primitive>,
 ): Promise<DetectedEnvironment[]> {
-  const detectionValues =
-    template.id === 'frontend-template'
-      ? mapTemplateValuesToPluginParams('frontend-env', values)
-      : values
   const detections: DetectedEnvironment[] = []
 
   for (const target of resolveEnvironmentTargets(template)) {
     if (target === 'node') {
+      const detectionValues =
+        template.id === 'node-template'
+          ? mapTemplateValuesToPluginParams('node-env', values)
+          : values
       detections.push(...(await detectNodeEnvironment(detectionValues)))
       continue
     }
 
     if (target === 'java') {
-      detections.push(...(await detectJavaEnvironment()))
+      const detectionValues = mapTemplateValuesToPluginParams('java-env', values)
+      detections.push(...(await detectJavaEnvironment(detectionValues)))
       continue
     }
 
     if (target === 'python') {
-      detections.push(...(await detectPythonEnvironment()))
+      const detectionValues = mapTemplateValuesToPluginParams('python-env', values)
+      detections.push(...(await detectPythonEnvironment(detectionValues)))
+      continue
+    }
+
+    if (target === 'git') {
+      const detectionValues = mapTemplateValuesToPluginParams('git-env', values)
+      detections.push(...(await detectGitEnvironment(detectionValues)))
     }
   }
 

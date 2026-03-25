@@ -6,11 +6,18 @@ vi.mock('node:child_process', () => ({
   }),
 }))
 
-import frontendPlugin from '../../fixtures/plugins/frontend-env/index'
+vi.mock('../../src/main/core/download', () => ({
+  downloadArtifacts: vi.fn().mockResolvedValue([
+    { artifact: { url: 'https://mock.test/file.tar.gz' }, localPath: '/tmp/cached', cacheHit: true },
+  ]),
+  validateOfficialDownloads: vi.fn(),
+}))
 
-describe('frontend env plugin', () => {
+import nodePlugin from '../../fixtures/plugins/node-env/index'
+
+describe('node env plugin', () => {
   it('returns install result with version paths and env changes', async () => {
-    const result = await frontendPlugin.install({
+    const result = await nodePlugin.install({
       nodeManager: 'nvm',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',
@@ -36,7 +43,7 @@ describe('frontend env plugin', () => {
   })
 
   it('verifies dry-run output without touching the system', async () => {
-    const installResult = await frontendPlugin.install({
+    const installResult = await nodePlugin.install({
       nodeManager: 'nvm',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',
@@ -46,7 +53,7 @@ describe('frontend env plugin', () => {
       platform: 'darwin',
     })
 
-    const verifyResult = await frontendPlugin.verify({
+    const verifyResult = await nodePlugin.verify({
       nodeManager: 'nvm',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',
@@ -64,7 +71,7 @@ describe('frontend env plugin', () => {
   })
 
   it('returns english validation and verify copy when locale is english', async () => {
-    const installResult = await frontendPlugin.install({
+    const installResult = await nodePlugin.install({
       nodeManager: 'nvm',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',
@@ -75,7 +82,7 @@ describe('frontend env plugin', () => {
       locale: 'en',
     })
 
-    const verifyResult = await frontendPlugin.verify({
+    const verifyResult = await nodePlugin.verify({
       nodeManager: 'nvm',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',
@@ -92,7 +99,7 @@ describe('frontend env plugin', () => {
   })
 
   it('returns real-run result when dryRun is false', async () => {
-    const result = await frontendPlugin.install({
+    const result = await nodePlugin.install({
       nodeManager: 'nvm',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',
@@ -109,7 +116,7 @@ describe('frontend env plugin', () => {
   })
 
   it('builds standalone node downloads from nodejs.org with checksum verification', async () => {
-    const result = await frontendPlugin.install({
+    const result = await nodePlugin.install({
       nodeManager: 'node',
       nodeVersion: '20.11.1',
       installRootDir: '/tmp/toolchain',

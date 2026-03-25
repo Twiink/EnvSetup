@@ -28,8 +28,8 @@ const precheckMessages: Partial<Record<ErrorCode, LocalizedTextInput>> = {
     en: 'Network access is unavailable for download-based steps.',
   },
   EXISTING_ENV_DETECTED: {
-    'zh-CN': '检测到已有 Node 或 npm 环境，请谨慎继续。',
-    en: 'An existing Node or npm environment was detected. Continue with care.',
+    'zh-CN': '检测到已有相关运行时环境，请谨慎继续。',
+    en: 'An existing runtime environment was detected. Continue with care.',
   },
   ELEVATION_REQUIRED: {
     'zh-CN': '部分操作可能需要管理员授权。',

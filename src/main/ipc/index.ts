@@ -10,6 +10,9 @@ import { cleanupDetectedEnvironment } from '../core/environment'
 import { resolveDryRun } from '../core/executionMode'
 import { runPrecheck as runEnhancedPrecheck } from '../core/enhancedPrecheck'
 import { listNodeLtsVersions } from '../core/nodeVersions'
+import { listJavaLtsVersions } from '../core/javaVersions'
+import { listPythonVersions } from '../core/pythonVersions'
+import { listGitVersions } from '../core/gitVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
 import { buildRuntimePrecheckInput, runPrecheck } from '../core/precheck'
 import { executeRollback, suggestRollbackSnapshots } from '../core/rollback'
@@ -40,12 +43,18 @@ import type {
   ResolvedTemplate,
   TaskProgressEvent,
 } from '../core/contracts'
-import frontendEnvPlugin from '../plugins/frontendEnvPlugin'
+import nodeEnvPlugin from '../plugins/nodeEnvPlugin'
+import javaEnvPlugin from '../plugins/javaEnvPlugin'
+import pythonEnvPlugin from '../plugins/pythonEnvPlugin'
+import gitEnvPlugin from '../plugins/gitEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
 const BUILTIN_TEMPLATE_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures/templates')
 const BUILTIN_PLUGINS: PluginRegistry = {
-  'frontend-env': frontendEnvPlugin,
+  'node-env': nodeEnvPlugin,
+  'java-env': javaEnvPlugin,
+  'python-env': pythonEnvPlugin,
+  'git-env': gitEnvPlugin,
 }
 
 const taskCache = new Map<string, InstallTask>()
@@ -91,6 +100,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('template:list', async () => listTemplates())
   ipcMain.handle('node:list-lts-versions', async () => listNodeLtsVersions())
+  ipcMain.handle('java:list-lts-versions', async () => listJavaLtsVersions())
+  ipcMain.handle('python:list-versions', async () => listPythonVersions())
+  ipcMain.handle('git:list-versions', async () => listGitVersions())
   ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) =>
     cleanupDetectedEnvironment(detection),
   )

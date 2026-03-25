@@ -250,25 +250,33 @@ const precheckItemTextMap: Partial<Record<ErrorCode, LocalizedTextInput>> = {
 }
 
 const templateFieldLabelMap: Record<string, LocalizedTextInput> = {
-  'frontend.nodeManager': {
+  'node.nodeManager': {
     'zh-CN': 'Node 管理方式',
     en: 'Node Management',
   },
-  'frontend.nodeVersion': {
+  'node.nodeVersion': {
     'zh-CN': 'Node 版本',
     en: 'Node Version',
   },
-  'frontend.installRootDir': {
+  'node.installRootDir': {
     'zh-CN': '工具安装根目录',
     en: 'Tool Install Root',
   },
-  'frontend.npmCacheDir': {
+  'node.npmCacheDir': {
     'zh-CN': 'npm 缓存目录',
     en: 'npm Cache Directory',
   },
-  'frontend.npmGlobalPrefix': {
+  'node.npmGlobalPrefix': {
     'zh-CN': 'npm 全局安装目录',
     en: 'npm Global Install Directory',
+  },
+  'git.gitManager': {
+    'zh-CN': 'Git 安装方式',
+    en: 'Git Installation Mode',
+  },
+  'git.installRootDir': {
+    'zh-CN': '工具安装根目录',
+    en: 'Tool Install Root',
   },
 }
 
@@ -281,16 +289,36 @@ const templateOptionLabelMap: Record<string, LocalizedTextInput> = {
     'zh-CN': '使用 nvm 管理 Node.js',
     en: 'Use nvm to Manage Node.js',
   },
+  git: {
+    'zh-CN': '直接安装 Git',
+    en: 'Install Git Directly',
+  },
+  homebrew: {
+    'zh-CN': '使用 Homebrew 安装 Git',
+    en: 'Install Git with Homebrew',
+  },
+  scoop: {
+    'zh-CN': '使用 Scoop 安装 Git',
+    en: 'Install Git with Scoop',
+  },
 }
 
 const pluginSummaryMap: Record<string, LocalizedTextInput> = {
-  'frontend-env.dry_run': {
-    'zh-CN': '已生成前端环境安装的演练计划。',
-    en: 'Prepared a dry-run plan for the frontend environment.',
+  'node-env.dry_run': {
+    'zh-CN': '已生成 Node.js 环境安装的演练计划。',
+    en: 'Prepared a dry-run plan for the Node.js environment.',
   },
-  'frontend-env.real_run': {
-    'zh-CN': '前端环境安装命令已执行完成。',
-    en: 'Completed frontend environment install commands.',
+  'node-env.real_run': {
+    'zh-CN': 'Node.js 环境安装命令已执行完成。',
+    en: 'Completed Node.js environment install commands.',
+  },
+  'git-env.dry_run': {
+    'zh-CN': '已生成 Git 环境安装的演练计划。',
+    en: 'Prepared a dry-run plan for the Git environment.',
+  },
+  'git-env.real_run': {
+    'zh-CN': 'Git 环境安装命令已执行完成。',
+    en: 'Completed Git environment install commands.',
   },
 }
 
@@ -303,6 +331,10 @@ const detectedEnvironmentKindMap: Record<
       'zh-CN': '模板管理目录',
       en: 'Template-Managed Directory',
     },
+    git: {
+      'zh-CN': 'Git 管理目录',
+      en: 'Git Managed Directory',
+    },
   },
   manager_root: {
     node: {
@@ -312,6 +344,10 @@ const detectedEnvironmentKindMap: Record<
     python: {
       'zh-CN': 'Python 管理器目录',
       en: 'Python Manager Directory',
+    },
+    git: {
+      'zh-CN': 'Git 管理器目录',
+      en: 'Git Manager Directory',
     },
   },
   runtime_executable: {
@@ -326,6 +362,10 @@ const detectedEnvironmentKindMap: Record<
     python: {
       'zh-CN': 'Python 可执行文件',
       en: 'Python Executable',
+    },
+    git: {
+      'zh-CN': 'Git 可执行文件',
+      en: 'Git Executable',
     },
   },
   runtime_home: {

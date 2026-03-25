@@ -1,0 +1,38 @@
+{
+  "id": "git-template",
+  "name": {
+    "zh-CN": "Git 版本控制",
+    "en": "Git Version Control"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "安装 Git 版本控制工具，支持直接安装或通过包管理器安装。",
+    "en": "Install Git version control tool, supports direct install or via package manager."
+  },
+  "plugins": [
+    {
+      "pluginId": "git-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "git.gitManager": "git",
+    "git.installRootDir": "./.envsetup-data/toolchain"
+  },
+  "overrides": {
+    "git.gitManager": {
+      "type": "enum",
+      "editable": true,
+      "required": true,
+      "enum": ["git", "homebrew", "scoop"]
+    },
+    "git.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true
+    }
+  },
+  "checks": ["git"],
+  "recommended": true
+}

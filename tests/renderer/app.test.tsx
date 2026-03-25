@@ -7,40 +7,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EnvSetupApi } from '../../src/main/core/contracts'
 import App from '../../src/renderer/App'
 
-const frontendTemplateFixture = {
-  id: 'frontend-template',
+const nodeTemplateFixture = {
+  id: 'node-template',
   name: {
-    'zh-CN': '前端开发环境',
-    en: 'Frontend Environment',
+    'zh-CN': 'Node.js 开发环境',
+    en: 'Node.js Environment',
   },
   version: '0.1.0',
   platforms: ['darwin'],
   description: {
-    'zh-CN': '前端开发环境模板',
-    en: 'Frontend environment template',
+    'zh-CN': 'Node.js 开发环境模板',
+    en: 'Node.js environment template',
   },
-  plugins: [{ pluginId: 'frontend-env', version: '0.1.0' }],
+  plugins: [{ pluginId: 'node-env', version: '0.1.0' }],
   defaults: {},
   overrides: {},
   checks: [],
   fields: {
-    'frontend.nodeManager': {
-      key: 'frontend.nodeManager',
+    'node.nodeManager': {
+      key: 'node.nodeManager',
       type: 'enum',
       value: 'nvm',
       editable: true,
       required: true,
       enum: ['node', 'nvm'],
     },
-    'frontend.nodeVersion': {
-      key: 'frontend.nodeVersion',
+    'node.nodeVersion': {
+      key: 'node.nodeVersion',
       type: 'version',
       value: '20.11.1',
       editable: true,
       required: true,
     },
-    'frontend.installRootDir': {
-      key: 'frontend.installRootDir',
+    'node.installRootDir': {
+      key: 'node.installRootDir',
       type: 'path',
       value: '/tmp/toolchain',
       editable: true,
@@ -120,14 +120,14 @@ beforeEach(() => {
   applyEnvChanges.mockResolvedValue({ applied: [], skipped: [] })
   startTask.mockResolvedValue({
     id: 'task-1',
-    templateId: 'frontend-template',
+    templateId: 'node-template',
     templateVersion: '0.1.0',
     locale: 'zh-CN',
     status: 'succeeded',
     params: {},
     plugins: [
       {
-        pluginId: 'frontend-env',
+        pluginId: 'node-env',
         version: '0.1.0',
         status: 'verified_success',
         params: {},
@@ -146,7 +146,7 @@ beforeEach(() => {
           downloads: [],
           commands: [],
           logs: [],
-          summary: 'Completed frontend environment install commands.',
+          summary: 'Completed Node.js environment install commands.',
         },
       },
     ],
@@ -157,12 +157,13 @@ beforeEach(() => {
   const api: EnvSetupApi = {
     listTemplates: vi
       .fn()
-      .mockResolvedValue([frontendTemplateFixture, javaTemplateFixture, pythonTemplateFixture]),
+      .mockResolvedValue([nodeTemplateFixture, javaTemplateFixture, pythonTemplateFixture]),
     listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
+    listGitVersions: vi.fn().mockResolvedValue(['2.47.1']),
     runPrecheck,
     createTask: vi.fn().mockResolvedValue({
       id: 'task-1',
-      templateId: 'frontend-template',
+      templateId: 'node-template',
       templateVersion: '0.1.0',
       locale: 'zh-CN',
       status: 'draft',
@@ -198,7 +199,7 @@ describe('App', () => {
 
     expect(await screen.findByText('模板')).toBeInTheDocument()
     expect(await screen.findByText('预检')).toBeInTheDocument()
-    expect(await screen.findByText('前端开发环境')).toBeInTheDocument()
+    expect(await screen.findByText('Node.js 开发环境')).toBeInTheDocument()
     expect(await screen.findByText('Java 开发环境')).toBeInTheDocument()
     expect(await screen.findByText('Python 开发环境')).toBeInTheDocument()
   })
@@ -259,7 +260,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'EnvSetup' })).toBeInTheDocument()
     expect(await screen.findByText('Templates')).toBeInTheDocument()
-    expect(await screen.findByText('Frontend Environment')).toBeInTheDocument()
+    expect(await screen.findByText('Node.js Environment')).toBeInTheDocument()
   })
 
   it('shows real_run summary after starting a task', async () => {
@@ -272,7 +273,7 @@ describe('App', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
 
-    expect(await screen.findByText('前端环境安装命令已执行完成。')).toBeInTheDocument()
+    expect(await screen.findByText('Node.js 环境安装命令已执行完成。')).toBeInTheDocument()
     expect(startTask).toHaveBeenCalledWith('task-1')
     expect(onTaskProgress).toHaveBeenCalled()
     expect(removeTaskProgressListener).toHaveBeenCalled()
@@ -281,14 +282,14 @@ describe('App', () => {
   it('renders env/download/command details when task has lastResult', async () => {
     startTask.mockResolvedValueOnce({
       id: 'task-1',
-      templateId: 'frontend-template',
+      templateId: 'node-template',
       templateVersion: '0.1.0',
       locale: 'zh-CN',
       status: 'succeeded',
       params: {},
       plugins: [
         {
-          pluginId: 'frontend-env',
+          pluginId: 'node-env',
           version: '0.1.0',
           status: 'verified_success',
           params: {},
@@ -322,7 +323,7 @@ describe('App', () => {
             ],
             commands: ['echo install'],
             logs: [],
-            summary: 'Completed frontend environment install commands.',
+            summary: 'Completed Node.js environment install commands.',
           },
         },
       ],

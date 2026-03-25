@@ -7,16 +7,58 @@
   "version": "0.1.0",
   "platforms": ["darwin", "win32"],
   "description": {
-    "zh-CN": "占位模板，用于预检当前机器上的 Python 解释器、虚拟环境与 pyenv/conda 路径。",
-    "en": "Placeholder template for checking Python interpreters, virtual environments, and pyenv/conda paths."
+    "zh-CN": "面向团队标准化交付的 Python 环境模板，支持 python.org 官方直接安装或 Miniconda 版本管理。",
+    "en": "A team-managed Python environment template supporting python.org direct install or Miniconda version management."
   },
-  "plugins": [],
-  "defaults": {},
-  "overrides": {},
+  "plugins": [
+    {
+      "pluginId": "python-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "python.pythonManager": "conda",
+    "python.pythonVersion": "3.12.10",
+    "python.installRootDir": "./.envsetup-data/toolchain",
+    "python.condaEnvName": "base"
+  },
+  "overrides": {
+    "python.pythonManager": {
+      "type": "enum",
+      "editable": true,
+      "required": true,
+      "enum": ["python", "conda"],
+      "affects": ["python-env"]
+    },
+    "python.pythonVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "dependsOn": {
+        "field": "python.pythonManager",
+        "in": ["python", "conda"]
+      }
+    },
+    "python.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["python-env"]
+    },
+    "python.condaEnvName": {
+      "type": "string",
+      "editable": true,
+      "dependsOn": {
+        "field": "python.pythonManager",
+        "equals": "conda"
+      }
+    }
+  },
   "checks": ["python"],
   "maintainer": {
     "zh-CN": "环境配置团队",
     "en": "Environment Setup Team"
   },
-  "recommended": false
+  "recommended": true
 }

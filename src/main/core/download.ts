@@ -8,6 +8,14 @@ const OFFICIAL_DOWNLOAD_HOSTS: Record<DownloadArtifact['tool'], Set<string>> = {
   node: new Set(['nodejs.org']),
   nvm: new Set(['github.com']),
   'nvm-windows': new Set(['github.com']),
+  temurin: new Set(['github.com', 'api.adoptium.net']),
+  sdkman: new Set(['get.sdkman.io', 'api.sdkman.io', 'github.com']),
+  python: new Set(['www.python.org']),
+  miniconda: new Set(['repo.anaconda.com']),
+  git: new Set(['sourceforge.net', 'git-scm.com']),
+  'git-for-windows': new Set(['github.com', 'gitforwindows.org']),
+  homebrew: new Set(['github.com', 'brew.sh', 'raw.githubusercontent.com']),
+  scoop: new Set(['github.com', 'raw.githubusercontent.com', 'get.scoop.sh']),
 }
 
 const DOWNLOAD_RETRYABLE_CODES = new Set<ErrorCode>(['DOWNLOAD_FAILED'])

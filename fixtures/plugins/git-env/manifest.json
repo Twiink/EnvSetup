@@ -1,32 +1,24 @@
 {
-  "id": "frontend-env",
+  "id": "git-env",
   "name": {
-    "zh-CN": "前端开发环境",
-    "en": "Frontend Environment"
+    "zh-CN": "Git 版本控制",
+    "en": "Git Version Control"
   },
   "version": "0.1.0",
   "mainAppVersion": "^0.1.0",
   "platforms": ["darwin", "win32"],
   "permissions": ["download", "write_path", "modify_env"],
   "parameters": {
-    "nodeManager": {
+    "gitManager": {
       "type": "enum",
-      "values": ["node", "nvm"],
+      "values": ["git", "homebrew", "scoop"],
       "required": true
     },
-    "nodeVersion": {
+    "gitVersion": {
       "type": "version",
-      "required": true
+      "required": false
     },
     "installRootDir": {
-      "type": "path",
-      "required": true
-    },
-    "npmCacheDir": {
-      "type": "path",
-      "required": true
-    },
-    "npmGlobalPrefix": {
       "type": "path",
       "required": true
     }

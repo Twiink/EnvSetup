@@ -57,20 +57,29 @@ export async function buildRuntimePrecheckInput(
   values: Record<string, Primitive>,
 ): Promise<PrecheckInput> {
   const detections = await detectTemplateEnvironments(template, values)
-  const frontendParams = mapTemplateValuesToPluginParams(
-    template.plugins[0]?.pluginId ?? 'frontend-env',
-    values,
-  )
-  const npmCacheDir =
-    typeof frontendParams.npmCacheDir === 'string' ? frontendParams.npmCacheDir : process.cwd()
-  const npmGlobalPrefix =
-    typeof frontendParams.npmGlobalPrefix === 'string'
-      ? frontendParams.npmGlobalPrefix
-      : process.cwd()
-  const installRootDir =
-    typeof frontendParams.installRootDir === 'string'
-      ? frontendParams.installRootDir
-      : process.cwd()
+
+  // Collect all writable paths from plugin params
+  const writablePaths: string[] = []
+
+  for (const plugin of template.plugins) {
+    const pluginParams = mapTemplateValuesToPluginParams(plugin.pluginId, values)
+
+    if (typeof pluginParams.installRootDir === 'string') {
+      writablePaths.push(pluginParams.installRootDir)
+    }
+    if (typeof pluginParams.npmCacheDir === 'string') {
+      writablePaths.push(pluginParams.npmCacheDir)
+    }
+    if (typeof pluginParams.npmGlobalPrefix === 'string') {
+      writablePaths.push(pluginParams.npmGlobalPrefix)
+    }
+  }
+
+  // If no plugin-specific paths found, fall back to cwd
+  if (writablePaths.length === 0) {
+    writablePaths.push(process.cwd())
+  }
+
   const currentPlatform = process.platform === 'win32' ? 'win32' : 'darwin'
 
   // Template-level checks: identify which declared tool checks have environment conflicts
@@ -82,11 +91,9 @@ export async function buildRuntimePrecheckInput(
     platformSupported: template.platforms.includes(currentPlatform),
     archSupported: isSupportedArchForPlatform(currentPlatform, process.arch),
     writable: (
-      await Promise.all([
-        isWritablePath(installRootDir).catch(() => false),
-        isWritablePath(npmCacheDir).catch(() => false),
-        isWritablePath(npmGlobalPrefix).catch(() => false),
-      ])
+      await Promise.all(
+        writablePaths.map((p) => isWritablePath(p).catch(() => false)),
+      )
     ).every(Boolean),
     dependencySatisfied: true,
     versionCompatible: true,

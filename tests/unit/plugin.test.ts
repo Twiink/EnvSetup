@@ -37,8 +37,8 @@ async function createPluginFixtureDir(): Promise<string> {
   await writeFile(
     join(dir, 'manifest.json'),
     JSON.stringify({
-      id: 'frontend-env',
-      name: 'Frontend Env',
+      id: 'node-env',
+      name: 'Node.js Env',
       version: '0.1.0',
       mainAppVersion: '^0.1.0',
       platforms: ['darwin', 'win32'],
@@ -61,8 +61,8 @@ describe('plugin import', () => {
   it('accepts a valid plugin manifest', () => {
     expect(() =>
       validatePluginManifest({
-        id: 'frontend-env',
-        name: 'Frontend Env',
+        id: 'node-env',
+        name: 'Node.js Env',
         version: '0.1.0',
         mainAppVersion: '^0.1.0',
         platforms: ['darwin', 'win32'],
@@ -82,7 +82,7 @@ describe('plugin import', () => {
     const pluginDir = await createPluginFixtureDir()
     const imported = await importPluginFromDirectory(pluginDir)
 
-    expect(imported.manifest.id).toBe('frontend-env')
+    expect(imported.manifest.id).toBe('node-env')
     expect(imported.entryPath).toContain('index.ts')
   })
 
@@ -90,12 +90,12 @@ describe('plugin import', () => {
     const pluginDir = await createPluginFixtureDir()
     const stagingDir = await mkdtemp(join(tmpdir(), 'envsetup-staging-'))
     tempDirs.push(stagingDir)
-    const zipPath = join(stagingDir, 'frontend-env.zip')
+    const zipPath = join(stagingDir, 'node-env.zip')
     await createZipArchive(pluginDir, zipPath)
 
     const imported = await importPluginFromZip(zipPath, stagingDir)
 
-    expect(imported.manifest.id).toBe('frontend-env')
+    expect(imported.manifest.id).toBe('node-env')
     expect(imported.entryPath).toContain('index.ts')
   })
 })

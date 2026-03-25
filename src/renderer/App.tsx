@@ -24,12 +24,12 @@ function buildInitialValues(
     Object.values(template.fields).map((field) => [field.key, field.value]),
   )
 
-  const templateNodeVersion = values['frontend.nodeVersion']
+  const templateNodeVersion = values['node.nodeVersion']
   if (
     nodeLtsVersions.length > 0 &&
     (typeof templateNodeVersion !== 'string' || !nodeLtsVersions.includes(templateNodeVersion))
   ) {
-    values['frontend.nodeVersion'] = nodeLtsVersions[0]
+    values['node.nodeVersion'] = nodeLtsVersions[0]
   }
 
   return values
@@ -40,12 +40,12 @@ function buildFieldOptions(
   nodeLtsVersions: string[],
 ): Record<string, string[]> {
   const currentNodeVersion =
-    typeof values['frontend.nodeVersion'] === 'string' ? values['frontend.nodeVersion'] : undefined
+    typeof values['node.nodeVersion'] === 'string' ? values['node.nodeVersion'] : undefined
   const versions =
     nodeLtsVersions.length > 0 ? nodeLtsVersions : currentNodeVersion ? [currentNodeVersion] : []
 
   return {
-    'frontend.nodeVersion': versions,
+    'node.nodeVersion': versions,
   }
 }
 

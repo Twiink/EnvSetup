@@ -1,0 +1,36 @@
+{
+  "id": "node-env",
+  "name": {
+    "zh-CN": "Node.js 开发环境",
+    "en": "Node.js Environment"
+  },
+  "version": "0.1.0",
+  "mainAppVersion": "^0.1.0",
+  "platforms": ["darwin", "win32"],
+  "permissions": ["download", "write_path", "modify_env"],
+  "parameters": {
+    "nodeManager": {
+      "type": "enum",
+      "values": ["node", "nvm"],
+      "required": true
+    },
+    "nodeVersion": {
+      "type": "version",
+      "required": true
+    },
+    "installRootDir": {
+      "type": "path",
+      "required": true
+    },
+    "npmCacheDir": {
+      "type": "path",
+      "required": true
+    },
+    "npmGlobalPrefix": {
+      "type": "path",
+      "required": true
+    }
+  },
+  "dependencies": [],
+  "entry": "index.ts"
+}

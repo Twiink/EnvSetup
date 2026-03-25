@@ -53,8 +53,8 @@ export type PrecheckLevel = 'pass' | 'warn' | 'block'
 export type ParameterType = 'string' | 'boolean' | 'enum' | 'path' | 'version' | 'number'
 export type EnvChangeKind = 'env' | 'path' | 'profile'
 export type TaskResultLevel = 'success' | 'partial' | 'failure'
-export type DownloadArtifactKind = 'archive' | 'mirror'
-export type EnvironmentTool = 'node' | 'java' | 'python'
+export type DownloadArtifactKind = 'archive' | 'mirror' | 'installer'
+export type EnvironmentTool = 'node' | 'java' | 'python' | 'git'
 export type DetectedEnvironmentKind =
   | 'managed_root'
   | 'manager_root'
@@ -198,7 +198,18 @@ export type EnvChange = {
 
 export type DownloadArtifact = {
   kind: DownloadArtifactKind
-  tool: 'node' | 'nvm' | 'nvm-windows'
+  tool:
+    | 'node'
+    | 'nvm'
+    | 'nvm-windows'
+    | 'temurin'
+    | 'sdkman'
+    | 'python'
+    | 'miniconda'
+    | 'git'
+    | 'git-for-windows'
+    | 'homebrew'
+    | 'scoop'
   url: string
   official: boolean
   checksumUrl?: string
@@ -247,12 +258,34 @@ export type PluginExecutionInput = {
   [key: string]: Primitive | undefined | ((event: TaskProgressEvent) => void)
 }
 
-export type FrontendPluginParams = PluginExecutionInput & {
+export type NodePluginParams = PluginExecutionInput & {
   nodeManager: 'node' | 'nvm'
   nodeVersion: string
   installRootDir: string
   npmCacheDir: string
   npmGlobalPrefix: string
+  downloadCacheDir?: string
+}
+
+export type JavaPluginParams = PluginExecutionInput & {
+  javaManager: 'jdk' | 'sdkman'
+  javaVersion: string
+  installRootDir: string
+  downloadCacheDir?: string
+}
+
+export type PythonPluginParams = PluginExecutionInput & {
+  pythonManager: 'python' | 'conda'
+  pythonVersion: string
+  installRootDir: string
+  condaEnvName?: string
+  downloadCacheDir?: string
+}
+
+export type GitPluginParams = PluginExecutionInput & {
+  gitManager: 'git' | 'homebrew' | 'scoop'
+  gitVersion?: string
+  installRootDir: string
   downloadCacheDir?: string
 }
 
@@ -451,6 +484,9 @@ export type EnvChangesPreview = {
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
+  listJavaLtsVersions: () => Promise<string[]>
+  listPythonVersions: () => Promise<string[]>
+  listGitVersions: () => Promise<string[]>
   runPrecheck: (payload: {
     templateId: string
     values: Record<string, Primitive>
