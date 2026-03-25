@@ -12,6 +12,7 @@ directories:
 
 files:
   - out/**/*
+  - fixtures/templates/**/*
 
 mac:
   icon: build/icon.icns
