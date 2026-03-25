@@ -44,7 +44,7 @@ function splitExecutableCandidates(binary: string): string[] {
   return [binary]
 }
 
-async function findExecutable(binaryNames: string[]): Promise<string | undefined> {
+export async function findExecutable(binaryNames: string[]): Promise<string | undefined> {
   const entries = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
 
   for (const entry of entries) {
@@ -64,7 +64,7 @@ async function findExecutable(binaryNames: string[]): Promise<string | undefined
   return undefined
 }
 
-function isCleanupAllowedPath(targetPath: string): boolean {
+export function isCleanupAllowedPath(targetPath: string): boolean {
   const normalizedPath = resolve(targetPath)
   const userHome = resolve(homedir())
   const tempRoot = resolve(tmpdir())

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildCondaInitSnippet,
   buildGitEnvChanges,
+  buildJavaEnvChanges,
   buildNodeEnvChanges,
   buildNvmInitSnippet,
   buildPlatformStrategy,
+  buildPythonEnvChanges,
+  buildSdkmanInitSnippet,
   resolveGitInstallPaths,
+  resolveJavaInstallPaths,
   resolveNodeInstallPaths,
+  resolvePythonInstallPaths,
 } from '../../src/main/core/platform'
 
 // ---------------------------------------------------------------------------
@@ -237,5 +243,266 @@ describe('buildGitEnvChanges', () => {
         expect.objectContaining({ key: 'PATH', value: '\\tools\\scoop\\shims' }),
       ]),
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveJavaInstallPaths
+// ---------------------------------------------------------------------------
+
+describe('resolveJavaInstallPaths', () => {
+  const darwinJava = {
+    platform: 'darwin' as const,
+    javaManager: 'jdk' as const,
+    javaVersion: '21.0.2',
+    installRootDir: '/tools',
+  }
+
+  it('resolves standaloneJdkDir under installRootDir on darwin', () => {
+    const paths = resolveJavaInstallPaths(darwinJava)
+    expect(paths.standaloneJdkDir).toBe('/tools/java-21.0.2')
+  })
+
+  it('places bin/ under standaloneJdkDir on darwin', () => {
+    const paths = resolveJavaInstallPaths(darwinJava)
+    expect(paths.standaloneJdkBinDir).toBe('/tools/java-21.0.2/bin')
+  })
+
+  it('places sdkmanDir under installRootDir', () => {
+    const paths = resolveJavaInstallPaths(darwinJava)
+    expect(paths.sdkmanDir).toBe('/tools/sdkman')
+  })
+
+  it('uses backslash paths on win32', () => {
+    const paths = resolveJavaInstallPaths({ ...darwinJava, platform: 'win32' })
+    expect(paths.standaloneJdkDir).toBe('\\tools\\java-21.0.2')
+    expect(paths.standaloneJdkBinDir).toBe('\\tools\\java-21.0.2\\bin')
+    expect(paths.sdkmanDir).toBe('\\tools\\sdkman')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildJavaEnvChanges
+// ---------------------------------------------------------------------------
+
+describe('buildJavaEnvChanges', () => {
+  const darwinJdk = {
+    platform: 'darwin' as const,
+    javaManager: 'jdk' as const,
+    javaVersion: '21.0.2',
+    installRootDir: '/tools',
+  }
+
+  it('includes JAVA_HOME env change for jdk manager', () => {
+    const changes = buildJavaEnvChanges(darwinJdk)
+    const javaHome = changes.find((c) => c.key === 'JAVA_HOME')
+    expect(javaHome).toBeDefined()
+    expect(javaHome?.value).toBe('/tools/java-21.0.2')
+  })
+
+  it('includes PATH change for jdk manager', () => {
+    const changes = buildJavaEnvChanges(darwinJdk)
+    const pathChange = changes.find((c) => c.key === 'PATH')
+    expect(pathChange).toBeDefined()
+    expect(pathChange?.value).toBe('/tools/java-21.0.2/bin')
+  })
+
+  it('includes SDKMAN_DIR env change for sdkman on darwin', () => {
+    const darwinSdkman = { ...darwinJdk, javaManager: 'sdkman' as const }
+    const changes = buildJavaEnvChanges(darwinSdkman)
+    const sdkmanDir = changes.find((c) => c.key === 'SDKMAN_DIR')
+    expect(sdkmanDir).toBeDefined()
+    expect(sdkmanDir?.value).toBe('/tools/sdkman')
+  })
+
+  it('includes profile changes for each profile target on darwin with sdkman', () => {
+    const darwinSdkman = { ...darwinJdk, javaManager: 'sdkman' as const }
+    const changes = buildJavaEnvChanges(darwinSdkman)
+    const profileChanges = changes.filter((c) => c.kind === 'profile')
+    expect(profileChanges.length).toBeGreaterThanOrEqual(2)
+    expect(profileChanges.some((c) => c.target === '~/.zshrc')).toBe(true)
+    expect(profileChanges.some((c) => c.target === '~/.bash_profile')).toBe(true)
+  })
+
+  it('includes SDKMAN_DIR but no profile changes for sdkman on win32', () => {
+    const win32Sdkman = {
+      ...darwinJdk,
+      platform: 'win32' as const,
+      javaManager: 'sdkman' as const,
+    }
+    const changes = buildJavaEnvChanges(win32Sdkman)
+    expect(changes.find((c) => c.key === 'SDKMAN_DIR')).toBeDefined()
+    expect(changes.find((c) => c.kind === 'profile')).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildSdkmanInitSnippet
+// ---------------------------------------------------------------------------
+
+describe('buildSdkmanInitSnippet', () => {
+  it('contains the envsetup start/end markers', () => {
+    const snippet = buildSdkmanInitSnippet('/tools/sdkman')
+    expect(snippet).toContain('# envsetup: java-env:start')
+    expect(snippet).toContain('# envsetup: java-env:end')
+  })
+
+  it('exports SDKMAN_DIR to the provided path', () => {
+    const snippet = buildSdkmanInitSnippet('/tools/sdkman')
+    expect(snippet).toContain('export SDKMAN_DIR="/tools/sdkman"')
+  })
+
+  it('sources sdkman-init.sh', () => {
+    const snippet = buildSdkmanInitSnippet('/tools/sdkman')
+    expect(snippet).toContain('sdkman-init.sh')
+    expect(snippet).toContain('source "/tools/sdkman/bin/sdkman-init.sh"')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolvePythonInstallPaths
+// ---------------------------------------------------------------------------
+
+describe('resolvePythonInstallPaths', () => {
+  const darwinPython = {
+    platform: 'darwin' as const,
+    pythonManager: 'python' as const,
+    pythonVersion: '3.12.1',
+    installRootDir: '/tools',
+  }
+
+  it('resolves standalonePythonDir under installRootDir on darwin', () => {
+    const paths = resolvePythonInstallPaths(darwinPython)
+    expect(paths.standalonePythonDir).toBe('/tools/python-3.12.1')
+  })
+
+  it('places bin/ under standalonePythonDir on darwin', () => {
+    const paths = resolvePythonInstallPaths(darwinPython)
+    expect(paths.standalonePythonBinDir).toBe('/tools/python-3.12.1/bin')
+  })
+
+  it('standalonePythonBinDir equals standalonePythonDir on win32', () => {
+    const paths = resolvePythonInstallPaths({ ...darwinPython, platform: 'win32' })
+    expect(paths.standalonePythonBinDir).toBe(paths.standalonePythonDir)
+  })
+
+  it('resolves condaDir to miniconda3 under installRootDir', () => {
+    const paths = resolvePythonInstallPaths(darwinPython)
+    expect(paths.condaDir).toBe('/tools/miniconda3')
+  })
+
+  it('condaEnvDir equals condaDir when condaEnvName is base', () => {
+    const paths = resolvePythonInstallPaths({ ...darwinPython, condaEnvName: 'base' })
+    expect(paths.condaEnvDir).toBe(paths.condaDir)
+  })
+
+  it('condaEnvDir defaults to condaDir when condaEnvName is omitted', () => {
+    const paths = resolvePythonInstallPaths(darwinPython)
+    expect(paths.condaEnvDir).toBe(paths.condaDir)
+  })
+
+  it('condaEnvDir points to envs/{name} for a custom conda env name', () => {
+    const paths = resolvePythonInstallPaths({ ...darwinPython, condaEnvName: 'myenv' })
+    expect(paths.condaEnvDir).toBe('/tools/miniconda3/envs/myenv')
+  })
+
+  it('uses backslash paths on win32', () => {
+    const paths = resolvePythonInstallPaths({
+      ...darwinPython,
+      platform: 'win32',
+      condaEnvName: 'myenv',
+    })
+    expect(paths.standalonePythonDir).toBe('\\tools\\python-3.12.1')
+    expect(paths.condaDir).toBe('\\tools\\miniconda3')
+    expect(paths.condaEnvDir).toBe('\\tools\\miniconda3\\envs\\myenv')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildPythonEnvChanges
+// ---------------------------------------------------------------------------
+
+describe('buildPythonEnvChanges', () => {
+  const darwinPython = {
+    platform: 'darwin' as const,
+    pythonManager: 'python' as const,
+    pythonVersion: '3.12.1',
+    installRootDir: '/tools',
+  }
+
+  it('includes PATH change pointing to standalonePythonBinDir for python manager', () => {
+    const changes = buildPythonEnvChanges(darwinPython)
+    const pathChange = changes.find((c) => c.key === 'PATH')
+    expect(pathChange).toBeDefined()
+    expect(pathChange?.value).toBe('/tools/python-3.12.1/bin')
+  })
+
+  it('includes profile changes for conda on darwin', () => {
+    const darwinConda = { ...darwinPython, pythonManager: 'conda' as const }
+    const changes = buildPythonEnvChanges(darwinConda)
+    const profileChanges = changes.filter((c) => c.kind === 'profile')
+    expect(profileChanges.length).toBeGreaterThanOrEqual(2)
+    expect(profileChanges.some((c) => c.target === '~/.zshrc')).toBe(true)
+    expect(profileChanges.some((c) => c.target === '~/.bash_profile')).toBe(true)
+  })
+
+  it('does not produce profile changes for conda on win32', () => {
+    const win32Conda = {
+      ...darwinPython,
+      platform: 'win32' as const,
+      pythonManager: 'conda' as const,
+    }
+    const changes = buildPythonEnvChanges(win32Conda)
+    expect(changes.find((c) => c.kind === 'profile')).toBeUndefined()
+  })
+
+  it('includes PATH with condaDir and Scripts for conda on win32', () => {
+    const win32Conda = {
+      ...darwinPython,
+      platform: 'win32' as const,
+      pythonManager: 'conda' as const,
+    }
+    const changes = buildPythonEnvChanges(win32Conda)
+    const pathChange = changes.find((c) => c.key === 'PATH')
+    expect(pathChange).toBeDefined()
+    expect(pathChange?.value).toContain('\\tools\\miniconda3')
+    expect(pathChange?.value).toContain('Scripts')
+  })
+
+  it('does not include PATH or profile changes for standalone python on darwin', () => {
+    const changes = buildPythonEnvChanges(darwinPython)
+    const profileChanges = changes.filter((c) => c.kind === 'profile')
+    expect(profileChanges).toHaveLength(0)
+    const pathChange = changes.find((c) => c.key === 'PATH')
+    expect(pathChange?.value).toBe('/tools/python-3.12.1/bin')
+  })
+
+  it('includes PATH change pointing to standalonePythonBinDir for pkg manager on darwin', () => {
+    const darwinPkg = { ...darwinPython, pythonManager: 'pkg' as const }
+    const changes = buildPythonEnvChanges(darwinPkg)
+    const pathChange = changes.find((c) => c.key === 'PATH')
+    expect(pathChange).toBeDefined()
+    expect(pathChange?.value).toBe('/tools/python-3.12.1/bin')
+    const profileChanges = changes.filter((c) => c.kind === 'profile')
+    expect(profileChanges).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildCondaInitSnippet
+// ---------------------------------------------------------------------------
+
+describe('buildCondaInitSnippet', () => {
+  it('contains the envsetup start/end markers', () => {
+    const snippet = buildCondaInitSnippet('/tools/miniconda3')
+    expect(snippet).toContain('# envsetup: python-env:start')
+    expect(snippet).toContain('# envsetup: python-env:end')
+  })
+
+  it('contains conda shell.bash hook eval', () => {
+    const snippet = buildCondaInitSnippet('/tools/miniconda3')
+    expect(snippet).toContain('conda shell.bash hook')
+    expect(snippet).toContain('eval')
+    expect(snippet).toContain('/tools/miniconda3/bin/conda')
   })
 })

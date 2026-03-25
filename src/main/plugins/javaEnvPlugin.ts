@@ -20,6 +20,8 @@ const ADOPTIUM_BINARY_BASE_URL = 'https://api.adoptium.net/v3/binary/latest'
 const ADOPTIUM_CHECKSUM_BASE_URL = 'https://api.adoptium.net/v3/checksum/latest'
 const SDKMAN_ARCHIVE_BASE_URL = 'https://github.com/sdkman/sdkman-cli/archive/refs/tags'
 const PINNED_SDKMAN_VERSION = '5.18.2'
+const GIT_FOR_WINDOWS_VERSION = '2.47.1'
+const GIT_FOR_WINDOWS_EXE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
 
 function translate(locale: AppLocale, text: { 'zh-CN': string; en: string }): string {
   return text[locale]
@@ -97,6 +99,14 @@ function buildDownloadPlan(input: JavaPluginParams): DownloadArtifact[] {
       url: `${SDKMAN_ARCHIVE_BASE_URL}/${PINNED_SDKMAN_VERSION}.tar.gz`,
       official: true,
       note: 'Download SDKMAN from the official GitHub repository archive (for Git Bash).',
+    },
+    {
+      kind: 'installer',
+      tool: 'git-for-windows',
+      url: GIT_FOR_WINDOWS_EXE_URL,
+      official: true,
+      fileName: `Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`,
+      note: 'Git for Windows (provides Git Bash required by SDKMAN). Installed only if bash.exe is not found.',
     },
   ]
 }
@@ -219,7 +229,7 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
-    `$gitBash = (Get-Command 'bash.exe' -ErrorAction SilentlyContinue).Source; if (-not $gitBash) { throw 'Git Bash (bash.exe) is required for SDKMAN on Windows.' }`,
+    `$gitBash = (Get-Command 'bash.exe' -ErrorAction SilentlyContinue).Source; if (-not $gitBash) { $gitInstaller = ${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}; Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT','/NORESTART' -Wait -NoNewWindow; Remove-Item -LiteralPath $gitInstaller -Force; $gitBash = (Get-Command 'bash.exe' -ErrorAction SilentlyContinue).Source; if (-not $gitBash) { throw 'Failed to install Git for Windows.' } }`,
     `& $gitBash -c "export SDKMAN_DIR='${installPaths.sdkmanDir.replace(/\\/g, '/')}' && mkdir -p \\$SDKMAN_DIR && tar -xzf '${archivePath.replace(/\\/g, '/')}' -C '${installPaths.installRootDir.replace(/\\/g, '/')}' && cp -R '${installPaths.installRootDir.replace(/\\/g, '/')}/sdkman-cli-${PINNED_SDKMAN_VERSION}/.' \\$SDKMAN_DIR && rm -rf '${installPaths.installRootDir.replace(/\\/g, '/')}/sdkman-cli-${PINNED_SDKMAN_VERSION}' && source \\$SDKMAN_DIR/bin/sdkman-init.sh && sdk install java ${featureVersion}.0-tem && java -version"`,
   ]
 }

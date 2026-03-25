@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { SnapshotMeta, FailureAnalysis } from '../../src/main/core/contracts'
+import type { SnapshotMeta, FailureAnalysis, Snapshot } from '../../src/main/core/contracts'
 import { suggestRollbackSnapshots, executeRollback } from '../../src/main/core/rollback'
 
 // ---------------------------------------------------------------------------
@@ -9,12 +9,20 @@ import { suggestRollbackSnapshots, executeRollback } from '../../src/main/core/r
 vi.mock('../../src/main/core/snapshot', () => ({
   loadSnapshotMeta: vi.fn(),
   applySnapshot: vi.fn(),
+  loadSnapshot: vi.fn(),
+  restoreShellConfigs: vi.fn(),
 }))
 
-import { loadSnapshotMeta, applySnapshot } from '../../src/main/core/snapshot'
+import { loadSnapshotMeta, applySnapshot, loadSnapshot, restoreShellConfigs } from '../../src/main/core/snapshot'
 
 const mockLoadSnapshotMeta = vi.mocked(loadSnapshotMeta)
 const mockApplySnapshot = vi.mocked(applySnapshot)
+const mockLoadSnapshot = vi.mocked(loadSnapshot)
+const mockRestoreShellConfigs = vi.mocked(restoreShellConfigs)
+
+vi.mock('../../src/main/core/environment', () => ({
+  isCleanupAllowedPath: vi.fn().mockReturnValue(true),
+}))
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -219,6 +227,18 @@ describe('suggestRollbackSnapshots', () => {
 describe('executeRollback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: loadSnapshot returns a snapshot with empty shellConfigs
+    mockLoadSnapshot.mockResolvedValue({
+      id: 'snap-1',
+      taskId: 'task-1',
+      type: 'auto',
+      createdAt: '2024-01-01T10:00:00Z',
+      files: {},
+      environment: { variables: {}, path: [] },
+      shellConfigs: {},
+      metadata: { platform: 'darwin', diskUsage: 0, fileCount: 0 },
+    } satisfies Snapshot)
+    mockRestoreShellConfigs.mockResolvedValue(0)
   })
 
   it('uses full mode when trackedPaths is empty', async () => {

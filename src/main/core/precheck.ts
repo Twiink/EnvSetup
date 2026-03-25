@@ -12,7 +12,7 @@ import type {
   ResolvedTemplate,
 } from './contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-import { detectTemplateEnvironments } from './environment'
+import { detectTemplateEnvironments, findExecutable } from './environment'
 import { getPrecheckMessage } from './i18n'
 import { mapTemplateValuesToPluginParams } from './template'
 
@@ -87,6 +87,13 @@ export async function buildRuntimePrecheckInput(
     detections.some((d) => d.tool === toolId),
   )
 
+  // Check Git Bash availability for Windows + SDKMAN
+  let gitBashMissing: boolean | undefined
+  if (currentPlatform === 'win32' && values['java.javaManager'] === 'sdkman') {
+    const bashExe = await findExecutable(['bash'])
+    gitBashMissing = bashExe === undefined
+  }
+
   return {
     platformSupported: template.platforms.includes(currentPlatform),
     archSupported: isSupportedArchForPlatform(currentPlatform, process.arch),
@@ -100,6 +107,7 @@ export async function buildRuntimePrecheckInput(
     networkAvailable: true,
     elevationRequired: false,
     failedTemplateChecks: failedTemplateChecks.length > 0 ? failedTemplateChecks : undefined,
+    gitBashMissing,
   }
 }
 
@@ -184,6 +192,18 @@ export async function runPrecheck(
       code: 'ELEVATION_REQUIRED',
       level: 'warn',
       message: getPrecheckMessage('ELEVATION_REQUIRED', locale),
+    })
+  }
+
+  if (input.gitBashMissing) {
+    const gitBashMsg =
+      locale === 'zh-CN'
+        ? '在 Windows 上使用 SDKMAN 管理 Java 需要 Git Bash。将自动安装 Git for Windows 以提供 Git Bash。'
+        : 'SDKMAN on Windows requires Git Bash. Git for Windows will be installed automatically to provide Git Bash.'
+    items.push({
+      code: 'PLUGIN_DEPENDENCY_MISSING',
+      level: 'warn',
+      message: gitBashMsg,
     })
   }
 

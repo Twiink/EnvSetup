@@ -352,7 +352,7 @@ export function buildPythonEnvChanges(input: PythonPluginParams): EnvChange[] {
   const installPaths = resolvePythonInstallPaths(input)
   const envChanges: EnvChange[] = []
 
-  if (input.pythonManager === 'python') {
+  if (input.pythonManager === 'python' || input.pythonManager === 'pkg') {
     envChanges.push({
       kind: 'path',
       key: 'PATH',

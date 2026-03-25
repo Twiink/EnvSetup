@@ -1,10 +1,21 @@
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { execFile } from 'node:child_process'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { EnvChange } from '../../src/main/core/contracts'
 import { previewEnvChanges, applyEnvChanges } from '../../src/main/core/envPersistence'
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return {
+    ...actual,
+    execFile: vi.fn((_cmd: string, _args: string[] | null, callback: (...args: unknown[]) => void) => {
+      callback(null, '', '')
+    }),
+  }
+})
 
 describe('previewEnvChanges', () => {
   it('counts env, path, and profile changes correctly', () => {
@@ -192,5 +203,94 @@ describe('applyEnvChanges (darwin)', () => {
     expect(result.applied).toHaveLength(1)
     const content = await readFile(profilePath, 'utf8')
     expect(content).toContain('source ~/.nvm/nvm.sh')
+  })
+})
+
+describe('applyEnvChanges (win32)', () => {
+  const mockedExecFile = vi.mocked(execFile)
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('calls setx for env kind changes', async () => {
+    const changes: EnvChange[] = [
+      {
+        kind: 'env',
+        key: 'NODE_HOME',
+        value: '/opt/node',
+        scope: 'user',
+        description: 'node home',
+      },
+    ]
+
+    const result = await applyEnvChanges({ changes, platform: 'win32' })
+
+    expect(result.applied).toHaveLength(1)
+    expect(result.applied[0].key).toBe('NODE_HOME')
+    expect(mockedExecFile).toHaveBeenCalledWith('setx', ['NODE_HOME', '/opt/node'], expect.any(Function))
+  })
+
+  it('calls setx for path kind changes with key PATH', async () => {
+    const changes: EnvChange[] = [
+      {
+        kind: 'path',
+        key: 'PATH',
+        value: 'C:\\nodejs\\bin',
+        scope: 'user',
+        description: 'node bin',
+      },
+    ]
+
+    const result = await applyEnvChanges({ changes, platform: 'win32' })
+
+    expect(result.applied).toHaveLength(1)
+    expect(result.applied[0].kind).toBe('path')
+    expect(mockedExecFile).toHaveBeenCalledWith('setx', ['PATH', 'C:\\nodejs\\bin'], expect.any(Function))
+  })
+
+  it('skips profile kind changes on win32', async () => {
+    const changes: EnvChange[] = [
+      {
+        kind: 'profile',
+        key: 'nvm_init',
+        value: 'source ~/.nvm/nvm.sh',
+        scope: 'user',
+        description: 'nvm init',
+      },
+    ]
+
+    const result = await applyEnvChanges({ changes, platform: 'win32' })
+
+    expect(result.applied).toHaveLength(0)
+    expect(result.skipped).toHaveLength(1)
+    expect(result.skipped[0].key).toBe('nvm_init')
+    expect(mockedExecFile).not.toHaveBeenCalled()
+  })
+
+  it('filters out session-scoped changes on win32', async () => {
+    const changes: EnvChange[] = [
+      {
+        kind: 'env',
+        key: 'PERSIST',
+        value: '1',
+        scope: 'user',
+        description: 'persist',
+      },
+      {
+        kind: 'env',
+        key: 'TEMP',
+        value: '2',
+        scope: 'session',
+        description: 'temp',
+      },
+    ]
+
+    const result = await applyEnvChanges({ changes, platform: 'win32' })
+
+    expect(result.applied).toHaveLength(1)
+    expect(result.applied[0].key).toBe('PERSIST')
+    expect(mockedExecFile).toHaveBeenCalledTimes(1)
+    expect(mockedExecFile).toHaveBeenCalledWith('setx', ['PERSIST', '1'], expect.any(Function))
   })
 })

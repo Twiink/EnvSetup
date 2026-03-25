@@ -206,4 +206,69 @@ describe('precheck', () => {
 
     expect(result.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
+
+  it('warns when gitBashMissing is true', async () => {
+    const result = await runPrecheck({
+      platformSupported: true,
+      archSupported: true,
+      writable: true,
+      dependencySatisfied: true,
+      versionCompatible: true,
+      existingEnvConflict: false,
+      gitBashMissing: true,
+    })
+
+    expect(result.level).toBe('warn')
+    const item = result.items.find((i) => i.code === 'PLUGIN_DEPENDENCY_MISSING')
+    expect(item).toBeDefined()
+    expect(item?.message).toContain('Git Bash')
+  })
+
+  it('returns zh-CN Git Bash message when locale is zh-CN', async () => {
+    const result = await runPrecheck(
+      {
+        platformSupported: true,
+        archSupported: true,
+        writable: true,
+        dependencySatisfied: true,
+        versionCompatible: true,
+        existingEnvConflict: false,
+        gitBashMissing: true,
+      },
+      'zh-CN',
+    )
+
+    const item = result.items.find((i) => i.code === 'PLUGIN_DEPENDENCY_MISSING')
+    expect(item?.message).toContain('SDKMAN')
+    expect(item?.message).toContain('Git for Windows')
+  })
+
+  it('does not block when gitBashMissing is false', async () => {
+    const result = await runPrecheck({
+      platformSupported: true,
+      archSupported: true,
+      writable: true,
+      dependencySatisfied: true,
+      versionCompatible: true,
+      existingEnvConflict: false,
+      gitBashMissing: false,
+    })
+
+    expect(result.level).toBe('pass')
+    expect(result.items.find((i) => i.message?.includes('Git Bash'))).toBeUndefined()
+  })
+
+  it('does not block when gitBashMissing is undefined', async () => {
+    const result = await runPrecheck({
+      platformSupported: true,
+      archSupported: true,
+      writable: true,
+      dependencySatisfied: true,
+      versionCompatible: true,
+      existingEnvConflict: false,
+    })
+
+    expect(result.level).toBe('pass')
+    expect(result.items.find((i) => i.message?.includes('Git Bash'))).toBeUndefined()
+  })
 })

@@ -21,6 +21,7 @@ function buildInitialValues(
   nodeLtsVersions: string[],
   javaLtsVersions: string[],
   pythonVersions: string[],
+  gitVersions: string[],
 ): Record<string, Primitive> {
   const values = Object.fromEntries(
     Object.values(template.fields).map((field) => [field.key, field.value]),
@@ -50,6 +51,14 @@ function buildInitialValues(
     values['python.pythonVersion'] = pythonVersions[0]
   }
 
+  const templateGitVersion = values['git.gitVersion']
+  if (
+    gitVersions.length > 0 &&
+    (typeof templateGitVersion !== 'string' || !gitVersions.includes(templateGitVersion))
+  ) {
+    values['git.gitVersion'] = gitVersions[0]
+  }
+
   return values
 }
 
@@ -58,6 +67,7 @@ function buildFieldOptions(
   nodeLtsVersions: string[],
   javaLtsVersions: string[],
   pythonVersions: string[],
+  gitVersions: string[],
 ): Record<string, string[]> {
   const currentNodeVersion =
     typeof values['node.nodeVersion'] === 'string' ? values['node.nodeVersion'] : undefined
@@ -74,10 +84,16 @@ function buildFieldOptions(
   const pythonVersionsList =
     pythonVersions.length > 0 ? pythonVersions : currentPythonVersion ? [currentPythonVersion] : []
 
+  const currentGitVersion =
+    typeof values['git.gitVersion'] === 'string' ? values['git.gitVersion'] : undefined
+  const gitVersionsList =
+    gitVersions.length > 0 ? gitVersions : currentGitVersion ? [currentGitVersion] : []
+
   return {
     'node.nodeVersion': nodeVersions,
     'java.javaVersion': javaVersionsList,
     'python.pythonVersion': pythonVersionsList,
+    'git.gitVersion': gitVersionsList,
   }
 }
 
@@ -109,6 +125,7 @@ export default function App() {
   const [nodeLtsVersions, setNodeLtsVersions] = useState<string[]>([])
   const [javaLtsVersions, setJavaLtsVersions] = useState<string[]>([])
   const [pythonVersions, setPythonVersions] = useState<string[]>([])
+  const [gitVersions, setGitVersions] = useState<string[]>([])
   const [values, setValues] = useState<Record<string, Primitive>>({})
   const [precheck, setPrecheck] = useState<PrecheckResult>()
   const [task, setTask] = useState<InstallTask>()
@@ -128,13 +145,19 @@ export default function App() {
 
     async function loadTemplates() {
       try {
-        const [nextTemplates, nextNodeLtsVersions, nextJavaLtsVersions, nextPythonVersions] =
-          await Promise.all([
-            window.envSetup.listTemplates(),
-            window.envSetup.listNodeLtsVersions(),
-            window.envSetup.listJavaLtsVersions(),
-            window.envSetup.listPythonVersions(),
-          ])
+        const [
+          nextTemplates,
+          nextNodeLtsVersions,
+          nextJavaLtsVersions,
+          nextPythonVersions,
+          nextGitVersions,
+        ] = await Promise.all([
+          window.envSetup.listTemplates(),
+          window.envSetup.listNodeLtsVersions(),
+          window.envSetup.listJavaLtsVersions(),
+          window.envSetup.listPythonVersions(),
+          window.envSetup.listGitVersions(),
+        ])
         if (!active) {
           return
         }
@@ -148,6 +171,7 @@ export default function App() {
         setNodeLtsVersions(nextNodeLtsVersions)
         setJavaLtsVersions(nextJavaLtsVersions)
         setPythonVersions(nextPythonVersions)
+        setGitVersions(nextGitVersions)
         setSelectedTemplateId(firstTemplate.id)
         setValues(
           buildInitialValues(
@@ -155,6 +179,7 @@ export default function App() {
             nextNodeLtsVersions,
             nextJavaLtsVersions,
             nextPythonVersions,
+            nextGitVersions,
           ),
         )
       } catch (loadError) {
@@ -196,7 +221,9 @@ export default function App() {
     }
 
     setSelectedTemplateId(templateId)
-    setValues(buildInitialValues(template, nodeLtsVersions, javaLtsVersions, pythonVersions))
+    setValues(
+      buildInitialValues(template, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions),
+    )
     setPrecheck(undefined)
     setTask(undefined)
     setTaskProgressEvents([])
@@ -585,6 +612,7 @@ export default function App() {
               nodeLtsVersions,
               javaLtsVersions,
               pythonVersions,
+              gitVersions,
             )}
             onChange={handleChange}
             onPickDirectory={handlePickDirectory}

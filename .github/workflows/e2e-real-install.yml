@@ -4,9 +4,85 @@ on:
   push:
     branches:
       - master
-#  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
 
 jobs:
+  # ============================================================
+  # Job 1: Unit + Integration tests (vitest, mock plugins)
+  # Runs fast mock-based tests for all tools.
+  # Real-install tests are SKIPPED here (ENVSETUP_REAL_RUN not set).
+  # ============================================================
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit and integration tests (mock-based)
+        run: npm test
+        timeout-minutes: 10
+
+  # ============================================================
+  # Job 2: Real installation integration tests (vitest)
+  # Uses REAL plugins with dryRun=false. Downloads real artifacts,
+  # runs real shell commands, verifies installed binaries.
+  # Covers: Node (direct+nvm), Java (jdk+sdkman), Python (conda+direct),
+  #   Git (direct+homebrew/scoop)
+  # Scenarios: fresh install, cleanup→install, snapshot→rollback
+  # ============================================================
+  real-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run real install + rollback tests
+        env:
+          ENVSETUP_REAL_RUN: '1'
+        run: npx vitest run tests/integration/action-real-install.test.ts tests/integration/action-real-rollback.test.ts --reporter=verbose
+        timeout-minutes: 55
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: real-install-logs-${{ matrix.os }}
+          path: |
+            tests/integration/
+            /tmp/envsetup-real-*
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ============================================================
+  # Job 3: E2E real install tests (Playwright + Electron)
+  # Tests actual Electron UI flows with real plugin execution
+  # ============================================================
   e2e:
     strategy:
       fail-fast: false
@@ -34,7 +110,7 @@ jobs:
         env:
           ENVSETUP_REAL_RUN: '1'
         run: npx playwright test
-        timeout-minutes: 15
+        timeout-minutes: 30
 
       - name: Upload Playwright artifacts on failure
         if: failure()

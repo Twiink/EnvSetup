@@ -1,5 +1,7 @@
+import { rm } from 'node:fs/promises'
 import type { FailureAnalysis, RollbackResult, RollbackSuggestion } from './contracts'
-import { applySnapshot, loadSnapshotMeta } from './snapshot'
+import { applySnapshot, loadSnapshot, loadSnapshotMeta, restoreShellConfigs } from './snapshot'
+import { isCleanupAllowedPath } from './environment'
 
 /**
  * 根据失败分析找到最合适的回滚快照
@@ -109,11 +111,13 @@ export async function suggestRollbackSnapshots(
 /**
  * 执行回滚到指定快照
  * trackedPaths 非空时使用 partial 模式，否则使用 full 模式
+ * installPaths 可选，指定需要删除的安装目录
  */
 export async function executeRollback(
   baseDir: string,
   snapshotId: string,
   trackedPaths: string[],
+  installPaths?: string[],
 ): Promise<RollbackResult> {
   try {
     const mode = trackedPaths.length > 0 ? 'partial' : 'full'
@@ -125,15 +129,55 @@ export async function executeRollback(
       restoreEnv: true,
     })
 
+    // Step 2: Restore shell configs from snapshot
+    let shellConfigsRestored = 0
+    try {
+      const snapshot = await loadSnapshot(baseDir, snapshotId)
+      if (snapshot.shellConfigs && Object.keys(snapshot.shellConfigs).length > 0) {
+        shellConfigsRestored = await restoreShellConfigs(baseDir, snapshot.shellConfigs)
+      }
+    } catch (shellError) {
+      result.errors.push({
+        path: 'shellConfigs',
+        error: shellError instanceof Error ? shellError.message : String(shellError),
+      })
+    }
+
+    // Step 3: Remove installed directories
+    let directoriesRemoved = 0
+    if (installPaths && installPaths.length > 0) {
+      for (const dirPath of installPaths) {
+        try {
+          if (!isCleanupAllowedPath(dirPath)) {
+            result.errors.push({
+              path: dirPath,
+              error: `Refusing to remove protected path: ${dirPath}`,
+            })
+            continue
+          }
+          await rm(dirPath, { recursive: true, force: true })
+          directoriesRemoved++
+        } catch (dirError) {
+          result.errors.push({
+            path: dirPath,
+            error: dirError instanceof Error ? dirError.message : String(dirError),
+          })
+        }
+      }
+    }
+
     const hasErrors = result.errors.length > 0
     return {
       success: !hasErrors,
       snapshotId,
       filesRestored: result.filesRestored,
+      envVariablesRestored: result.envVariablesRestored,
+      shellConfigsRestored,
+      directoriesRemoved,
       errors: result.errors,
       message: hasErrors
-        ? `Restored ${result.filesRestored} file(s) with ${result.errors.length} error(s)`
-        : `Successfully restored ${result.filesRestored} file(s)`,
+        ? `Restored ${result.filesRestored} file(s), ${shellConfigsRestored} shell config(s), removed ${directoriesRemoved} dir(s) with ${result.errors.length} error(s)`
+        : `Successfully restored ${result.filesRestored} file(s), ${shellConfigsRestored} shell config(s), removed ${directoriesRemoved} dir(s)`,
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -141,6 +185,9 @@ export async function executeRollback(
       success: false,
       snapshotId,
       filesRestored: 0,
+      envVariablesRestored: 0,
+      shellConfigsRestored: 0,
+      directoriesRemoved: 0,
       errors: [{ path: '', error: errorMessage }],
       message: `Rollback failed: ${errorMessage}`,
     }

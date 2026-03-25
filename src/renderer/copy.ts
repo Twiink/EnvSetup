@@ -289,6 +289,26 @@ const templateOptionLabelMap: Record<string, LocalizedTextInput> = {
     'zh-CN': '使用 nvm 管理 Node.js',
     en: 'Use nvm to Manage Node.js',
   },
+  jdk: {
+    'zh-CN': '直接安装 JDK (Temurin)',
+    en: 'Install JDK Directly (Temurin)',
+  },
+  sdkman: {
+    'zh-CN': '使用 SDKMAN 管理 Java',
+    en: 'Use SDKMAN to Manage Java',
+  },
+  python: {
+    'zh-CN': '直接安装 Python',
+    en: 'Install Python Directly',
+  },
+  conda: {
+    'zh-CN': '使用 Miniconda 管理 Python',
+    en: 'Use Miniconda to Manage Python',
+  },
+  pkg: {
+    'zh-CN': '使用 macOS 安装包 (.pkg)',
+    en: 'Use macOS Installer Package (.pkg)',
+  },
   git: {
     'zh-CN': '直接安装 Git',
     en: 'Install Git Directly',

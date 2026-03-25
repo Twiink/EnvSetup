@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -58,14 +58,37 @@ const javaTemplateFixture = {
   version: '0.1.0',
   platforms: ['darwin'],
   description: {
-    'zh-CN': 'Java 占位模板',
-    en: 'Java placeholder template',
+    'zh-CN': 'Java 开发环境模板',
+    en: 'Java environment template',
   },
-  plugins: [],
+  plugins: [{ pluginId: 'java-env', version: '0.1.0' }],
   defaults: {},
   overrides: {},
   checks: ['java'],
-  fields: {},
+  fields: {
+    'java.javaManager': {
+      key: 'java.javaManager',
+      type: 'enum',
+      value: 'jdk',
+      editable: true,
+      required: true,
+      enum: ['jdk', 'sdkman'],
+    },
+    'java.javaVersion': {
+      key: 'java.javaVersion',
+      type: 'version',
+      value: '21.0.6',
+      editable: true,
+      required: true,
+    },
+    'java.installRootDir': {
+      key: 'java.installRootDir',
+      type: 'path',
+      value: '/tmp/java-toolchain',
+      editable: true,
+      required: true,
+    },
+  },
 }
 
 const pythonTemplateFixture = {
@@ -77,14 +100,79 @@ const pythonTemplateFixture = {
   version: '0.1.0',
   platforms: ['darwin'],
   description: {
-    'zh-CN': 'Python 占位模板',
-    en: 'Python placeholder template',
+    'zh-CN': 'Python 开发环境模板',
+    en: 'Python environment template',
   },
-  plugins: [],
+  plugins: [{ pluginId: 'python-env', version: '0.1.0' }],
   defaults: {},
   overrides: {},
   checks: ['python'],
-  fields: {},
+  fields: {
+    'python.pythonManager': {
+      key: 'python.pythonManager',
+      type: 'enum',
+      value: 'python',
+      editable: true,
+      required: true,
+      enum: ['python', 'conda'],
+    },
+    'python.pythonVersion': {
+      key: 'python.pythonVersion',
+      type: 'version',
+      value: '3.12.10',
+      editable: true,
+      required: true,
+    },
+    'python.installRootDir': {
+      key: 'python.installRootDir',
+      type: 'path',
+      value: '/tmp/python-toolchain',
+      editable: true,
+      required: true,
+    },
+  },
+}
+
+const gitTemplateFixture = {
+  id: 'git-template',
+  name: {
+    'zh-CN': 'Git 开发环境',
+    en: 'Git Environment',
+  },
+  version: '0.1.0',
+  platforms: ['darwin'],
+  description: {
+    'zh-CN': 'Git 开发环境模板',
+    en: 'Git environment template',
+  },
+  plugins: [{ pluginId: 'git-env', version: '0.1.0' }],
+  defaults: {},
+  overrides: {},
+  checks: ['git'],
+  fields: {
+    'git.gitManager': {
+      key: 'git.gitManager',
+      type: 'enum',
+      value: 'git',
+      editable: true,
+      required: true,
+      enum: ['git', 'homebrew'],
+    },
+    'git.gitVersion': {
+      key: 'git.gitVersion',
+      type: 'version',
+      value: '2.47.1',
+      editable: true,
+      required: true,
+    },
+    'git.installRootDir': {
+      key: 'git.installRootDir',
+      type: 'path',
+      value: '/tmp/git-toolchain',
+      editable: true,
+      required: true,
+    },
+  },
 }
 
 const pickDirectory = vi.fn()
@@ -92,6 +180,9 @@ const runPrecheck = vi.fn()
 const onTaskProgress = vi.fn()
 const removeTaskProgressListener = vi.fn()
 const startTask = vi.fn()
+const cancelTask = vi.fn()
+const retryPlugin = vi.fn()
+const cleanupEnvironment = vi.fn()
 const previewEnvChanges = vi.fn()
 const applyEnvChanges = vi.fn()
 
@@ -109,6 +200,9 @@ beforeEach(() => {
   onTaskProgress.mockReset()
   removeTaskProgressListener.mockReset()
   startTask.mockReset()
+  cancelTask.mockReset()
+  retryPlugin.mockReset()
+  cleanupEnvironment.mockReset()
   previewEnvChanges.mockReset()
   applyEnvChanges.mockReset()
   previewEnvChanges.mockResolvedValue({
@@ -117,7 +211,39 @@ beforeEach(() => {
     profileCount: 0,
     targets: [],
   })
+  cleanupEnvironment.mockResolvedValue({ ok: true })
   applyEnvChanges.mockResolvedValue({ applied: [], skipped: [] })
+  cancelTask.mockResolvedValue({
+    id: 'task-1',
+    templateId: 'node-template',
+    templateVersion: '0.1.0',
+    locale: 'zh-CN',
+    status: 'cancelled',
+    params: {},
+    plugins: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })
+  retryPlugin.mockResolvedValue({
+    id: 'task-1',
+    templateId: 'node-template',
+    templateVersion: '0.1.0',
+    locale: 'zh-CN',
+    status: 'running',
+    params: {},
+    plugins: [
+      {
+        pluginId: 'node-env',
+        version: '0.1.0',
+        status: 'running',
+        params: {},
+        logs: [],
+        context: {},
+      },
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })
   startTask.mockResolvedValue({
     id: 'task-1',
     templateId: 'node-template',
@@ -155,9 +281,12 @@ beforeEach(() => {
   })
 
   const api: EnvSetupApi = {
-    listTemplates: vi
-      .fn()
-      .mockResolvedValue([nodeTemplateFixture, javaTemplateFixture, pythonTemplateFixture]),
+    listTemplates: vi.fn().mockResolvedValue([
+      nodeTemplateFixture,
+      javaTemplateFixture,
+      pythonTemplateFixture,
+      gitTemplateFixture,
+    ]),
     listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
     listJavaLtsVersions: vi.fn().mockResolvedValue(['21.0.6', '17.0.14', '11.0.26']),
     listPythonVersions: vi.fn().mockResolvedValue(['3.12.10', '3.11.10', '3.10.15']),
@@ -170,18 +299,58 @@ beforeEach(() => {
       locale: 'zh-CN',
       status: 'draft',
       params: {},
-      plugins: [],
+      plugins: [
+        {
+          pluginId: 'node-env',
+          version: '0.1.0',
+          status: 'failed',
+          params: {},
+          logs: [],
+          context: {},
+          lastResult: {
+            status: 'installed_unverified',
+            executionMode: 'real_run',
+            version: '20.11.1',
+            paths: {
+              installRootDir: '/tmp/toolchain',
+              npmCacheDir: '/tmp/npm-cache',
+              npmGlobalPrefix: '/tmp/npm-global',
+            },
+            envChanges: [
+              {
+                kind: 'env',
+                key: 'npm_config_cache',
+                value: '/tmp/npm-cache',
+                scope: 'user',
+                description: 'Set npm cache directory.',
+              },
+            ],
+            downloads: [],
+            commands: [],
+            logs: [],
+            summary: 'Completed Node.js environment install commands.',
+          },
+        },
+      ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }),
     startTask,
-    retryPlugin: vi.fn(),
+    cancelTask,
+    retryPlugin,
+    cleanupEnvironment,
     pickDirectory,
     importPluginFromPath: vi.fn(),
     previewEnvChanges,
     applyEnvChanges,
     onTaskProgress,
     removeTaskProgressListener,
+    listSnapshots: vi.fn(),
+    createSnapshot: vi.fn(),
+    deleteSnapshot: vi.fn(),
+    suggestRollback: vi.fn(),
+    executeRollback: vi.fn(),
+    runEnhancedPrecheck: vi.fn(),
   }
 
   Object.defineProperty(window, 'envSetup', {
@@ -204,6 +373,7 @@ describe('App', () => {
     expect(await screen.findByText('Node.js 开发环境')).toBeInTheDocument()
     expect(await screen.findByText('Java 开发环境')).toBeInTheDocument()
     expect(await screen.findByText('Python 开发环境')).toBeInTheDocument()
+    expect(await screen.findByText('Git 开发环境')).toBeInTheDocument()
   })
 
   it('creates a task after precheck', async () => {
@@ -253,6 +423,15 @@ describe('App', () => {
     expect(await screen.findByText('已发现环境')).toBeInTheDocument()
     expect(await screen.findByText('Node 管理器目录')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '一键清理' })).toBeInTheDocument()
+  })
+
+  it('renders git version as selectable option after switching template', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Git 开发环境'))
+
+    expect(await screen.findByDisplayValue('2.47.1')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('直接安装 Git')).toBeInTheDocument()
   })
 
   it('switches visible copy to english', async () => {
@@ -344,5 +523,116 @@ describe('App', () => {
     expect(await screen.findByText('下载项（1）')).toBeInTheDocument()
     expect(await screen.findByText('命令计划（1）')).toBeInTheDocument()
     expect(await screen.findByText('环境变更（1）')).toBeInTheDocument()
+  })
+
+  it('reruns precheck after cleanup', async () => {
+    runPrecheck
+      .mockResolvedValueOnce({
+        level: 'warn',
+        items: [],
+        detections: [
+          {
+            id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+            tool: 'node',
+            kind: 'manager_root',
+            path: '/tmp/.nvm',
+            source: 'NVM_DIR',
+            cleanupSupported: true,
+            cleanupPath: '/tmp/.nvm',
+            cleanupEnvKey: 'NVM_DIR',
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      })
+      .mockResolvedValueOnce({
+        level: 'pass',
+        items: [],
+        detections: [],
+        createdAt: new Date().toISOString(),
+      })
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    fireEvent.click(await screen.findByRole('button', { name: '一键清理' }))
+
+    await waitFor(() => {
+      expect(cleanupEnvironment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+          cleanupPath: '/tmp/.nvm',
+        }),
+      )
+      expect(runPrecheck).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByText('通过')).toBeInTheDocument()
+  })
+
+  it('retries failed plugin and rebinds progress listener', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await screen.findByText('通过')
+    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await screen.findByText('任务状态')
+    fireEvent.click(await screen.findByRole('button', { name: '重试插件' }))
+
+    expect(retryPlugin).toHaveBeenCalledWith('task-1', 'node-env')
+    expect(onTaskProgress).toHaveBeenCalled()
+    expect(removeTaskProgressListener).toHaveBeenCalled()
+  })
+
+  it('cancels running task from task panel', async () => {
+    const createTask = vi.fn().mockResolvedValueOnce({
+      id: 'task-1',
+      templateId: 'node-template',
+      templateVersion: '0.1.0',
+      locale: 'zh-CN',
+      status: 'running',
+      params: {},
+      plugins: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+
+    Object.defineProperty(window, 'envSetup', {
+      configurable: true,
+      writable: true,
+      value: {
+        ...window.envSetup,
+        createTask,
+      },
+    })
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await screen.findByText('通过')
+    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await screen.findByText('执行中')
+    fireEvent.click(await screen.findByRole('button', { name: '取消任务' }))
+
+    expect(cancelTask).toHaveBeenCalledWith('task-1')
+    expect(await screen.findByText('已取消')).toBeInTheDocument()
+  })
+
+  it('previews and applies env changes from task result', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await screen.findByText('通过')
+    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await screen.findByText('任务状态')
+    fireEvent.click(await screen.findByRole('button', { name: '应用环境变更' }))
+
+    await waitFor(() => {
+      expect(previewEnvChanges).toHaveBeenCalledWith([
+        expect.objectContaining({ key: 'npm_config_cache', value: '/tmp/npm-cache' }),
+      ])
+      expect(applyEnvChanges).toHaveBeenCalledWith({
+        changes: [expect.objectContaining({ key: 'npm_config_cache', value: '/tmp/npm-cache' })],
+      })
+    })
+    expect(await screen.findByText('环境变更已应用。 (0/1)')).toBeInTheDocument()
   })
 })

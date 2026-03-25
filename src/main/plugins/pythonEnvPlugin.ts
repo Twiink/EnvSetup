@@ -35,6 +35,7 @@ function resolvePythonArch(): string {
   return process.arch === 'x64' ? 'x86_64' : 'arm64'
 }
 
+/** @deprecated Retained for potential future source-compilation option. Not called in production. */
 function buildPythonSourceUrl(input: PythonPluginParams): string {
   return `${PYTHON_FTP_BASE_URL}/${input.pythonVersion}/Python-${input.pythonVersion}.tar.xz`
 }
@@ -54,14 +55,15 @@ function buildMinicondaUrl(input: PythonPluginParams): string {
 function buildDownloadPlan(input: PythonPluginParams): DownloadArtifact[] {
   if (input.pythonManager === 'python') {
     if (input.platform === 'darwin') {
+      // Use precompiled .pkg installer instead of source compilation
       return [
         {
-          kind: 'archive',
+          kind: 'installer',
           tool: 'python',
-          url: buildPythonSourceUrl(input),
+          url: buildPythonPkgUrl(input),
           official: true,
-          note: 'Download the Python source archive from python.org for compilation.',
-          fileName: `Python-${input.pythonVersion}.tar.xz`,
+          note: 'Download the official Python .pkg installer from python.org.',
+          fileName: `python-${input.pythonVersion}-macos11.pkg`,
         },
       ]
     }
@@ -73,6 +75,19 @@ function buildDownloadPlan(input: PythonPluginParams): DownloadArtifact[] {
         official: true,
         note: 'Download the Python embeddable zip from python.org.',
         fileName: `python-${input.pythonVersion}-embed-amd64.zip`,
+      },
+    ]
+  }
+
+  if (input.pythonManager === 'pkg') {
+    return [
+      {
+        kind: 'installer',
+        tool: 'python',
+        url: buildPythonPkgUrl(input),
+        official: true,
+        note: 'Download the official Python .pkg installer from python.org.',
+        fileName: `python-${input.pythonVersion}-macos11.pkg`,
       },
     ]
   }
@@ -100,11 +115,11 @@ function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
 function toPythonParams(input: PluginExecutionInput): PythonPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
-  if (input.pythonManager !== 'python' && input.pythonManager !== 'conda') {
+  if (input.pythonManager !== 'python' && input.pythonManager !== 'conda' && input.pythonManager !== 'pkg') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'python-env 需要 pythonManager=python|conda',
-        en: 'python-env requires pythonManager=python|conda',
+        'zh-CN': 'python-env 需要 pythonManager=python|conda|pkg',
+        en: 'python-env requires pythonManager=python|conda|pkg',
       }),
     )
   }
@@ -141,6 +156,15 @@ function toPythonParams(input: PluginExecutionInput): PythonPluginParams {
     )
   }
 
+  if (input.pythonManager === 'pkg' && input.platform !== 'darwin') {
+    throw new Error(
+      translate(locale, {
+        'zh-CN': 'python-env 的 pkg 管理器仅支持 macOS',
+        en: 'python-env pkg manager is only supported on macOS',
+      }),
+    )
+  }
+
   return {
     pythonManager: input.pythonManager,
     pythonVersion: input.pythonVersion,
@@ -153,6 +177,35 @@ function toPythonParams(input: PluginExecutionInput): PythonPluginParams {
   }
 }
 
+function buildPythonPkgUrl(input: PythonPluginParams): string {
+  return `${PYTHON_FTP_BASE_URL}/${input.pythonVersion}/python-${input.pythonVersion}-macos11.pkg`
+}
+
+/** Extract major.minor from a version string like '3.12.10' */
+function extractPythonMajorMinor(version: string): string {
+  const parts = version.split('.')
+  return `${parts[0]}.${parts[1]}`
+}
+
+function buildDarwinPkgCommands(input: PythonPluginParams): string[] {
+  const installPaths = resolvePythonInstallPaths(input)
+  const pkgUrl = buildPythonPkgUrl(input)
+  const installerPath = `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
+  const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
+  const majorMinor = extractPythonMajorMinor(input.pythonVersion)
+
+  return [
+    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
+    `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
+    `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
+    `mkdir -p ${quoteShell(installPaths.standalonePythonDir)}`,
+    `cp -R ${quoteShell(`${expandDir}/Python_Framework.pkg/Payload/Python.framework/Versions/${majorMinor}`)}/. ${quoteShell(installPaths.standalonePythonDir)}/`,
+    `rm -rf ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
+    `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
+  ]
+}
+
+/** @deprecated Retained for potential future source-compilation option. Not called in production. */
 function buildDarwinStandaloneCommands(input: PythonPluginParams): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const archiveUrl = buildPythonSourceUrl(input)
@@ -251,9 +304,9 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
 
 export function buildInstallCommands(input: PythonPluginParams): string[] {
   if (input.platform === 'darwin') {
-    return input.pythonManager === 'conda'
-      ? buildDarwinCondaCommands(input)
-      : buildDarwinStandaloneCommands(input)
+    if (input.pythonManager === 'conda') return buildDarwinCondaCommands(input)
+    // 'python' and 'pkg' managers both use .pkg extraction on macOS (fast, precompiled)
+    return buildDarwinPkgCommands(input)
   }
 
   return input.pythonManager === 'conda'

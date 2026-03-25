@@ -32,4 +32,29 @@ describe('gitVersions', () => {
       ...DEFAULT_GIT_VERSIONS,
     ])
   })
+
+  it('listGitVersions returns version from API on success', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ tag_name: 'v2.48.0' }),
+    })
+
+    await expect(listGitVersions(fetchImpl as typeof fetch)).resolves.toEqual(['2.48.0'])
+  })
+
+  it('normalizeGitVersion handles non-string input', () => {
+    expect(normalizeGitVersion(undefined)).toBeUndefined()
+    expect(normalizeGitVersion(123)).toBeUndefined()
+  })
+
+  it('fetchOfficialGitVersion throws on non-ok response', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+    })
+
+    await expect(fetchOfficialGitVersion(fetchImpl as typeof fetch)).rejects.toThrow(
+      'Failed to load Git release',
+    )
+  })
 })

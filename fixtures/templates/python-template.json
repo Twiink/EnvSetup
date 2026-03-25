@@ -27,7 +27,7 @@
       "type": "enum",
       "editable": true,
       "required": true,
-      "enum": ["python", "conda"],
+      "enum": ["python", "conda", "pkg"],
       "affects": ["python-env"]
     },
     "python.pythonVersion": {
@@ -37,7 +37,7 @@
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
       "dependsOn": {
         "field": "python.pythonManager",
-        "in": ["python", "conda"]
+        "in": ["python", "conda", "pkg"]
       }
     },
     "python.installRootDir": {

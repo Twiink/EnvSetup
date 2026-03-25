@@ -155,6 +155,8 @@ export type PrecheckInput = {
   elevationRequired?: boolean
   /** Template-declared checks that failed (e.g. required tools not found) */
   failedTemplateChecks?: string[]
+  /** Windows + SDKMAN: Git Bash (bash.exe) not found in PATH */
+  gitBashMissing?: boolean
 }
 
 export type PrecheckItem = {
@@ -281,7 +283,7 @@ export type JavaPluginParams = PluginExecutionInput & {
 }
 
 export type PythonPluginParams = PluginExecutionInput & {
-  pythonManager: 'python' | 'conda'
+  pythonManager: 'python' | 'conda' | 'pkg'
   pythonVersion: string
   installRootDir: string
   condaEnvName?: string
@@ -471,6 +473,9 @@ export type RollbackResult = {
   success: boolean
   snapshotId: string
   filesRestored: number
+  envVariablesRestored: number
+  shellConfigsRestored: number
+  directoriesRemoved: number
   errors: Array<{ path: string; error: string }>
   message: string
 }
@@ -524,6 +529,7 @@ export type EnvSetupApi = {
   executeRollback: (payload: {
     snapshotId: string
     trackedPaths?: string[]
+    installPaths?: string[]
   }) => Promise<RollbackResult>
   // 增强预检
   runEnhancedPrecheck: (pluginResults: PluginInstallResult[]) => Promise<EnhancedPrecheckResult>

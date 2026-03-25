@@ -40,7 +40,7 @@ describe('python env plugin', () => {
     expect(result.downloads[0].tool).toBe('python')
     expect(result.downloads[0].url).toContain('www.python.org')
     expect(result.commands.length).toBeGreaterThan(0)
-    expect(result.commands.join('\n')).toContain('configure')
+    expect(result.commands.join('\n')).toContain('pkgutil')
   })
 
   it('returns dry-run install result with conda manager on darwin', async () => {
@@ -185,5 +185,61 @@ describe('python env plugin', () => {
         platform: 'darwin',
       }),
     ).rejects.toThrow()
+  })
+
+  it('returns dry-run install result with pkg manager on darwin', async () => {
+    const result = await pythonPlugin.install({
+      pythonManager: 'pkg',
+      pythonVersion: '3.12.10',
+      installRootDir: '/tmp/toolchain',
+      dryRun: true,
+      platform: 'darwin',
+    })
+
+    expect(result.status).toBe('installed_unverified')
+    expect(result.executionMode).toBe('dry_run')
+    expect(result.version).toBe('3.12.10')
+    expect(result.downloads.length).toBe(1)
+    expect(result.downloads[0].tool).toBe('python')
+    expect(result.downloads[0].kind).toBe('installer')
+    expect(result.downloads[0].url).toContain('macos11.pkg')
+    expect(result.commands.join('\n')).toContain('pkgutil')
+    expect(result.commands.join('\n')).toContain('Python_Framework')
+    expect(result.envChanges.length).toBeGreaterThan(0)
+  })
+
+  it('pkg manager throws on win32', async () => {
+    await expect(
+      pythonPlugin.install({
+        pythonManager: 'pkg',
+        pythonVersion: '3.12.10',
+        installRootDir: 'C:\\envsetup\\toolchain',
+        dryRun: true,
+        platform: 'win32',
+      }),
+    ).rejects.toThrow('macOS')
+  })
+
+  it('verifies dry-run output for pkg manager', async () => {
+    const installResult = await pythonPlugin.install({
+      pythonManager: 'pkg',
+      pythonVersion: '3.12.10',
+      installRootDir: '/tmp/toolchain',
+      dryRun: true,
+      platform: 'darwin',
+    })
+
+    const verifyResult = await pythonPlugin.verify({
+      pythonManager: 'pkg',
+      pythonVersion: '3.12.10',
+      installRootDir: '/tmp/toolchain',
+      dryRun: true,
+      platform: 'darwin',
+      installResult,
+    })
+
+    expect(verifyResult.status).toBe('verified_success')
+    expect(verifyResult.checks[0]).toContain('计划安装')
+    expect(verifyResult.checks[2]).toContain('macos11.pkg')
   })
 })
