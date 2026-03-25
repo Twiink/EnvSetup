@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stat } from 'node:fs/promises'
@@ -16,6 +16,7 @@ describe('getAppPaths', () => {
     expect(paths.pluginsDir).toBe(join(base, 'plugins'))
     expect(paths.pluginStagingDir).toBe(join(base, 'plugin-staging'))
     expect(paths.snapshotsDir).toBe(join(base, 'snapshots'))
+    expect(paths.downloadCacheDir).toBe(join(base, 'downloads-cache'))
   })
 })
 
@@ -30,6 +31,7 @@ describe('ensureAppPaths', () => {
       paths.pluginsDir,
       paths.pluginStagingDir,
       paths.snapshotsDir,
+      paths.downloadCacheDir,
     ]) {
       const s = await stat(dir)
       expect(s.isDirectory()).toBe(true)

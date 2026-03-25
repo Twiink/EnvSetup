@@ -14,6 +14,7 @@ type TaskPanelProps = {
   onStartTask: () => void
   onRetryPlugin: (pluginId: string) => void
   onCancelTask: () => void
+  onApplyEnvChanges: (pluginId: string) => void
 }
 
 function getPluginStatusStyles(status: InstallTask['plugins'][number]['status']) {
@@ -54,6 +55,7 @@ export function TaskPanel({
   onStartTask,
   onRetryPlugin,
   onCancelTask,
+  onApplyEnvChanges,
 }: TaskPanelProps) {
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({})
 
@@ -336,6 +338,52 @@ export function TaskPanel({
                           Node {plugin.lastResult.version} · {getUiText(locale, 'cacheLabel')}{' '}
                           {plugin.lastResult.paths.npmCacheDir}
                         </p>
+                        <p style={{ margin: '0.75rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
+                          {getUiText(locale, 'downloadItems')}（{plugin.lastResult.downloads.length}）
+                        </p>
+                        <ul style={{ margin: '0.35rem 0 0', paddingInlineStart: '1.1rem', fontSize: '0.85rem' }}>
+                          {plugin.lastResult.downloads.map((download) => (
+                            <li key={`${download.kind}:${download.url}`}>{download.url}</li>
+                          ))}
+                        </ul>
+                        <p style={{ margin: '0.75rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
+                          {getUiText(locale, 'commandPlan')}（{plugin.lastResult.commands.length}）
+                        </p>
+                        <ul style={{ margin: '0.35rem 0 0', paddingInlineStart: '1.1rem', fontSize: '0.85rem' }}>
+                          {plugin.lastResult.commands.map((command) => (
+                            <li key={command}>{command}</li>
+                          ))}
+                        </ul>
+                        <p style={{ margin: '0.75rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
+                          {getUiText(locale, 'envChangesLabel')}（{plugin.lastResult.envChanges.length}）
+                        </p>
+                        <ul style={{ margin: '0.35rem 0 0', paddingInlineStart: '1.1rem', fontSize: '0.85rem' }}>
+                          {plugin.lastResult.envChanges.map((change) => (
+                            <li key={`${change.kind}:${change.key}:${change.target ?? ''}`}>
+                              {change.kind} · {change.key} = {change.value}
+                            </li>
+                          ))}
+                        </ul>
+                        {plugin.lastResult.envChanges.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => onApplyEnvChanges(plugin.pluginId)}
+                            disabled={busy}
+                            style={{
+                              marginTop: '0.8rem',
+                              borderRadius: '6px',
+                              border: '1px solid #D47A6A',
+                              padding: '0.4rem 0.85rem',
+                              background: '#FFF0EE',
+                              color: '#D47A6A',
+                              cursor: busy ? 'not-allowed' : 'pointer',
+                              fontSize: '0.85rem',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {getUiText(locale, 'applyEnvChanges')}
+                          </button>
+                        ) : null}
                       </div>
                     ) : null}
 

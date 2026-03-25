@@ -7,6 +7,7 @@ export type AppPaths = {
   pluginsDir: string
   pluginStagingDir: string
   snapshotsDir: string
+  downloadCacheDir: string
 }
 
 export function getAppPaths(baseDir = join(process.cwd(), '.envsetup-data')): AppPaths {
@@ -16,6 +17,7 @@ export function getAppPaths(baseDir = join(process.cwd(), '.envsetup-data')): Ap
     pluginsDir: join(baseDir, 'plugins'),
     pluginStagingDir: join(baseDir, 'plugin-staging'),
     snapshotsDir: join(baseDir, 'snapshots'),
+    downloadCacheDir: join(baseDir, 'downloads-cache'),
   }
 }
 
@@ -27,6 +29,7 @@ export async function ensureAppPaths(baseDir?: string): Promise<AppPaths> {
     mkdir(paths.pluginsDir, { recursive: true }),
     mkdir(paths.pluginStagingDir, { recursive: true }),
     mkdir(paths.snapshotsDir, { recursive: true }),
+    mkdir(paths.downloadCacheDir, { recursive: true }),
   ])
   return paths
 }

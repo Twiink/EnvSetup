@@ -389,6 +389,29 @@ describe('executeTask', () => {
     expect(result.status).toBe('failed')
   })
 
+  it('uses structured error code when install throws coded error', async () => {
+    const task = makeTask(['err-plugin'])
+    const codedError = Object.assign(new Error('download failed'), { code: 'DOWNLOAD_FAILED' })
+    const registry = {
+      'err-plugin': {
+        install: vi.fn().mockRejectedValue(codedError),
+        verify: vi.fn(),
+      },
+    }
+
+    const result = await executeTask({
+      task,
+      registry,
+      platform: 'darwin',
+      tasksDir,
+      dryRun: true,
+    })
+
+    expect(result.plugins[0].status).toBe('failed')
+    expect(result.plugins[0].errorCode).toBe('DOWNLOAD_FAILED')
+    expect(result.plugins[0].error).toBe('download failed')
+  })
+
   it('skips already-verified plugins when no pluginFilter is set', async () => {
     let task = makeTask(['plugin-a'])
     task = applyPluginResult(task, 'plugin-a', makeInstallResult(), makeVerifyResult())

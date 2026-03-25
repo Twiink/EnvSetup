@@ -1,9 +1,35 @@
-import type { FailureAnalysis, FailureCategory, PluginInstallResult } from './contracts'
+import type {
+  ErrorCode,
+  FailureAnalysis,
+  FailureCategory,
+  PluginInstallResult,
+} from './contracts'
 
-/**
- * 分类错误信息
- * 从错误字符串中识别失败类型
- */
+function categoryFromErrorCode(errorCode?: ErrorCode): FailureCategory | undefined {
+  switch (errorCode) {
+    case 'DOWNLOAD_CHECKSUM_FAILED':
+    case 'DOWNLOAD_HOST_UNTRUSTED':
+      return 'conflict'
+    case 'DOWNLOAD_FAILED':
+    case 'DOWNLOAD_RETRY_EXHAUSTED':
+    case 'NETWORK_UNAVAILABLE':
+      return 'network'
+    case 'PERMISSION_DENIED':
+    case 'ELEVATION_REQUIRED':
+      return 'permission'
+    case 'PLUGIN_DEPENDENCY_MISSING':
+      return 'dependency'
+    case 'PATH_NOT_WRITABLE':
+    case 'EXISTING_ENV_DETECTED':
+    case 'VERSION_INCOMPATIBLE':
+    case 'ARCH_UNSUPPORTED':
+    case 'ENV_PERSISTENCE_FAILED':
+      return 'conflict'
+    default:
+      return undefined
+  }
+}
+
 export function categorizeError(errorMessage: string): FailureCategory {
   const msg = errorMessage.toLowerCase()
 
@@ -100,7 +126,7 @@ export function analyzeFailure(result: PluginInstallResult): FailureAnalysis {
     }
   }
 
-  const category = categorizeError(errorText)
+  const category = categoryFromErrorCode(result.errorCode) ?? categorizeError(errorText)
   const retryable = isRetryable(category)
   const action = suggestAction(category, errorText)
 

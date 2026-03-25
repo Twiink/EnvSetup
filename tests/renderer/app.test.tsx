@@ -92,6 +92,8 @@ const runPrecheck = vi.fn()
 const onTaskProgress = vi.fn()
 const removeTaskProgressListener = vi.fn()
 const startTask = vi.fn()
+const previewEnvChanges = vi.fn()
+const applyEnvChanges = vi.fn()
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -107,6 +109,15 @@ beforeEach(() => {
   onTaskProgress.mockReset()
   removeTaskProgressListener.mockReset()
   startTask.mockReset()
+  previewEnvChanges.mockReset()
+  applyEnvChanges.mockReset()
+  previewEnvChanges.mockResolvedValue({
+    envCount: 0,
+    pathCount: 0,
+    profileCount: 0,
+    targets: [],
+  })
+  applyEnvChanges.mockResolvedValue({ applied: [], skipped: [] })
   startTask.mockResolvedValue({
     id: 'task-1',
     templateId: 'frontend-template',
@@ -164,6 +175,8 @@ beforeEach(() => {
     retryPlugin: vi.fn(),
     pickDirectory,
     importPluginFromPath: vi.fn(),
+    previewEnvChanges,
+    applyEnvChanges,
     onTaskProgress,
     removeTaskProgressListener,
   }
@@ -263,5 +276,70 @@ describe('App', () => {
     expect(startTask).toHaveBeenCalledWith('task-1')
     expect(onTaskProgress).toHaveBeenCalled()
     expect(removeTaskProgressListener).toHaveBeenCalled()
+  })
+
+  it('renders env/download/command details when task has lastResult', async () => {
+    startTask.mockResolvedValueOnce({
+      id: 'task-1',
+      templateId: 'frontend-template',
+      templateVersion: '0.1.0',
+      locale: 'zh-CN',
+      status: 'succeeded',
+      params: {},
+      plugins: [
+        {
+          pluginId: 'frontend-env',
+          version: '0.1.0',
+          status: 'verified_success',
+          params: {},
+          logs: [],
+          context: {},
+          lastResult: {
+            status: 'installed_unverified',
+            executionMode: 'real_run',
+            version: '20.11.1',
+            paths: {
+              installRootDir: '/tmp/toolchain',
+              npmCacheDir: '/tmp/npm-cache',
+              npmGlobalPrefix: '/tmp/npm-global',
+            },
+            envChanges: [
+              {
+                kind: 'env',
+                key: 'npm_config_cache',
+                value: '/tmp/npm-cache',
+                scope: 'user',
+                description: 'Set npm cache directory.',
+              },
+            ],
+            downloads: [
+              {
+                kind: 'archive',
+                tool: 'node',
+                url: 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-arm64.tar.gz',
+                official: true,
+              },
+            ],
+            commands: ['echo install'],
+            logs: [],
+            summary: 'Completed frontend environment install commands.',
+          },
+        },
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await screen.findByText('通过')
+    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await screen.findByText('任务状态')
+    fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
+
+    expect(await screen.findByText('下载项（1）')).toBeInTheDocument()
+    expect(await screen.findByText('命令计划（1）')).toBeInTheDocument()
+    expect(await screen.findByText('环境变更（1）')).toBeInTheDocument()
   })
 })

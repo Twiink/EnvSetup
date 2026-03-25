@@ -15,6 +15,8 @@ const api: EnvSetupApi = {
   cleanupEnvironment: (detection) => ipcRenderer.invoke('environment:cleanup', detection),
   pickDirectory: (defaultPath) => ipcRenderer.invoke('dialog:pick-directory', { defaultPath }),
   importPluginFromPath: (pluginPath) => ipcRenderer.invoke('plugin:import', { path: pluginPath }),
+  previewEnvChanges: (changes) => ipcRenderer.invoke('environment:preview-changes', changes),
+  applyEnvChanges: (payload) => ipcRenderer.invoke('environment:apply-changes', payload),
   // 快照管理
   listSnapshots: () => ipcRenderer.invoke('snapshot:list'),
   createSnapshot: (payload) => ipcRenderer.invoke('snapshot:create', payload),

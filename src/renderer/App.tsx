@@ -82,7 +82,7 @@ export default function App() {
   const [error, setError] = useState<string>()
   const [importMessage, setImportMessage] = useState<string>()
   const [taskProgressEvents, setTaskProgressEvents] = useState<TaskProgressEvent[]>([])
-
+  const [taskMessage, setTaskMessage] = useState<string>()
   useEffect(() => {
     document.documentElement.lang = locale
     document.title = getUiText(locale, 'documentTitle')
@@ -305,6 +305,33 @@ export default function App() {
     }
   }
 
+  async function handleApplyEnvChanges(pluginId: string) {
+    if (!task) {
+      return
+    }
+
+    const plugin = task.plugins.find((entry) => entry.pluginId === pluginId)
+    const changes = plugin?.lastResult?.envChanges ?? []
+    if (changes.length === 0) {
+      return
+    }
+
+    setBusy(true)
+    setError(undefined)
+
+    try {
+      await window.envSetup.previewEnvChanges(changes)
+      const result = await window.envSetup.applyEnvChanges({ changes })
+      setTaskMessage(
+        `${getUiText(locale, 'applyEnvChangesSuccess')} (${result.applied.length}/${changes.length})`,
+      )
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : String(applyError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleCleanupDetection(detection: DetectedEnvironment) {
     if (!selectedTemplate) {
       return
@@ -456,6 +483,22 @@ export default function App() {
           </div>
         ) : null}
 
+        {taskMessage ? (
+          <div
+            role="status"
+            style={{
+              padding: '1.25rem',
+              borderRadius: '12px',
+              background: '#F2F6ED',
+              color: '#6B8E53',
+              border: '1px solid #DEE8D5',
+              fontSize: '0.95rem',
+            }}
+          >
+            {taskMessage}
+          </div>
+        ) : null}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -515,6 +558,7 @@ export default function App() {
             onStartTask={handleStartTask}
             onCancelTask={handleCancelTask}
             onRetryPlugin={handleRetryPlugin}
+            onApplyEnvChanges={handleApplyEnvChanges}
           />
         </div>
       </div>

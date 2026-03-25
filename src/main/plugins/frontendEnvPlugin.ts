@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 import { buildFrontendEnvChanges, resolveFrontendInstallPaths } from '../core/platform'
+import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -20,12 +21,6 @@ const NVM_ARCHIVE_BASE_URL = 'https://github.com/nvm-sh/nvm/archive/refs/tags'
 const NVM_WINDOWS_RELEASE_BASE_URL = 'https://github.com/coreybutler/nvm-windows/releases/download'
 const PINNED_NVM_VERSION = '0.40.4'
 const PINNED_NVM_WINDOWS_VERSION = '1.2.2'
-
-const OFFICIAL_DOWNLOAD_HOSTS: Record<DownloadArtifact['tool'], Set<string>> = {
-  node: new Set(['nodejs.org']),
-  nvm: new Set(['github.com']),
-  'nvm-windows': new Set(['github.com']),
-}
 
 function translate(locale: AppLocale, text: { 'zh-CN': string; en: string }): string {
   return text[locale]
@@ -70,6 +65,7 @@ function buildDownloadPlan(input: FrontendPluginParams): DownloadArtifact[] {
         official: true,
         checksumUrl: buildNodeChecksumUrl(input),
         checksumAlgorithm: 'sha256',
+        fileName: resolveNodeArchiveBasename(input),
         note: 'Download the standalone Node.js archive from nodejs.org.',
       },
     ]
@@ -113,23 +109,7 @@ function buildDownloadPlan(input: FrontendPluginParams): DownloadArtifact[] {
 }
 
 function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
-  for (const download of downloads) {
-    const allowedHosts = OFFICIAL_DOWNLOAD_HOSTS[download.tool]
-    const host = new URL(download.url).host
-
-    if (!allowedHosts.has(host)) {
-      throw new Error(`Unofficial download host detected for ${download.tool}: ${download.url}`)
-    }
-
-    if (download.checksumUrl) {
-      const checksumHost = new URL(download.checksumUrl).host
-      if (!allowedHosts.has(checksumHost)) {
-        throw new Error(
-          `Unofficial checksum host detected for ${download.tool}: ${download.checksumUrl}`,
-        )
-      }
-    }
-  }
+  validateOfficialDownloads(downloads)
 }
 
 function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
@@ -191,6 +171,7 @@ function toFrontendParams(input: PluginExecutionInput): FrontendPluginParams {
     installRootDir,
     npmCacheDir: input.npmCacheDir,
     npmGlobalPrefix: input.npmGlobalPrefix,
+    downloadCacheDir: typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
     platform: input.platform,
     dryRun: input.dryRun,
   }
@@ -402,6 +383,18 @@ const frontendEnvPlugin = {
     ]
 
     if (!params.dryRun) {
+      if (!params.downloadCacheDir) {
+        throw Object.assign(new Error('Download cache directory is required for real-run'), {
+          code: 'DOWNLOAD_FAILED',
+        })
+      }
+
+      const resolvedDownloads = await downloadArtifacts({
+        downloads,
+        cacheDir: params.downloadCacheDir,
+      })
+      logs.push(...resolvedDownloads.map((item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`))
+
       const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
       logs.push(...cmdOutput)
     }

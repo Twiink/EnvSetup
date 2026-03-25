@@ -6,6 +6,7 @@ import { appendTaskLog, sanitizeLog } from './logger'
 import type {
   AppPlatform,
   AppLocale,
+  ErrorCode,
   InstallTask,
   PluginExecutionInput,
   PluginInstallResult,
@@ -17,6 +18,7 @@ import type {
   TaskProgressEvent,
   TaskStatus,
 } from './contracts'
+import { ERROR_CODES } from './contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
 
 export type CreateTaskInput = {
@@ -49,6 +51,18 @@ export type PluginRegistry = Record<string, PluginLifecycle>
 
 function timestamp(): string {
   return new Date().toISOString()
+}
+
+function isErrorCode(value: unknown): value is ErrorCode {
+  return typeof value === 'string' && ERROR_CODES.includes(value as ErrorCode)
+}
+
+function resolveErrorCode(error: unknown): ErrorCode {
+  if (typeof error === 'object' && error !== null && 'code' in error && isErrorCode(error.code)) {
+    return error.code
+  }
+
+  return 'PLUGIN_EXECUTION_FAILED'
 }
 
 function cloneTask(task: InstallTask): InstallTask {
@@ -121,6 +135,7 @@ function buildExecutionInput(
   plugin: TaskPluginSnapshot,
   platform: AppPlatform,
   dryRun: boolean,
+  runtimeContext?: Record<string, Primitive>,
 ): PluginExecutionInput {
   // Merge context from all preceding verified plugins so later plugins can consume outputs
   const precedingContext: Record<string, Primitive> = {}
@@ -133,6 +148,7 @@ function buildExecutionInput(
 
   return {
     ...precedingContext,
+    ...runtimeContext,
     ...plugin.params,
     platform,
     dryRun,
@@ -223,6 +239,7 @@ export async function executeTask(options: {
   dryRun?: boolean
   pluginFilter?: string
   onProgress?: (event: TaskProgressEvent) => void
+  runtimeContext?: Record<string, Primitive>
 }): Promise<InstallTask> {
   const dryRun = options.dryRun ?? true
   let nextTask = withTaskUpdate(options.task, (draft) => {
@@ -286,7 +303,13 @@ export async function executeTask(options: {
         continue
       }
 
-      const executionInput = buildExecutionInput(nextTask, draftPlugin, options.platform, dryRun)
+      const executionInput = buildExecutionInput(
+        nextTask,
+        draftPlugin,
+        options.platform,
+        dryRun,
+        options.runtimeContext,
+      )
       executionInput.onProgress = (event) => {
         options.onProgress?.({ ...event, taskId: nextTask.id })
       }
@@ -329,7 +352,7 @@ export async function executeTask(options: {
           return
         }
         failedPlugin.status = 'failed'
-        failedPlugin.errorCode = 'PLUGIN_EXECUTION_FAILED'
+        failedPlugin.errorCode = resolveErrorCode(error)
         failedPlugin.error = error instanceof Error ? error.message : String(error)
         failedPlugin.logs.push(failedPlugin.error)
         failedPlugin.finishedAt = timestamp()
@@ -412,6 +435,7 @@ export async function retryTaskPlugin(options: {
   tasksDir: string
   dryRun?: boolean
   onProgress?: (event: TaskProgressEvent) => void
+  runtimeContext?: Record<string, Primitive>
 }): Promise<InstallTask> {
   const resetTask = withTaskUpdate(options.task, (draft) => {
     const plugin = draft.plugins.find((entry) => entry.pluginId === options.pluginId)

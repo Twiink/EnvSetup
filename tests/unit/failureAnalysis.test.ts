@@ -151,6 +151,16 @@ describe('analyzeFailure', () => {
     expect(analysis.message).toBe('ECONNREFUSED 127.0.0.1:3000')
   })
 
+  it('prioritises structured error code over message matching', () => {
+    const result = makeResult({
+      errorCode: 'DOWNLOAD_CHECKSUM_FAILED',
+      error: 'network timeout text should not override code',
+    })
+    const analysis = analyzeFailure(result)
+    expect(analysis.category).toBe('conflict')
+    expect(analysis.retryable).toBe(false)
+  })
+
   it('falls back to last log lines when no result.error', () => {
     const result = makeResult({
       error: undefined,

@@ -28,7 +28,11 @@ export const ERROR_CODES = [
   'PARAM_INVALID',
   'PATH_NOT_WRITABLE',
   'NETWORK_UNAVAILABLE',
+  'DOWNLOAD_HOST_UNTRUSTED',
+  'DOWNLOAD_FAILED',
+  'DOWNLOAD_RETRY_EXHAUSTED',
   'DOWNLOAD_CHECKSUM_FAILED',
+  'ENV_PERSISTENCE_FAILED',
   'EXISTING_ENV_DETECTED',
   'PLUGIN_PACKAGE_INVALID',
   'PLUGIN_DEPENDENCY_MISSING',
@@ -200,6 +204,7 @@ export type DownloadArtifact = {
   checksumUrl?: string
   checksumAlgorithm?: 'sha256'
   note?: string
+  fileName?: string
 }
 
 export type PluginInstallResult = {
@@ -214,6 +219,7 @@ export type PluginInstallResult = {
   summary: string
   context?: Record<string, Primitive>
   error?: string
+  errorCode?: ErrorCode
 }
 
 export type PluginVerifyResult = {
@@ -247,6 +253,7 @@ export type FrontendPluginParams = PluginExecutionInput & {
   installRootDir: string
   npmCacheDir: string
   npmGlobalPrefix: string
+  downloadCacheDir?: string
 }
 
 export type PluginCheckResult = {
@@ -429,6 +436,18 @@ export type RollbackResult = {
   message: string
 }
 
+export type ApplyEnvChangesResult = {
+  applied: EnvChange[]
+  skipped: EnvChange[]
+}
+
+export type EnvChangesPreview = {
+  envCount: number
+  pathCount: number
+  profileCount: number
+  targets: string[]
+}
+
 export type EnvSetupApi = {
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
@@ -449,6 +468,10 @@ export type EnvSetupApi = {
   cleanupEnvironment: (detection: DetectedEnvironment) => Promise<CleanupEnvironmentResult>
   pickDirectory: (defaultPath?: string) => Promise<string | undefined>
   importPluginFromPath: (pluginPath: string) => Promise<ImportedPlugin>
+  previewEnvChanges: (changes: EnvChange[]) => Promise<EnvChangesPreview>
+  applyEnvChanges: (payload: {
+    changes: EnvChange[]
+  }) => Promise<ApplyEnvChangesResult>
   // 快照管理
   listSnapshots: () => Promise<SnapshotMeta>
   createSnapshot: (payload: { taskId: string; label?: string }) => Promise<Snapshot>

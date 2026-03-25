@@ -98,6 +98,7 @@ describe('frontend env plugin', () => {
       installRootDir: '/tmp/toolchain',
       npmCacheDir: '/tmp/npm-cache',
       npmGlobalPrefix: '/tmp/npm-global',
+      downloadCacheDir: '/tmp/download-cache',
       dryRun: false,
       platform: 'darwin',
       onProgress: vi.fn(),

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { getMainWindow } from '../index'
 import { ensureAppPaths } from '../core/appPaths'
+import { applyEnvChanges, previewEnvChanges } from '../core/envPersistence'
 import { cleanupDetectedEnvironment } from '../core/environment'
 import { resolveDryRun } from '../core/executionMode'
 import { runPrecheck as runEnhancedPrecheck } from '../core/enhancedPrecheck'
@@ -31,6 +32,7 @@ import {
 import { loadTemplatesFromDirectory, mapTemplateValuesToPluginParams } from '../core/template'
 import type {
   DetectedEnvironment,
+  EnvChange,
   FailureAnalysis,
   InstallTask,
   PluginInstallResult,
@@ -65,12 +67,15 @@ async function getTask(taskId: string, tasksDir: string): Promise<InstallTask> {
   return taskCache.get(taskId) ?? loadTask(taskId, tasksDir)
 }
 
-function getExecutionOptions(tasksDir: string) {
+function getExecutionOptions(tasksDir: string, downloadCacheDir: string) {
   return {
     registry: BUILTIN_PLUGINS,
     platform: (process.platform === 'win32' ? 'win32' : 'darwin') as 'win32' | 'darwin',
     tasksDir,
     dryRun: resolveDryRun(app.isPackaged),
+    runtimeContext: {
+      downloadCacheDir,
+    },
     onProgress: (event: TaskProgressEvent) => {
       getMainWindow()?.webContents.send('task:progress', event)
     },
@@ -88,6 +93,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('node:list-lts-versions', async () => listNodeLtsVersions())
   ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) =>
     cleanupDetectedEnvironment(detection),
+  )
+  ipcMain.handle('environment:preview-changes', async (_event, changes: EnvChange[]) =>
+    previewEnvChanges(changes ?? []),
+  )
+  ipcMain.handle('environment:apply-changes', async (_event, payload: { changes: EnvChange[] }) =>
+    applyEnvChanges({
+      changes: payload.changes ?? [],
+      platform: (process.platform === 'win32' ? 'win32' : 'darwin') as 'win32' | 'darwin',
+    }),
   )
 
   ipcMain.handle(
@@ -166,7 +180,7 @@ export function registerIpcHandlers(): void {
 
     const nextTask = await executeTask({
       task,
-      ...getExecutionOptions(paths.tasksDir),
+      ...getExecutionOptions(paths.tasksDir, paths.downloadCacheDir),
     })
 
     const taskWithSnapshot: typeof nextTask = { ...nextTask, snapshotId }
@@ -210,7 +224,7 @@ export function registerIpcHandlers(): void {
       const nextTask = await retryTaskPlugin({
         task,
         pluginId: payload.pluginId,
-        ...getExecutionOptions(paths.tasksDir),
+        ...getExecutionOptions(paths.tasksDir, paths.downloadCacheDir),
       })
       taskCache.set(nextTask.id, nextTask)
       return nextTask

@@ -161,6 +161,26 @@ const uiText = {
     'zh-CN': '正在执行命令',
     en: 'Running command',
   },
+  downloadItems: {
+    'zh-CN': '下载项',
+    en: 'Downloads',
+  },
+  commandPlan: {
+    'zh-CN': '命令计划',
+    en: 'Command Plan',
+  },
+  envChangesLabel: {
+    'zh-CN': '环境变更',
+    en: 'Environment Changes',
+  },
+  applyEnvChanges: {
+    'zh-CN': '应用环境变更',
+    en: 'Apply Environment Changes',
+  },
+  applyEnvChangesSuccess: {
+    'zh-CN': '环境变更已应用。',
+    en: 'Environment changes applied.',
+  },
 } as const satisfies Record<string, LocalizedTextInput>
 
 const localeButtonLabelMap: Record<AppLocale, string> = {
