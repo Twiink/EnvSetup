@@ -1,10 +1,12 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { stat } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { getMainWindow } from '../index'
 import { ensureAppPaths } from '../core/appPaths'
 import { cleanupDetectedEnvironment } from '../core/environment'
+import { resolveDryRun } from '../core/executionMode'
 import { runPrecheck as runEnhancedPrecheck } from '../core/enhancedPrecheck'
 import { listNodeLtsVersions } from '../core/nodeVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
@@ -34,6 +36,7 @@ import type {
   PluginInstallResult,
   Primitive,
   ResolvedTemplate,
+  TaskProgressEvent,
 } from '../core/contracts'
 import frontendEnvPlugin from '../plugins/frontendEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
@@ -60,6 +63,18 @@ async function getTemplate(templateId: string): Promise<ResolvedTemplate> {
 
 async function getTask(taskId: string, tasksDir: string): Promise<InstallTask> {
   return taskCache.get(taskId) ?? loadTask(taskId, tasksDir)
+}
+
+function getExecutionOptions(tasksDir: string) {
+  return {
+    registry: BUILTIN_PLUGINS,
+    platform: (process.platform === 'win32' ? 'win32' : 'darwin') as 'win32' | 'darwin',
+    tasksDir,
+    dryRun: resolveDryRun(app.isPackaged),
+    onProgress: (event: TaskProgressEvent) => {
+      getMainWindow()?.webContents.send('task:progress', event)
+    },
+  }
 }
 
 export function registerIpcHandlers(): void {
@@ -151,10 +166,7 @@ export function registerIpcHandlers(): void {
 
     const nextTask = await executeTask({
       task,
-      registry: BUILTIN_PLUGINS,
-      platform: process.platform === 'win32' ? 'win32' : 'darwin',
-      tasksDir: paths.tasksDir,
-      dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
+      ...getExecutionOptions(paths.tasksDir),
     })
 
     const taskWithSnapshot: typeof nextTask = { ...nextTask, snapshotId }
@@ -198,10 +210,7 @@ export function registerIpcHandlers(): void {
       const nextTask = await retryTaskPlugin({
         task,
         pluginId: payload.pluginId,
-        registry: BUILTIN_PLUGINS,
-        platform: process.platform === 'win32' ? 'win32' : 'darwin',
-        tasksDir: paths.tasksDir,
-        dryRun: process.env.ENVSETUP_REAL_RUN !== '1',
+        ...getExecutionOptions(paths.tasksDir),
       })
       taskCache.set(nextTask.id, nextTask)
       return nextTask

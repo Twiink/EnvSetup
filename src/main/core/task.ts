@@ -14,6 +14,7 @@ import type {
   Primitive,
   PrecheckResult,
   TaskPluginSnapshot,
+  TaskProgressEvent,
   TaskStatus,
 } from './contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
@@ -221,6 +222,7 @@ export async function executeTask(options: {
   tasksDir: string
   dryRun?: boolean
   pluginFilter?: string
+  onProgress?: (event: TaskProgressEvent) => void
 }): Promise<InstallTask> {
   const dryRun = options.dryRun ?? true
   let nextTask = withTaskUpdate(options.task, (draft) => {
@@ -270,6 +272,14 @@ export async function executeTask(options: {
     })
     await persistTask(nextTask, options.tasksDir)
 
+    options.onProgress?.({
+      taskId: nextTask.id,
+      pluginId: plugin.pluginId,
+      type: 'plugin_start',
+      message: `Starting plugin: ${plugin.pluginId}`,
+      timestamp: timestamp(),
+    })
+
     try {
       const draftPlugin = nextTask.plugins.find((entry) => entry.pluginId === plugin.pluginId)
       if (!draftPlugin) {
@@ -277,6 +287,9 @@ export async function executeTask(options: {
       }
 
       const executionInput = buildExecutionInput(nextTask, draftPlugin, options.platform, dryRun)
+      executionInput.onProgress = (event) => {
+        options.onProgress?.({ ...event, taskId: nextTask.id })
+      }
 
       if (runner.check) {
         const checkResult = await runner.check(executionInput)
@@ -301,6 +314,14 @@ export async function executeTask(options: {
         buildPluginLogs(installResult, verifyResult),
         options.tasksDir,
       )
+
+      options.onProgress?.({
+        taskId: nextTask.id,
+        pluginId: plugin.pluginId,
+        type: 'plugin_done',
+        message: `Plugin ${plugin.pluginId} finished`,
+        timestamp: timestamp(),
+      })
     } catch (error) {
       nextTask = withTaskUpdate(nextTask, (draft) => {
         const failedPlugin = draft.plugins.find((entry) => entry.pluginId === plugin.pluginId)
@@ -318,6 +339,14 @@ export async function executeTask(options: {
         [error instanceof Error ? error.message : String(error)],
         options.tasksDir,
       )
+      options.onProgress?.({
+        taskId: nextTask.id,
+        pluginId: plugin.pluginId,
+        type: 'command_error',
+        message: error instanceof Error ? error.message : String(error),
+        output: error instanceof Error ? error.message : String(error),
+        timestamp: timestamp(),
+      })
     }
 
     await persistTask(nextTask, options.tasksDir)
@@ -335,6 +364,13 @@ export async function executeTask(options: {
             : draft.resultLevel
   })
   await persistTask(nextTask, options.tasksDir)
+  options.onProgress?.({
+    taskId: nextTask.id,
+    pluginId: options.pluginFilter ?? 'task',
+    type: 'task_done',
+    message: `Task ${nextTask.status}`,
+    timestamp: timestamp(),
+  })
   return nextTask
 }
 
@@ -375,6 +411,7 @@ export async function retryTaskPlugin(options: {
   platform: AppPlatform
   tasksDir: string
   dryRun?: boolean
+  onProgress?: (event: TaskProgressEvent) => void
 }): Promise<InstallTask> {
   const resetTask = withTaskUpdate(options.task, (draft) => {
     const plugin = draft.plugins.find((entry) => entry.pluginId === options.pluginId)

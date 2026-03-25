@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn((_file, _args, callback) => {
+    callback(null, { stdout: 'ok', stderr: '' })
+  }),
+}))
 
 import frontendPlugin from '../../fixtures/plugins/frontend-env/index'
 
@@ -83,6 +89,22 @@ describe('frontend env plugin', () => {
 
     expect(installResult.summary).toContain('official-source')
     expect(verifyResult.checks[2]).toContain('official download sources')
+  })
+
+  it('returns real-run result when dryRun is false', async () => {
+    const result = await frontendPlugin.install({
+      nodeManager: 'nvm',
+      nodeVersion: '20.11.1',
+      installRootDir: '/tmp/toolchain',
+      npmCacheDir: '/tmp/npm-cache',
+      npmGlobalPrefix: '/tmp/npm-global',
+      dryRun: false,
+      platform: 'darwin',
+      onProgress: vi.fn(),
+    })
+
+    expect(result.executionMode).toBe('real_run')
+    expect(result.logs).toEqual(expect.arrayContaining([expect.stringContaining('mode=real-run')]))
   })
 
   it('builds standalone node downloads from nodejs.org with checksum verification', async () => {

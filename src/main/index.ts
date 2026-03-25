@@ -5,6 +5,11 @@ import { fileURLToPath } from 'node:url'
 import { registerIpcHandlers } from './ipc/index'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+let mainWindow: BrowserWindow | null = null
+
+export function getMainWindow() {
+  return mainWindow
+}
 
 // 指向项目根目录下的 build/ 图标
 const ICON_DIR = join(__dirname, '../../build')
@@ -21,7 +26,7 @@ function getIcon() {
 }
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     icon: getIcon(),

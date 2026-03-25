@@ -9,6 +9,7 @@ import type {
   PluginExecutionInput,
   PluginInstallResult,
   PluginVerifyResult,
+  TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
 
@@ -321,10 +322,21 @@ function buildVerifyCommands(input: FrontendPluginParams): string[] {
 async function runCommands(
   commands: string[],
   platform: FrontendPluginParams['platform'],
+  onProgress?: (event: TaskProgressEvent) => void,
+  pluginId = 'frontend-env',
 ): Promise<string[]> {
   const output: string[] = []
-  for (const command of commands) {
+  for (const [index, command] of commands.entries()) {
     output.push(`$ ${command}`)
+    onProgress?.({
+      taskId: '',
+      pluginId,
+      type: 'command_start',
+      message: command,
+      commandIndex: index + 1,
+      commandTotal: commands.length,
+      timestamp: new Date().toISOString(),
+    })
     try {
       const result =
         platform === 'win32'
@@ -338,11 +350,31 @@ async function runCommands(
           : await execFileAsync('sh', ['-c', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
+      onProgress?.({
+        taskId: '',
+        pluginId,
+        type: 'command_done',
+        message: command,
+        commandIndex: index + 1,
+        commandTotal: commands.length,
+        output: [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n'),
+        timestamp: new Date().toISOString(),
+      })
     } catch (err: unknown) {
       const e = err as { stdout?: string; stderr?: string; message?: string }
       if (e.stdout?.trim()) output.push(e.stdout.trim())
       if (e.stderr?.trim()) output.push(`stderr: ${e.stderr.trim()}`)
       output.push(`error: ${e.message ?? String(err)}`)
+      onProgress?.({
+        taskId: '',
+        pluginId,
+        type: 'command_error',
+        message: command,
+        commandIndex: index + 1,
+        commandTotal: commands.length,
+        output: [e.stdout?.trim(), e.stderr?.trim(), e.message ?? String(err)].filter(Boolean).join('\n'),
+        timestamp: new Date().toISOString(),
+      })
       throw Object.assign(new Error(e.message ?? String(err)), { commandOutput: output })
     }
   }
@@ -370,7 +402,7 @@ const frontendEnvPlugin = {
     ]
 
     if (!params.dryRun) {
-      const cmdOutput = await runCommands(commands, params.platform)
+      const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
       logs.push(...cmdOutput)
     }
 
@@ -430,7 +462,7 @@ const frontendEnvPlugin = {
       }
     }
 
-    const verifyOutput = await runCommands(buildVerifyCommands(params), params.platform)
+    const verifyOutput = await runCommands(buildVerifyCommands(params), params.platform, input.onProgress)
 
     return {
       status: 'verified_success',

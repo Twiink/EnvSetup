@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { EnvSetupApi } from '../main/core/contracts'
+import type { EnvSetupApi, TaskProgressEvent } from '../main/core/contracts'
+
+let taskProgressListener: ((event: TaskProgressEvent) => void) | undefined
 
 const api: EnvSetupApi = {
   listTemplates: () => ipcRenderer.invoke('template:list'),
@@ -22,6 +24,16 @@ const api: EnvSetupApi = {
   executeRollback: (payload) => ipcRenderer.invoke('rollback:execute', payload),
   // 增强预检
   runEnhancedPrecheck: (pluginResults) => ipcRenderer.invoke('precheck:enhanced', pluginResults),
+  onTaskProgress: (callback) => {
+    taskProgressListener = callback
+    ipcRenderer.on('task:progress', (_event, data: TaskProgressEvent) => {
+      taskProgressListener?.(data)
+    })
+  },
+  removeTaskProgressListener: () => {
+    taskProgressListener = undefined
+    ipcRenderer.removeAllListeners('task:progress')
+  },
 }
 
 contextBridge.exposeInMainWorld('envSetup', api)

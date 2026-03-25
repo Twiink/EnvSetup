@@ -145,6 +145,22 @@ const uiText = {
     'zh-CN': '缓存目录',
     en: 'Cache Directory',
   },
+  logTerminalTitle: {
+    'zh-CN': '安装日志',
+    en: 'Install Log',
+  },
+  logTerminalExpand: {
+    'zh-CN': '展开日志',
+    en: 'Show Log',
+  },
+  logTerminalCollapse: {
+    'zh-CN': '收起日志',
+    en: 'Hide Log',
+  },
+  pluginRunningProgress: {
+    'zh-CN': '正在执行命令',
+    en: 'Running command',
+  },
 } as const satisfies Record<string, LocalizedTextInput>
 
 const localeButtonLabelMap: Record<AppLocale, string> = {

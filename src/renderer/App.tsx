@@ -6,6 +6,7 @@ import type {
   Primitive,
   PrecheckResult,
   ResolvedTemplate,
+  TaskProgressEvent,
 } from '../main/core/contracts'
 import { DEFAULT_LOCALE, normalizeLocale, type AppLocale } from '../shared/locale'
 import { validateResolvedTemplateValues } from '../shared/templateFields'
@@ -55,6 +56,14 @@ function getTemplateById(
   return templates.find((template) => template.id === templateId)
 }
 
+function removeTaskProgressListenerSafely() {
+  window.envSetup.removeTaskProgressListener?.()
+}
+
+function registerTaskProgressListener(callback: (event: TaskProgressEvent) => void) {
+  window.envSetup.onTaskProgress?.(callback)
+}
+
 export default function App() {
   const [locale, setLocale] = useState<AppLocale>(() => {
     if (typeof window === 'undefined') {
@@ -72,6 +81,7 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [importMessage, setImportMessage] = useState<string>()
+  const [taskProgressEvents, setTaskProgressEvents] = useState<TaskProgressEvent[]>([])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -116,6 +126,12 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      removeTaskProgressListenerSafely()
+    }
+  }, [])
+
   const selectedTemplate = getTemplateById(templates, selectedTemplateId)
   const validationErrors = selectedTemplate
     ? validateResolvedTemplateValues(selectedTemplate, values, locale)
@@ -137,6 +153,7 @@ export default function App() {
     setValues(buildInitialValues(template, nodeLtsVersions))
     setPrecheck(undefined)
     setTask(undefined)
+    setTaskProgressEvents([])
     setError(undefined)
   }
 
@@ -147,6 +164,7 @@ export default function App() {
     }))
     setPrecheck(undefined)
     setTask(undefined)
+    setTaskProgressEvents([])
     setError(undefined)
   }
 
@@ -188,6 +206,7 @@ export default function App() {
         locale,
       })
       setTask(nextTask)
+      setTaskProgressEvents([])
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : String(createError))
     } finally {
@@ -202,6 +221,14 @@ export default function App() {
 
     setBusy(true)
     setError(undefined)
+    setTaskProgressEvents([])
+    removeTaskProgressListenerSafely()
+    registerTaskProgressListener((event) => {
+      if (event.taskId !== task.id) {
+        return
+      }
+      setTaskProgressEvents((currentEvents) => [...currentEvents, event])
+    })
 
     try {
       const nextTask = await window.envSetup.startTask(task.id)
@@ -209,6 +236,7 @@ export default function App() {
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : String(startError))
     } finally {
+      removeTaskProgressListenerSafely()
       setBusy(false)
     }
   }
@@ -257,6 +285,14 @@ export default function App() {
 
     setBusy(true)
     setError(undefined)
+    setTaskProgressEvents([])
+    removeTaskProgressListenerSafely()
+    registerTaskProgressListener((event) => {
+      if (event.taskId !== task.id || event.pluginId !== pluginId) {
+        return
+      }
+      setTaskProgressEvents((currentEvents) => [...currentEvents, event])
+    })
 
     try {
       const nextTask = await window.envSetup.retryPlugin(task.id, pluginId)
@@ -264,6 +300,7 @@ export default function App() {
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : String(retryError))
     } finally {
+      removeTaskProgressListenerSafely()
       setBusy(false)
     }
   }
@@ -471,6 +508,7 @@ export default function App() {
           <TaskPanel
             locale={locale}
             task={task}
+            progressEvents={taskProgressEvents}
             busy={busy}
             canCreate={canCreateTask}
             onCreateTask={handleCreateTask}

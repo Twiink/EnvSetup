@@ -89,6 +89,9 @@ const pythonTemplateFixture = {
 
 const pickDirectory = vi.fn()
 const runPrecheck = vi.fn()
+const onTaskProgress = vi.fn()
+const removeTaskProgressListener = vi.fn()
+const startTask = vi.fn()
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -100,6 +103,44 @@ beforeEach(() => {
     items: [],
     detections: [],
     createdAt: new Date().toISOString(),
+  })
+  onTaskProgress.mockReset()
+  removeTaskProgressListener.mockReset()
+  startTask.mockReset()
+  startTask.mockResolvedValue({
+    id: 'task-1',
+    templateId: 'frontend-template',
+    templateVersion: '0.1.0',
+    locale: 'zh-CN',
+    status: 'succeeded',
+    params: {},
+    plugins: [
+      {
+        pluginId: 'frontend-env',
+        version: '0.1.0',
+        status: 'verified_success',
+        params: {},
+        logs: [],
+        context: {},
+        lastResult: {
+          status: 'installed_unverified',
+          executionMode: 'real_run',
+          version: '20.11.1',
+          paths: {
+            installRootDir: '/tmp/toolchain',
+            npmCacheDir: '/tmp/npm-cache',
+            npmGlobalPrefix: '/tmp/npm-global',
+          },
+          envChanges: [],
+          downloads: [],
+          commands: [],
+          logs: [],
+          summary: 'Completed frontend environment install commands.',
+        },
+      },
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   })
 
   const api: EnvSetupApi = {
@@ -119,10 +160,12 @@ beforeEach(() => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }),
-    startTask: vi.fn(),
+    startTask,
     retryPlugin: vi.fn(),
     pickDirectory,
     importPluginFromPath: vi.fn(),
+    onTaskProgress,
+    removeTaskProgressListener,
   }
 
   Object.defineProperty(window, 'envSetup', {
@@ -204,5 +247,21 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'EnvSetup' })).toBeInTheDocument()
     expect(await screen.findByText('Templates')).toBeInTheDocument()
     expect(await screen.findByText('Frontend Environment')).toBeInTheDocument()
+  })
+
+  it('shows real_run summary after starting a task', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await screen.findByText('通过')
+    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await screen.findByText('任务状态')
+
+    fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
+
+    expect(await screen.findByText('前端环境安装命令已执行完成。')).toBeInTheDocument()
+    expect(startTask).toHaveBeenCalledWith('task-1')
+    expect(onTaskProgress).toHaveBeenCalled()
+    expect(removeTaskProgressListener).toHaveBeenCalled()
   })
 })

@@ -222,11 +222,23 @@ export type PluginVerifyResult = {
   error?: string
 }
 
+export type TaskProgressEvent = {
+  taskId: string
+  pluginId: string
+  type: 'plugin_start' | 'command_start' | 'command_done' | 'command_error' | 'plugin_done' | 'task_done'
+  message: string
+  commandIndex?: number
+  commandTotal?: number
+  output?: string
+  timestamp: string
+}
+
 export type PluginExecutionInput = {
   platform: AppPlatform
   dryRun?: boolean
   locale?: AppLocale
-  [key: string]: Primitive | undefined
+  onProgress?: (event: TaskProgressEvent) => void
+  [key: string]: Primitive | undefined | ((event: TaskProgressEvent) => void)
 }
 
 export type FrontendPluginParams = PluginExecutionInput & {
@@ -452,4 +464,7 @@ export type EnvSetupApi = {
   }) => Promise<RollbackResult>
   // 增强预检
   runEnhancedPrecheck: (pluginResults: PluginInstallResult[]) => Promise<EnhancedPrecheckResult>
+  // 进度事件
+  onTaskProgress: (callback: (event: TaskProgressEvent) => void) => void
+  removeTaskProgressListener: () => void
 }
