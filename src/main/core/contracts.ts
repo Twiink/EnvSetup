@@ -471,6 +471,7 @@ export type RollbackSuggestion = {
 
 export type RollbackResult = {
   success: boolean
+  executionMode: 'dry_run' | 'real_run'
   snapshotId: string
   filesRestored: number
   envVariablesRestored: number

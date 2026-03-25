@@ -1,9 +1,31 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { InstallTask, Primitive, Snapshot } from '../../src/main/core/contracts'
+import type { CreateTaskInput } from '../../src/main/core/task'
 
-const handlers = new Map<string, Function>()
-const handle = vi.fn((channel: string, fn: Function) => {
+type IpcHandler = (event: unknown, ...args: unknown[]) => Promise<unknown> | unknown
+
+const handlers = new Map<string, IpcHandler>()
+const handle = vi.fn((channel: string, fn: IpcHandler) => {
   handlers.set(channel, fn)
 })
+
+const snapshotStub: Snapshot = {
+  id: 'snapshot-1',
+  taskId: 'task-1',
+  createdAt: '2026-03-25T00:00:00.000Z',
+  type: 'auto',
+  files: {},
+  environment: {
+    variables: {},
+    path: [],
+  },
+  shellConfigs: {},
+  metadata: {
+    platform: 'darwin',
+    diskUsage: 0,
+    fileCount: 0,
+  },
+}
 
 const showOpenDialog = vi.fn()
 const getFocusedWindow = vi.fn()
@@ -72,20 +94,40 @@ vi.mock('../../src/main/core/enhancedPrecheck', () => ({
     canProceed: true,
   })),
 }))
-vi.mock('../../src/main/core/nodeVersions', () => ({ listNodeLtsVersions: vi.fn(async () => ['20.11.1']) }))
-vi.mock('../../src/main/core/javaVersions', () => ({ listJavaLtsVersions: vi.fn(async () => ['21.0.6+7']) }))
-vi.mock('../../src/main/core/pythonVersions', () => ({ listPythonVersions: vi.fn(async () => ['3.12.1']) }))
-vi.mock('../../src/main/core/gitVersions', () => ({ listGitVersions: vi.fn(async () => ['2.47.1']) }))
-vi.mock('../../src/main/core/plugin', () => ({ importPluginFromDirectory: vi.fn(), importPluginFromZip: vi.fn() }))
+vi.mock('../../src/main/core/nodeVersions', () => ({
+  listNodeLtsVersions: vi.fn(async () => ['20.11.1']),
+}))
+vi.mock('../../src/main/core/javaVersions', () => ({
+  listJavaLtsVersions: vi.fn(async () => ['21.0.6+7']),
+}))
+vi.mock('../../src/main/core/pythonVersions', () => ({
+  listPythonVersions: vi.fn(async () => ['3.12.1']),
+}))
+vi.mock('../../src/main/core/gitVersions', () => ({
+  listGitVersions: vi.fn(async () => ['2.47.1']),
+}))
+vi.mock('../../src/main/core/plugin', () => ({
+  importPluginFromDirectory: vi.fn(),
+  importPluginFromZip: vi.fn(),
+}))
 vi.mock('../../src/main/core/precheck', () => ({
   buildRuntimePrecheckInput: vi.fn(async () => ({ ok: true })),
-  runPrecheck: vi.fn(async () => ({ level: 'pass', items: [], detections: [], createdAt: new Date().toISOString() })),
+  runPrecheck: vi.fn(async () => ({
+    level: 'pass',
+    items: [],
+    detections: [],
+    createdAt: new Date().toISOString(),
+  })),
 }))
 vi.mock('../../src/main/core/rollback', () => ({
   executeRollback: vi.fn(async (baseDir, snapshotId, trackedPaths) => ({
     success: true,
+    executionMode: 'dry_run',
     snapshotId,
     filesRestored: trackedPaths.length,
+    envVariablesRestored: 0,
+    shellConfigsRestored: 0,
+    directoriesRemoved: 0,
     errors: [],
     message: `rolled back from ${baseDir}`,
   })),
@@ -100,25 +142,27 @@ vi.mock('../../src/main/core/snapshot', () => ({
 }))
 vi.mock('../../src/main/core/task', () => ({
   cancelTask: vi.fn(async ({ task }) => ({ ...task, status: 'cancelled' })),
-  createTask: vi.fn((input) => ({
-    id: 'task-created',
-    templateId: input.templateId,
-    templateVersion: input.templateVersion,
-    locale: input.locale,
-    status: 'draft',
-    params: input.params,
-    precheck: input.precheck,
-    plugins: input.plugins.map((plugin: any) => ({
-      pluginId: plugin.pluginId,
-      version: plugin.version,
-      status: 'not_started',
-      params: plugin.params,
-      logs: [],
-      context: {},
-    })),
-    createdAt: '2026-03-25T00:00:00.000Z',
-    updatedAt: '2026-03-25T00:00:00.000Z',
-  })),
+  createTask: vi.fn(
+    (input: CreateTaskInput): InstallTask => ({
+      id: 'task-created',
+      templateId: input.templateId,
+      templateVersion: input.templateVersion,
+      locale: input.locale,
+      status: 'draft',
+      params: input.params,
+      precheck: input.precheck,
+      plugins: input.plugins.map((plugin) => ({
+        pluginId: plugin.pluginId,
+        version: plugin.version,
+        status: 'not_started',
+        params: plugin.params as Record<string, Primitive>,
+        logs: [],
+        context: {},
+      })),
+      createdAt: '2026-03-25T00:00:00.000Z',
+      updatedAt: '2026-03-25T00:00:00.000Z',
+    }),
+  ),
   executeTask: vi.fn(async ({ task, onProgress }) => {
     onProgress?.({
       taskId: task.id,
@@ -154,7 +198,11 @@ vi.mock('../../src/main/core/task', () => ({
     updatedAt: '2026-03-25T00:00:00.000Z',
   })),
   persistTask: vi.fn(async () => undefined),
-  retryTaskPlugin: vi.fn(async ({ task, pluginId }) => ({ ...task, retriedPluginId: pluginId, status: 'running' })),
+  retryTaskPlugin: vi.fn(async ({ task, pluginId }) => ({
+    ...task,
+    retriedPluginId: pluginId,
+    status: 'running',
+  })),
 }))
 vi.mock('../../src/main/core/template', () => ({
   loadTemplatesFromDirectory: vi.fn(async () => [
@@ -215,7 +263,7 @@ beforeEach(async () => {
   vi.mocked(templateMod.mapTemplateValuesToPluginParams).mockClear()
 
   vi.mocked(rollbackMod.suggestRollbackSnapshots).mockResolvedValue([])
-  vi.mocked(snapshotMod.createSnapshot).mockResolvedValue({ id: 'snapshot-1' } as any)
+  vi.mocked(snapshotMod.createSnapshot).mockResolvedValue(snapshotStub)
   vi.mocked(snapshotMod.loadSnapshotMeta).mockResolvedValue({ snapshots: [], maxSnapshots: 5 })
 })
 
@@ -250,7 +298,10 @@ describe('registerIpcHandlers', () => {
 
     const result = await handlers.get('task:create')?.({}, payload)
 
-    expect(templateMod.mapTemplateValuesToPluginParams).toHaveBeenCalledWith('node-env', payload.values)
+    expect(templateMod.mapTemplateValuesToPluginParams).toHaveBeenCalledWith(
+      'node-env',
+      payload.values,
+    )
     expect(taskMod.createTask).toHaveBeenCalledWith(
       expect.objectContaining({
         templateId: 'tpl-1',
@@ -267,7 +318,10 @@ describe('registerIpcHandlers', () => {
         ],
       }),
     )
-    expect(taskMod.persistTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'task-created' }), '/tmp/tasks')
+    expect(taskMod.persistTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'task-created' }),
+      '/tmp/tasks',
+    )
     expect(result.id).toBe('task-created')
   })
 
@@ -302,11 +356,12 @@ describe('registerIpcHandlers', () => {
   it('starts task and attaches rollback suggestions when execution fails', async () => {
     const rollbackMod = await import('../../src/main/core/rollback')
     const taskMod = await import('../../src/main/core/task')
-
-    vi.mocked(taskMod.executeTask).mockResolvedValueOnce({
+    const failedTask: InstallTask = {
       ...(await taskMod.loadTask('task-2', '/tmp/tasks')),
       status: 'failed',
-    } as any)
+    }
+
+    vi.mocked(taskMod.executeTask).mockResolvedValueOnce(failedTask)
     vi.mocked(rollbackMod.suggestRollbackSnapshots).mockResolvedValueOnce([
       {
         snapshotId: 'snapshot-1',
@@ -341,7 +396,10 @@ describe('registerIpcHandlers', () => {
   it('retries a plugin with mapped execution options', async () => {
     const taskMod = await import('../../src/main/core/task')
 
-    const result = await handlers.get('task:retry-plugin')?.({}, { taskId: 'task-1', pluginId: 'node-env' })
+    const result = await handlers.get('task:retry-plugin')?.(
+      {},
+      { taskId: 'task-1', pluginId: 'node-env' },
+    )
 
     expect(taskMod.retryTaskPlugin).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -398,7 +456,15 @@ describe('registerIpcHandlers', () => {
   it('lists snapshots from snapshot meta', async () => {
     const snapshotMod = await import('../../src/main/core/snapshot')
     vi.mocked(snapshotMod.loadSnapshotMeta).mockResolvedValueOnce({
-      snapshots: [{ id: 'snapshot-1', taskId: 'task-1', createdAt: '2026-03-25T00:00:00.000Z', type: 'auto', canDelete: false }],
+      snapshots: [
+        {
+          id: 'snapshot-1',
+          taskId: 'task-1',
+          createdAt: '2026-03-25T00:00:00.000Z',
+          type: 'auto',
+          canDelete: false,
+        },
+      ],
       maxSnapshots: 5,
     })
 
@@ -411,15 +477,18 @@ describe('registerIpcHandlers', () => {
   it('creates manual snapshot using cached task tracked paths', async () => {
     const snapshotMod = await import('../../src/main/core/snapshot')
 
-    await handlers.get('task:create')?.({}, {
-      templateId: 'tpl-1',
-      values: {
-        installRootDir: '/tmp/toolchain',
-        npmCacheDir: '/tmp/npm-cache',
-        npmGlobalPrefix: '/tmp/npm-global',
+    await handlers.get('task:create')?.(
+      {},
+      {
+        templateId: 'tpl-1',
+        values: {
+          installRootDir: '/tmp/toolchain',
+          npmCacheDir: '/tmp/npm-cache',
+          npmGlobalPrefix: '/tmp/npm-global',
+        },
+        locale: 'zh-CN',
       },
-      locale: 'zh-CN',
-    })
+    )
 
     await handlers.get('snapshot:create')?.({}, { taskId: 'task-created', label: 'before retry' })
 
@@ -436,8 +505,20 @@ describe('registerIpcHandlers', () => {
     const snapshotMod = await import('../../src/main/core/snapshot')
     vi.mocked(snapshotMod.loadSnapshotMeta).mockResolvedValueOnce({
       snapshots: [
-        { id: 'snapshot-1', taskId: 'task-1', createdAt: '2026-03-25T00:00:00.000Z', type: 'auto', canDelete: false },
-        { id: 'snapshot-2', taskId: 'task-2', createdAt: '2026-03-25T00:00:00.000Z', type: 'manual', canDelete: true },
+        {
+          id: 'snapshot-1',
+          taskId: 'task-1',
+          createdAt: '2026-03-25T00:00:00.000Z',
+          type: 'auto',
+          canDelete: false,
+        },
+        {
+          id: 'snapshot-2',
+          taskId: 'task-2',
+          createdAt: '2026-03-25T00:00:00.000Z',
+          type: 'manual',
+          canDelete: true,
+        },
       ],
       maxSnapshots: 5,
     })
@@ -446,7 +527,15 @@ describe('registerIpcHandlers', () => {
 
     expect(snapshotMod.deleteSnapshot).toHaveBeenCalledWith('/tmp/snapshots', 'snapshot-1')
     expect(snapshotMod.saveSnapshotMeta).toHaveBeenCalledWith('/tmp/snapshots', {
-      snapshots: [{ id: 'snapshot-2', taskId: 'task-2', createdAt: '2026-03-25T00:00:00.000Z', type: 'manual', canDelete: true }],
+      snapshots: [
+        {
+          id: 'snapshot-2',
+          taskId: 'task-2',
+          createdAt: '2026-03-25T00:00:00.000Z',
+          type: 'manual',
+          canDelete: true,
+        },
+      ],
       maxSnapshots: 5,
     })
   })
@@ -462,32 +551,51 @@ describe('registerIpcHandlers', () => {
       },
     ])
 
-    const suggestions = await handlers.get('rollback:suggest')?.({}, {
-      taskId: 'task-1',
-      failureAnalysis: { category: 'conflict', message: 'conflict', retryable: false },
-    })
-    const rollbackResult = await handlers.get('rollback:execute')?.({}, {
-      snapshotId: 'snapshot-1',
-      trackedPaths: ['/tmp/toolchain'],
-    })
+    const suggestions = await handlers.get('rollback:suggest')?.(
+      {},
+      {
+        taskId: 'task-1',
+        failureAnalysis: { category: 'conflict', message: 'conflict', retryable: false },
+      },
+    )
+    const rollbackResult = await handlers.get('rollback:execute')?.(
+      {},
+      {
+        snapshotId: 'snapshot-1',
+        trackedPaths: ['/tmp/toolchain'],
+      },
+    )
 
     expect(rollbackMod.suggestRollbackSnapshots).toHaveBeenCalledWith('/tmp/snapshots', 'task-1', {
       category: 'conflict',
       message: 'conflict',
       retryable: false,
     })
-    expect(rollbackMod.executeRollback).toHaveBeenCalledWith('/tmp/snapshots', 'snapshot-1', ['/tmp/toolchain'], undefined)
+    expect(rollbackMod.executeRollback).toHaveBeenCalledWith(
+      '/tmp/snapshots',
+      'snapshot-1',
+      ['/tmp/toolchain'],
+      undefined,
+      { dryRun: true },
+    )
     expect(suggestions).toHaveLength(1)
     expect(rollbackResult.success).toBe(true)
+    expect(rollbackResult.executionMode).toBe('dry_run')
   })
 
   it('delegates enhanced precheck handler', async () => {
     const enhancedPrecheckMod = await import('../../src/main/core/enhancedPrecheck')
-    const payload = { pluginResults: [{ pluginId: 'node-env' }], installedVersions: { node: '20.11.1' } }
+    const payload = {
+      pluginResults: [{ pluginId: 'node-env' }],
+      installedVersions: { node: '20.11.1' },
+    }
 
     const result = await handlers.get('precheck:enhanced')?.({}, payload)
 
-    expect(enhancedPrecheckMod.runPrecheck).toHaveBeenCalledWith(payload.pluginResults, payload.installedVersions)
+    expect(enhancedPrecheckMod.runPrecheck).toHaveBeenCalledWith(
+      payload.pluginResults,
+      payload.installedVersions,
+    )
     expect(result.canProceed).toBe(true)
   })
 

@@ -13,7 +13,12 @@ vi.mock('../../src/main/core/snapshot', () => ({
   restoreShellConfigs: vi.fn(),
 }))
 
-import { loadSnapshotMeta, applySnapshot, loadSnapshot, restoreShellConfigs } from '../../src/main/core/snapshot'
+import {
+  loadSnapshotMeta,
+  applySnapshot,
+  loadSnapshot,
+  restoreShellConfigs,
+} from '../../src/main/core/snapshot'
 
 const mockLoadSnapshotMeta = vi.mocked(loadSnapshotMeta)
 const mockApplySnapshot = vi.mocked(applySnapshot)
@@ -328,5 +333,26 @@ describe('executeRollback', () => {
     await executeRollback('/base', 'snap-1', [])
 
     expect(mockApplySnapshot).toHaveBeenCalledWith(expect.objectContaining({ restoreEnv: true }))
+  })
+
+  it('returns a dry-run rollback plan without mutating files', async () => {
+    const result = await executeRollback(
+      '/base',
+      'snap-1',
+      ['/tmp/toolchain'],
+      ['/tmp/toolchain'],
+      {
+        dryRun: true,
+      },
+    )
+
+    expect(mockLoadSnapshot).toHaveBeenCalledWith('/base', 'snap-1')
+    expect(mockApplySnapshot).not.toHaveBeenCalled()
+    expect(mockRestoreShellConfigs).not.toHaveBeenCalled()
+    expect(result.success).toBe(true)
+    expect(result.executionMode).toBe('dry_run')
+    expect(result.filesRestored).toBe(0)
+    expect(result.directoriesRemoved).toBe(0)
+    expect(result.message).toContain('Dry-run rollback plan prepared')
   })
 })

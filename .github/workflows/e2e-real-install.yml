@@ -50,7 +50,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -65,8 +65,8 @@ jobs:
       - name: Run real install + rollback tests
         env:
           ENVSETUP_REAL_RUN: '1'
-        run: npx vitest run tests/integration/action-real-install.test.ts tests/integration/action-real-rollback.test.ts --reporter=verbose
-        timeout-minutes: 55
+        run: npx vitest run tests/integration/action-real-install.test.ts tests/integration/action-real-rollback.test.ts tests/integration/action-rollback-recovery.test.ts --reporter=verbose
+        timeout-minutes: 80
 
       - name: Upload test logs on failure
         if: failure()

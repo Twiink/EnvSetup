@@ -333,9 +333,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'rollback:execute',
-    async (_event, payload: { snapshotId: string; trackedPaths?: string[]; installPaths?: string[] }) => {
+    async (
+      _event,
+      payload: { snapshotId: string; trackedPaths?: string[]; installPaths?: string[] },
+    ) => {
       const paths = await ensureAppPaths()
-      return executeRollback(paths.snapshotsDir, payload.snapshotId, payload.trackedPaths ?? [], payload.installPaths)
+      return executeRollback(
+        paths.snapshotsDir,
+        payload.snapshotId,
+        payload.trackedPaths ?? [],
+        payload.installPaths,
+        { dryRun: resolveDryRun(app.isPackaged) },
+      )
     },
   )
 

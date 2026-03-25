@@ -173,7 +173,7 @@ function buildDarwinDirectCommands(input: GitPluginParams): string[] {
 
 function buildDarwinHomebrewCommands(): string[] {
   return [
-    `command -v brew >/dev/null 2>&1 || /bin/bash -c \"$(curl -fsSL ${HOMEBREW_INSTALL_URL})\"`,
+    `command -v brew >/dev/null 2>&1 || /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"`,
     'brew install git || brew upgrade git',
   ]
 }

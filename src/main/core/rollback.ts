@@ -3,6 +3,10 @@ import type { FailureAnalysis, RollbackResult, RollbackSuggestion } from './cont
 import { applySnapshot, loadSnapshot, loadSnapshotMeta, restoreShellConfigs } from './snapshot'
 import { isCleanupAllowedPath } from './environment'
 
+type ExecuteRollbackOptions = {
+  dryRun?: boolean
+}
+
 /**
  * 根据失败分析找到最合适的回滚快照
  * 返回建议列表（按置信度排序，最多 3 个）
@@ -118,8 +122,41 @@ export async function executeRollback(
   snapshotId: string,
   trackedPaths: string[],
   installPaths?: string[],
+  options: ExecuteRollbackOptions = {},
 ): Promise<RollbackResult> {
   try {
+    if (options.dryRun) {
+      const snapshot = await loadSnapshot(baseDir, snapshotId)
+      const plannedFiles =
+        trackedPaths.length > 0
+          ? trackedPaths.filter((filePath) => filePath in snapshot.files).length
+          : Object.keys(snapshot.files).length
+      const plannedShellConfigs = Object.keys(snapshot.shellConfigs).length
+      const removablePaths = installPaths ?? []
+      const errors = removablePaths
+        .filter((dirPath) => !isCleanupAllowedPath(dirPath))
+        .map((dirPath) => ({
+          path: dirPath,
+          error: `Refusing to remove protected path: ${dirPath}`,
+        }))
+      const plannedDirectoriesRemoved = removablePaths.length - errors.length
+      const hasErrors = errors.length > 0
+
+      return {
+        success: !hasErrors,
+        executionMode: 'dry_run',
+        snapshotId,
+        filesRestored: 0,
+        envVariablesRestored: 0,
+        shellConfigsRestored: 0,
+        directoriesRemoved: 0,
+        errors,
+        message: hasErrors
+          ? `Dry-run rollback plan prepared: would restore ${plannedFiles} file(s), ${plannedShellConfigs} shell config(s), remove ${plannedDirectoriesRemoved} dir(s), with ${errors.length} protected path error(s)`
+          : `Dry-run rollback plan prepared: would restore ${plannedFiles} file(s), ${plannedShellConfigs} shell config(s), remove ${plannedDirectoriesRemoved} dir(s)`,
+      }
+    }
+
     const mode = trackedPaths.length > 0 ? 'partial' : 'full'
     const result = await applySnapshot({
       baseDir,
@@ -169,6 +206,7 @@ export async function executeRollback(
     const hasErrors = result.errors.length > 0
     return {
       success: !hasErrors,
+      executionMode: 'real_run',
       snapshotId,
       filesRestored: result.filesRestored,
       envVariablesRestored: result.envVariablesRestored,
@@ -183,6 +221,7 @@ export async function executeRollback(
     const errorMessage = error instanceof Error ? error.message : String(error)
     return {
       success: false,
+      executionMode: options.dryRun ? 'dry_run' : 'real_run',
       snapshotId,
       filesRestored: 0,
       envVariablesRestored: 0,

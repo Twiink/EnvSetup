@@ -1,7 +1,13 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import {
+  test,
+  expect,
+  _electron as electron,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test'
 
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
 const isMac = process.platform === 'darwin'
@@ -27,7 +33,9 @@ function makeInstallRoot(name: string): string {
     : path.join(os.tmpdir(), `envsetup-e2e-${name}`)
 }
 
-async function launchRealRunApp(installRoot: string): Promise<{ app: ElectronApplication; page: Page; dataDir: string }> {
+async function launchRealRunApp(
+  installRoot: string,
+): Promise<{ app: ElectronApplication; page: Page; dataDir: string }> {
   const dataDir = path.join(process.cwd(), '.envsetup-data')
   const app = await electron.launch({
     args: ['.'],
@@ -43,8 +51,88 @@ async function launchRealRunApp(installRoot: string): Promise<{ app: ElectronApp
   return { app, page, dataDir }
 }
 
+async function createAndStartTask(
+  page: Page,
+  templateId: string,
+  overrides: Record<string, string>,
+): Promise<{
+  id: string
+  status: string
+  snapshotId?: string
+  pluginStatuses: string[]
+  pluginExecutionModes: Array<string | null>
+}> {
+  return page.evaluate(
+    async ({ templateId, overrides }) => {
+      const templates = await window.envSetup.listTemplates()
+      const template = templates.find((entry) => entry.id === templateId)
+      if (!template) {
+        throw new Error(`Template not found: ${templateId}`)
+      }
+
+      const values = Object.fromEntries(
+        Object.values(template.fields).map((field) => [field.key, field.value]),
+      ) as Record<string, string>
+
+      if ('node.nodeVersion' in values) {
+        const nodeVersions = await window.envSetup.listNodeLtsVersions()
+        if (nodeVersions[0]) {
+          values['node.nodeVersion'] = nodeVersions[0]
+        }
+      }
+
+      if ('java.javaVersion' in values) {
+        const javaVersions = await window.envSetup.listJavaLtsVersions()
+        if (javaVersions[0]) {
+          values['java.javaVersion'] = javaVersions[0]
+        }
+      }
+
+      if ('python.pythonVersion' in values) {
+        const pythonVersions = await window.envSetup.listPythonVersions()
+        if (pythonVersions[0]) {
+          values['python.pythonVersion'] = pythonVersions[0]
+        }
+      }
+
+      Object.assign(values, overrides)
+
+      const task = await window.envSetup.createTask({
+        templateId,
+        values,
+        locale: 'zh-CN',
+      })
+      const started = await window.envSetup.startTask(task.id)
+
+      return {
+        id: started.id,
+        status: started.status,
+        snapshotId: (started as typeof started & { snapshotId?: string }).snapshotId,
+        pluginStatuses: started.plugins.map((plugin) => plugin.status),
+        pluginExecutionModes: started.plugins.map(
+          (plugin) => plugin.lastResult?.executionMode ?? null,
+        ),
+      }
+    },
+    { templateId, overrides },
+  )
+}
+
+async function executeRollbackViaApp(page: Page, snapshotId: string, installRoot: string) {
+  return page.evaluate(
+    async ({ snapshotId, installRoot }) =>
+      window.envSetup.executeRollback({
+        snapshotId,
+        installPaths: [installRoot],
+      }),
+    { snapshotId, installRoot },
+  )
+}
+
 async function runNodeInstallFlow(page: Page, managerLabel: string) {
-  await expect(page.getByRole('button', { name: 'Node.js 开发环境' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: 'Node.js 开发环境' })).toBeVisible({
+    timeout: 15_000,
+  })
   await page.getByRole('button', { name: 'Node.js 开发环境' }).click()
   await page.locator('select[id="node.nodeManager"]').selectOption({ label: managerLabel })
   await page.locator('select[id="node.nodeVersion"]').selectOption({ index: 0 })
@@ -53,7 +141,9 @@ async function runNodeInstallFlow(page: Page, managerLabel: string) {
   await page.getByRole('button', { name: '创建任务' }).click()
   await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
-  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({ timeout: 150_000 })
+  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
+    timeout: 150_000,
+  })
 }
 
 async function runJavaInstallFlow(page: Page, managerLabel: string) {
@@ -66,11 +156,15 @@ async function runJavaInstallFlow(page: Page, managerLabel: string) {
   await page.getByRole('button', { name: '创建任务' }).click()
   await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
-  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({ timeout: 300_000 })
+  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
+    timeout: 300_000,
+  })
 }
 
 async function runPythonInstallFlow(page: Page, managerLabel: string, timeout = 300_000) {
-  await expect(page.getByRole('button', { name: 'Python 开发环境' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: 'Python 开发环境' })).toBeVisible({
+    timeout: 15_000,
+  })
   await page.getByRole('button', { name: 'Python 开发环境' }).click()
   await page.locator('select[id="python.pythonManager"]').selectOption({ label: managerLabel })
   await page.locator('select[id="python.pythonVersion"]').selectOption({ index: 0 })
@@ -91,8 +185,48 @@ async function runGitInstallFlow(page: Page, managerLabel: string) {
   await page.getByRole('button', { name: '创建任务' }).click()
   await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
-  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({ timeout: 300_000 })
+  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
+    timeout: 300_000,
+  })
 }
+
+const realRollbackCases = [
+  {
+    name: 'node direct',
+    templateId: 'node-template',
+    buildOverrides: (installRoot: string) => ({
+      'node.nodeManager': 'node',
+      'node.installRootDir': installRoot,
+      'node.npmCacheDir': `${installRoot}-cache`,
+      'node.npmGlobalPrefix': `${installRoot}-global`,
+    }),
+  },
+  {
+    name: 'java jdk',
+    templateId: 'java-template',
+    buildOverrides: (installRoot: string) => ({
+      'java.javaManager': 'jdk',
+      'java.installRootDir': installRoot,
+    }),
+  },
+  {
+    name: 'python conda',
+    templateId: 'python-template',
+    buildOverrides: (installRoot: string) => ({
+      'python.pythonManager': 'conda',
+      'python.installRootDir': installRoot,
+      'python.condaEnvName': 'base',
+    }),
+  },
+  {
+    name: 'git direct',
+    templateId: 'git-template',
+    buildOverrides: (installRoot: string) => ({
+      'git.gitManager': 'git',
+      'git.installRootDir': installRoot,
+    }),
+  },
+] as const
 
 test.describe('real install', () => {
   test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
@@ -218,4 +352,43 @@ test.describe('real install', () => {
       await app.close()
     }
   })
+})
+
+test.describe('real rollback via packaged IPC', () => {
+  test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
+
+  for (const testCase of realRollbackCases) {
+    test(`${testCase.name} removes installed directory`, async () => {
+      test.setTimeout(600_000)
+      const installRoot = makeInstallRoot(`${testCase.templateId}-rollback`)
+      await fs.rm(installRoot, { recursive: true, force: true })
+
+      const { app, page, dataDir } = await launchRealRunApp(installRoot)
+
+      try {
+        const started = await createAndStartTask(
+          page,
+          testCase.templateId,
+          testCase.buildOverrides(installRoot),
+        )
+
+        expect(started.status).toBe('succeeded')
+        expect(started.snapshotId).toBeTruthy()
+        expect(started.pluginStatuses).toContain('verified_success')
+        expect(started.pluginExecutionModes).toContain('real_run')
+        await expect(fs.access(installRoot)).resolves.toBeUndefined()
+
+        const rollbackResult = await executeRollbackViaApp(page, started.snapshotId!, installRoot)
+
+        expect(rollbackResult.success).toBe(true)
+        expect(rollbackResult.executionMode).toBe('real_run')
+        expect(rollbackResult.directoriesRemoved).toBe(1)
+        await expect(fs.access(installRoot)).rejects.toThrow()
+      } finally {
+        await dumpTaskLogs(dataDir)
+        await fs.rm(installRoot, { recursive: true, force: true })
+        await app.close()
+      }
+    })
+  }
 })

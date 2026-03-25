@@ -3,7 +3,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { FailureAnalysis, RollbackResult, RollbackSuggestion } from '../../src/main/core/contracts'
+import type {
+  FailureAnalysis,
+  RollbackResult,
+  RollbackSuggestion,
+} from '../../src/main/core/contracts'
 import { RollbackDialog } from '../../src/renderer/components/RollbackDialog'
 
 const suggestions: RollbackSuggestion[] = [
@@ -32,8 +36,12 @@ const failureAnalysis: FailureAnalysis = {
 
 const result: RollbackResult = {
   success: true,
+  executionMode: 'real_run',
   snapshotId: 'snapshot-1',
   filesRestored: 3,
+  envVariablesRestored: 1,
+  shellConfigsRestored: 0,
+  directoriesRemoved: 1,
   errors: [],
   message: 'Rollback completed',
 }
