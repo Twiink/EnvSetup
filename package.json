@@ -16,7 +16,10 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "test": "vitest run",
-    "test:e2e": "npm run build && playwright test"
+    "test:integration:real": "vitest run tests/integration/action-real-cycle-matrix.test.ts",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:dev": "npm run build && playwright test tests/e2e/app.spec.ts",
+    "test:e2e:real": "npm run build && playwright test tests/e2e/real-install.spec.ts"
   },
   "dependencies": {
     "react": "^19.1.1",

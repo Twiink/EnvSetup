@@ -37,12 +37,12 @@ jobs:
         timeout-minutes: 10
 
   # ============================================================
-  # Job 2: Real installation integration tests (vitest)
+  # Job 2: Real installation + rollback integration tests (vitest)
   # Uses REAL plugins with dryRun=false. Downloads real artifacts,
-  # runs real shell commands, verifies installed binaries.
-  # Covers: Node (direct+nvm), Java (jdk+sdkman), Python (conda+direct),
-  #   Git (direct+homebrew/scoop)
-  # Scenarios: fresh install, cleanup→install, snapshot→rollback
+  # runs real shell commands, verifies installed binaries, then
+  # executes real rollback for both fresh-install and cleanup→install flows.
+  # Covers managed install roots for:
+  #   Node (direct+nvm), Java (jdk+sdkman), Python (conda+direct), Git (direct)
   # ============================================================
   real-install:
     strategy:
@@ -62,10 +62,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run real install + rollback tests
+      - name: Run real install + rollback matrix
         env:
           ENVSETUP_REAL_RUN: '1'
-        run: npx vitest run tests/integration/action-real-install.test.ts tests/integration/action-real-rollback.test.ts tests/integration/action-rollback-recovery.test.ts --reporter=verbose
+        run: npm run test:integration:real -- --reporter=verbose
         timeout-minutes: 80
 
       - name: Upload test logs on failure
@@ -81,7 +81,9 @@ jobs:
 
   # ============================================================
   # Job 3: E2E real install tests (Playwright + Electron)
-  # Tests actual Electron UI flows with real plugin execution
+  # Tests actual Electron UI flows with real plugin execution.
+  # Only the dedicated real-run spec is executed here; dev dry-run
+  # coverage stays out of this job.
   # ============================================================
   e2e:
     strategy:
@@ -103,13 +105,10 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Build Electron app
-        run: npm run build
-
-      - name: Run E2E real install
+      - name: Run E2E real install + rollback
         env:
           ENVSETUP_REAL_RUN: '1'
-        run: npx playwright test
+        run: npm run test:e2e:real
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts on failure

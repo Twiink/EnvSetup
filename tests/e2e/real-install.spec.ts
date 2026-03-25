@@ -354,7 +354,7 @@ test.describe('real install', () => {
   })
 })
 
-test.describe('real rollback via packaged IPC', () => {
+test.describe('real rollback via built Electron app IPC', () => {
   test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
 
   for (const testCase of realRollbackCases) {
