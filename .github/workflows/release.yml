@@ -5,16 +5,13 @@ on:
     tags: ['v*']
 
 jobs:
-  release:
+  build:
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
 
     runs-on: ${{ matrix.os }}
-
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +23,41 @@ jobs:
 
       - run: npm ci
 
-      - name: Build and publish
-        run: npm run dist
+      - name: Build and package (without publish)
+        run: npx electron-vite build && npx electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.blockmap
+          if-no-files-found: ignore
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          draft: false
+          generate_release_notes: true
