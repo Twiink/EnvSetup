@@ -24,7 +24,7 @@ describe('environment detection', () => {
 
     const template = resolveTemplate({
       id: 'node-template',
-      name: { 'zh-CN': 'Node.js 开发环境', en: 'Node.js Environment'},
+      name: { 'zh-CN': 'Node.js 开发环境', en: 'Node.js Environment' },
       version: '0.1.0',
       platforms: ['darwin'],
       description: { 'zh-CN': '前端', en: 'Node.js' },

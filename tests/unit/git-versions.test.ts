@@ -28,6 +28,8 @@ describe('gitVersions', () => {
   it('falls back to default versions when fetch fails', async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error('network error'))
 
-    await expect(listGitVersions(fetchImpl as typeof fetch)).resolves.toEqual([...DEFAULT_GIT_VERSIONS])
+    await expect(listGitVersions(fetchImpl as typeof fetch)).resolves.toEqual([
+      ...DEFAULT_GIT_VERSIONS,
+    ])
   })
 })

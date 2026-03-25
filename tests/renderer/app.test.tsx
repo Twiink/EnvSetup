@@ -159,6 +159,8 @@ beforeEach(() => {
       .fn()
       .mockResolvedValue([nodeTemplateFixture, javaTemplateFixture, pythonTemplateFixture]),
     listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
+    listJavaLtsVersions: vi.fn().mockResolvedValue(['21.0.6', '17.0.14', '11.0.26']),
+    listPythonVersions: vi.fn().mockResolvedValue(['3.12.10', '3.11.10', '3.10.15']),
     listGitVersions: vi.fn().mockResolvedValue(['2.47.1']),
     runPrecheck,
     createTask: vi.fn().mockResolvedValue({

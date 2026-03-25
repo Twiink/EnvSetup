@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { ERROR_CODES, PLUGIN_STATES, SUPPORTED_PLATFORMS, TASK_STATES } from '../../src/main/core/contracts'
+import {
+  ERROR_CODES,
+  PLUGIN_STATES,
+  SUPPORTED_PLATFORMS,
+  TASK_STATES,
+} from '../../src/main/core/contracts'
 
 describe('contracts', () => {
   it('defines task states from spec', () => {

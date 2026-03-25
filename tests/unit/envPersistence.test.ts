@@ -9,9 +9,22 @@ import { previewEnvChanges, applyEnvChanges } from '../../src/main/core/envPersi
 describe('previewEnvChanges', () => {
   it('counts env, path, and profile changes correctly', () => {
     const changes: EnvChange[] = [
-      { kind: 'env', key: 'NODE_HOME', value: '/opt/node', scope: 'user', description: 'node home' },
+      {
+        kind: 'env',
+        key: 'NODE_HOME',
+        value: '/opt/node',
+        scope: 'user',
+        description: 'node home',
+      },
       { kind: 'path', key: 'PATH', value: '/opt/node/bin', scope: 'user', description: 'node bin' },
-      { kind: 'profile', key: 'nvm_init', value: 'source ~/.nvm/nvm.sh', scope: 'user', target: '~/.zshrc', description: 'nvm init' },
+      {
+        kind: 'profile',
+        key: 'nvm_init',
+        value: 'source ~/.nvm/nvm.sh',
+        scope: 'user',
+        target: '~/.zshrc',
+        description: 'nvm init',
+      },
     ]
 
     const preview = previewEnvChanges(changes)
@@ -52,8 +65,22 @@ describe('applyEnvChanges (darwin)', () => {
     await writeFile(profilePath, '# existing content\n', 'utf8')
 
     const changes: EnvChange[] = [
-      { kind: 'env', key: 'NODE_HOME', value: '/opt/node', scope: 'user', target: profilePath, description: 'node' },
-      { kind: 'path', key: 'PATH', value: '/opt/node/bin', scope: 'user', target: profilePath, description: 'path' },
+      {
+        kind: 'env',
+        key: 'NODE_HOME',
+        value: '/opt/node',
+        scope: 'user',
+        target: profilePath,
+        description: 'node',
+      },
+      {
+        kind: 'path',
+        key: 'PATH',
+        value: '/opt/node/bin',
+        scope: 'user',
+        target: profilePath,
+        description: 'path',
+      },
     ]
 
     const result = await applyEnvChanges({ changes, platform: 'darwin' })
@@ -80,7 +107,14 @@ describe('applyEnvChanges (darwin)', () => {
     await writeFile(profilePath, initial, 'utf8')
 
     const changes: EnvChange[] = [
-      { kind: 'env', key: 'NEW_KEY', value: 'new_value', scope: 'user', target: profilePath, description: 'new' },
+      {
+        kind: 'env',
+        key: 'NEW_KEY',
+        value: 'new_value',
+        scope: 'user',
+        target: profilePath,
+        description: 'new',
+      },
     ]
 
     const result = await applyEnvChanges({ changes, platform: 'darwin' })
@@ -97,8 +131,22 @@ describe('applyEnvChanges (darwin)', () => {
 
   it('filters out session-scoped changes', async () => {
     const changes: EnvChange[] = [
-      { kind: 'env', key: 'PERSIST', value: '1', scope: 'user', target: profilePath, description: 'persist' },
-      { kind: 'env', key: 'TEMP', value: '2', scope: 'session', target: profilePath, description: 'temp' },
+      {
+        kind: 'env',
+        key: 'PERSIST',
+        value: '1',
+        scope: 'user',
+        target: profilePath,
+        description: 'persist',
+      },
+      {
+        kind: 'env',
+        key: 'TEMP',
+        value: '2',
+        scope: 'session',
+        target: profilePath,
+        description: 'temp',
+      },
     ]
 
     const result = await applyEnvChanges({ changes, platform: 'darwin' })
@@ -110,7 +158,14 @@ describe('applyEnvChanges (darwin)', () => {
   it('creates profile file if it does not exist', async () => {
     const newProfile = join(tempDir, '.new_profile')
     const changes: EnvChange[] = [
-      { kind: 'env', key: 'FOO', value: 'bar', scope: 'user', target: newProfile, description: 'foo' },
+      {
+        kind: 'env',
+        key: 'FOO',
+        value: 'bar',
+        scope: 'user',
+        target: newProfile,
+        description: 'foo',
+      },
     ]
 
     const result = await applyEnvChanges({ changes, platform: 'darwin' })
@@ -122,7 +177,14 @@ describe('applyEnvChanges (darwin)', () => {
 
   it('handles profile kind changes as raw lines', async () => {
     const changes: EnvChange[] = [
-      { kind: 'profile', key: 'nvm_init', value: 'source ~/.nvm/nvm.sh', scope: 'user', target: profilePath, description: 'nvm' },
+      {
+        kind: 'profile',
+        key: 'nvm_init',
+        value: 'source ~/.nvm/nvm.sh',
+        scope: 'user',
+        target: profilePath,
+        description: 'nvm',
+      },
     ]
 
     const result = await applyEnvChanges({ changes, platform: 'darwin' })

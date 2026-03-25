@@ -1,4 +1,5 @@
-const GIT_FOR_WINDOWS_RELEASE_URL = 'https://api.github.com/repos/git-for-windows/git/releases/latest'
+const GIT_FOR_WINDOWS_RELEASE_URL =
+  'https://api.github.com/repos/git-for-windows/git/releases/latest'
 
 export const DEFAULT_GIT_VERSIONS = ['2.47.1'] as const
 

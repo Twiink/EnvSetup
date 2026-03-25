@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_PYTHON_VERSIONS, listPythonVersions, normalizePythonVersions } from '../../src/main/core/pythonVersions'
+import {
+  DEFAULT_PYTHON_VERSIONS,
+  listPythonVersions,
+  normalizePythonVersions,
+} from '../../src/main/core/pythonVersions'
 
 describe('pythonVersions', () => {
   describe('normalizePythonVersions', () => {

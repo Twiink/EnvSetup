@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_JAVA_LTS_VERSIONS, listJavaLtsVersions, normalizeJavaLtsVersions } from '../../src/main/core/javaVersions'
+import {
+  DEFAULT_JAVA_LTS_VERSIONS,
+  listJavaLtsVersions,
+  normalizeJavaLtsVersions,
+} from '../../src/main/core/javaVersions'
 
 describe('javaVersions', () => {
   describe('normalizeJavaLtsVersions', () => {

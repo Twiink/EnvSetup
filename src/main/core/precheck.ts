@@ -91,9 +91,7 @@ export async function buildRuntimePrecheckInput(
     platformSupported: template.platforms.includes(currentPlatform),
     archSupported: isSupportedArchForPlatform(currentPlatform, process.arch),
     writable: (
-      await Promise.all(
-        writablePaths.map((p) => isWritablePath(p).catch(() => false)),
-      )
+      await Promise.all(writablePaths.map((p) => isWritablePath(p).catch(() => false)))
     ).every(Boolean),
     dependencySatisfied: true,
     versionCompatible: true,

@@ -19,6 +19,8 @@ import { TemplatePanel } from './components/TemplatePanel'
 function buildInitialValues(
   template: ResolvedTemplate,
   nodeLtsVersions: string[],
+  javaLtsVersions: string[],
+  pythonVersions: string[],
 ): Record<string, Primitive> {
   const values = Object.fromEntries(
     Object.values(template.fields).map((field) => [field.key, field.value]),
@@ -32,20 +34,50 @@ function buildInitialValues(
     values['node.nodeVersion'] = nodeLtsVersions[0]
   }
 
+  const templateJavaVersion = values['java.javaVersion']
+  if (
+    javaLtsVersions.length > 0 &&
+    (typeof templateJavaVersion !== 'string' || !javaLtsVersions.includes(templateJavaVersion))
+  ) {
+    values['java.javaVersion'] = javaLtsVersions[0]
+  }
+
+  const templatePythonVersion = values['python.pythonVersion']
+  if (
+    pythonVersions.length > 0 &&
+    (typeof templatePythonVersion !== 'string' || !pythonVersions.includes(templatePythonVersion))
+  ) {
+    values['python.pythonVersion'] = pythonVersions[0]
+  }
+
   return values
 }
 
 function buildFieldOptions(
   values: Record<string, Primitive>,
   nodeLtsVersions: string[],
+  javaLtsVersions: string[],
+  pythonVersions: string[],
 ): Record<string, string[]> {
   const currentNodeVersion =
     typeof values['node.nodeVersion'] === 'string' ? values['node.nodeVersion'] : undefined
-  const versions =
+  const nodeVersions =
     nodeLtsVersions.length > 0 ? nodeLtsVersions : currentNodeVersion ? [currentNodeVersion] : []
 
+  const currentJavaVersion =
+    typeof values['java.javaVersion'] === 'string' ? values['java.javaVersion'] : undefined
+  const javaVersionsList =
+    javaLtsVersions.length > 0 ? javaLtsVersions : currentJavaVersion ? [currentJavaVersion] : []
+
+  const currentPythonVersion =
+    typeof values['python.pythonVersion'] === 'string' ? values['python.pythonVersion'] : undefined
+  const pythonVersionsList =
+    pythonVersions.length > 0 ? pythonVersions : currentPythonVersion ? [currentPythonVersion] : []
+
   return {
-    'node.nodeVersion': versions,
+    'node.nodeVersion': nodeVersions,
+    'java.javaVersion': javaVersionsList,
+    'python.pythonVersion': pythonVersionsList,
   }
 }
 
@@ -75,6 +107,8 @@ export default function App() {
   const [templates, setTemplates] = useState<ResolvedTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [nodeLtsVersions, setNodeLtsVersions] = useState<string[]>([])
+  const [javaLtsVersions, setJavaLtsVersions] = useState<string[]>([])
+  const [pythonVersions, setPythonVersions] = useState<string[]>([])
   const [values, setValues] = useState<Record<string, Primitive>>({})
   const [precheck, setPrecheck] = useState<PrecheckResult>()
   const [task, setTask] = useState<InstallTask>()
@@ -94,10 +128,13 @@ export default function App() {
 
     async function loadTemplates() {
       try {
-        const [nextTemplates, nextNodeLtsVersions] = await Promise.all([
-          window.envSetup.listTemplates(),
-          window.envSetup.listNodeLtsVersions(),
-        ])
+        const [nextTemplates, nextNodeLtsVersions, nextJavaLtsVersions, nextPythonVersions] =
+          await Promise.all([
+            window.envSetup.listTemplates(),
+            window.envSetup.listNodeLtsVersions(),
+            window.envSetup.listJavaLtsVersions(),
+            window.envSetup.listPythonVersions(),
+          ])
         if (!active) {
           return
         }
@@ -109,8 +146,17 @@ export default function App() {
         const firstTemplate = nextTemplates[0]
         setTemplates(nextTemplates)
         setNodeLtsVersions(nextNodeLtsVersions)
+        setJavaLtsVersions(nextJavaLtsVersions)
+        setPythonVersions(nextPythonVersions)
         setSelectedTemplateId(firstTemplate.id)
-        setValues(buildInitialValues(firstTemplate, nextNodeLtsVersions))
+        setValues(
+          buildInitialValues(
+            firstTemplate,
+            nextNodeLtsVersions,
+            nextJavaLtsVersions,
+            nextPythonVersions,
+          ),
+        )
       } catch (loadError) {
         if (!active) {
           return
@@ -150,7 +196,7 @@ export default function App() {
     }
 
     setSelectedTemplateId(templateId)
-    setValues(buildInitialValues(template, nodeLtsVersions))
+    setValues(buildInitialValues(template, nodeLtsVersions, javaLtsVersions, pythonVersions))
     setPrecheck(undefined)
     setTask(undefined)
     setTaskProgressEvents([])
@@ -534,7 +580,12 @@ export default function App() {
             values={values}
             errors={validationErrors}
             busy={busy}
-            fieldOptions={buildFieldOptions(values, nodeLtsVersions)}
+            fieldOptions={buildFieldOptions(
+              values,
+              nodeLtsVersions,
+              javaLtsVersions,
+              pythonVersions,
+            )}
             onChange={handleChange}
             onPickDirectory={handlePickDirectory}
           />

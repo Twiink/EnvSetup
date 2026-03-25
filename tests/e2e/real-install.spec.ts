@@ -46,7 +46,9 @@ test.describe('real install', () => {
 
     try {
       // Wait for templates to load asynchronously, then select frontend template
-      await expect(page.getByRole('button', { name: '前端开发环境' })).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByRole('button', { name: '前端开发环境' })).toBeVisible({
+        timeout: 15_000,
+      })
       await page.getByRole('button', { name: '前端开发环境' }).click()
 
       // Select first LTS version from dropdown
@@ -73,7 +75,10 @@ test.describe('real install', () => {
       await dumpTaskLogs(dataDir)
 
       // Fail the test if the task actually failed
-      const didFail = await page.getByText(/^失败$|^Failed$/).first().isVisible()
+      const didFail = await page
+        .getByText(/^失败$|^Failed$/)
+        .first()
+        .isVisible()
       if (didFail) {
         throw new Error('Task reached failed state — see task log output above for details')
       }

@@ -311,7 +311,9 @@ async function detectPythonEnvironment(
   return detections
 }
 
-async function detectGitEnvironment(values: Record<string, Primitive>): Promise<DetectedEnvironment[]> {
+async function detectGitEnvironment(
+  values: Record<string, Primitive>,
+): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
 
   const installRootDir =

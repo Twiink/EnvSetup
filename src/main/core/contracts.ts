@@ -242,7 +242,13 @@ export type PluginVerifyResult = {
 export type TaskProgressEvent = {
   taskId: string
   pluginId: string
-  type: 'plugin_start' | 'command_start' | 'command_done' | 'command_error' | 'plugin_done' | 'task_done'
+  type:
+    | 'plugin_start'
+    | 'command_start'
+    | 'command_done'
+    | 'command_error'
+    | 'plugin_done'
+    | 'task_done'
   message: string
   commandIndex?: number
   commandTotal?: number
@@ -505,9 +511,7 @@ export type EnvSetupApi = {
   pickDirectory: (defaultPath?: string) => Promise<string | undefined>
   importPluginFromPath: (pluginPath: string) => Promise<ImportedPlugin>
   previewEnvChanges: (changes: EnvChange[]) => Promise<EnvChangesPreview>
-  applyEnvChanges: (payload: {
-    changes: EnvChange[]
-  }) => Promise<ApplyEnvChangesResult>
+  applyEnvChanges: (payload: { changes: EnvChange[] }) => Promise<ApplyEnvChangesResult>
   // 快照管理
   listSnapshots: () => Promise<SnapshotMeta>
   createSnapshot: (payload: { taskId: string; label?: string }) => Promise<Snapshot>

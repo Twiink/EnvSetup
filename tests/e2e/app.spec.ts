@@ -22,9 +22,9 @@ test('user can select template and create task', async () => {
   await page.reload()
 
   // Wait for templates to load asynchronously before interacting
-  await expect(page.getByRole('button', { name: '前端开发环境' })).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('button', { name: '前端开发环境' }).click()
-  await page.locator('select[id="frontend.nodeVersion"]').selectOption({ index: 0 })
+  await expect(page.getByRole('button', { name: 'Node.js 开发环境' })).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Node.js 开发环境' }).click()
+  await page.locator('select[id="node.nodeVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible()
   await expect(page.getByRole('button', { name: '创建任务' })).toBeEnabled()
@@ -47,9 +47,9 @@ test('dev mode defaults to dry-run when starting a task', async () => {
   await page.evaluate(() => localStorage.setItem('envsetup.locale', 'zh-CN'))
   await page.reload()
 
-  await expect(page.getByRole('button', { name: '前端开发环境' })).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('button', { name: '前端开发环境' }).click()
-  await page.locator('select[id="frontend.nodeVersion"]').selectOption({ index: 0 })
+  await expect(page.getByRole('button', { name: 'Node.js 开发环境' })).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Node.js 开发环境' }).click()
+  await page.locator('select[id="node.nodeVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
 
@@ -60,7 +60,7 @@ test('dev mode defaults to dry-run when starting a task', async () => {
 
   // In dev mode (not packaged), the default is dry-run.
   // Expect the plugin to finish and show the dry-run summary text.
-  await expect(page.getByText(/已生成前端环境安装的演练计划|校验成功|成功/).first()).toBeVisible({
+  await expect(page.getByText(/已生成.*演练计划|校验成功|成功/).first()).toBeVisible({
     timeout: 60_000,
   })
 

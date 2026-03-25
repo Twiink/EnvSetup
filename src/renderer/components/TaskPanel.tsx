@@ -225,7 +225,8 @@ export function TaskPanel({
                   }
                   return lines.filter(Boolean)
                 })
-                const allLogs = plugin.status === 'running' ? [...plugin.logs, ...liveLogs] : plugin.logs
+                const allLogs =
+                  plugin.status === 'running' ? [...plugin.logs, ...liveLogs] : plugin.logs
                 const isLogExpanded = expandedLogs[plugin.pluginId] ?? true
                 const statusStyles = getPluginStatusStyles(plugin.status)
 
@@ -339,9 +340,16 @@ export function TaskPanel({
                           {plugin.lastResult.paths.npmCacheDir}
                         </p>
                         <p style={{ margin: '0.75rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
-                          {getUiText(locale, 'downloadItems')}（{plugin.lastResult.downloads.length}）
+                          {getUiText(locale, 'downloadItems')}（{plugin.lastResult.downloads.length}
+                          ）
                         </p>
-                        <ul style={{ margin: '0.35rem 0 0', paddingInlineStart: '1.1rem', fontSize: '0.85rem' }}>
+                        <ul
+                          style={{
+                            margin: '0.35rem 0 0',
+                            paddingInlineStart: '1.1rem',
+                            fontSize: '0.85rem',
+                          }}
+                        >
                           {plugin.lastResult.downloads.map((download) => (
                             <li key={`${download.kind}:${download.url}`}>{download.url}</li>
                           ))}
@@ -349,15 +357,28 @@ export function TaskPanel({
                         <p style={{ margin: '0.75rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
                           {getUiText(locale, 'commandPlan')}（{plugin.lastResult.commands.length}）
                         </p>
-                        <ul style={{ margin: '0.35rem 0 0', paddingInlineStart: '1.1rem', fontSize: '0.85rem' }}>
+                        <ul
+                          style={{
+                            margin: '0.35rem 0 0',
+                            paddingInlineStart: '1.1rem',
+                            fontSize: '0.85rem',
+                          }}
+                        >
                           {plugin.lastResult.commands.map((command) => (
                             <li key={command}>{command}</li>
                           ))}
                         </ul>
                         <p style={{ margin: '0.75rem 0 0', color: '#7D746D', fontSize: '0.85rem' }}>
-                          {getUiText(locale, 'envChangesLabel')}（{plugin.lastResult.envChanges.length}）
+                          {getUiText(locale, 'envChangesLabel')}（
+                          {plugin.lastResult.envChanges.length}）
                         </p>
-                        <ul style={{ margin: '0.35rem 0 0', paddingInlineStart: '1.1rem', fontSize: '0.85rem' }}>
+                        <ul
+                          style={{
+                            margin: '0.35rem 0 0',
+                            paddingInlineStart: '1.1rem',
+                            fontSize: '0.85rem',
+                          }}
+                        >
                           {plugin.lastResult.envChanges.map((change) => (
                             <li key={`${change.kind}:${change.key}:${change.target ?? ''}`}>
                               {change.kind} · {change.key} = {change.value}

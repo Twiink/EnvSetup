@@ -13,7 +13,11 @@ import {
   persistTask,
   shouldRerunPlugin,
 } from '../../src/main/core/task'
-import type { InstallTask, PluginInstallResult, PluginVerifyResult } from '../../src/main/core/contracts'
+import type {
+  InstallTask,
+  PluginInstallResult,
+  PluginVerifyResult,
+} from '../../src/main/core/contracts'
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -308,7 +312,11 @@ describe('persistTask / loadTask', () => {
     const { mkdir } = await import('node:fs/promises')
     await mkdir(tasksDir, { recursive: true })
     const taskWithoutLocale = { ...task, locale: undefined }
-    await writeFile(pathJoin(tasksDir, `${task.id}.json`), JSON.stringify(taskWithoutLocale), 'utf8')
+    await writeFile(
+      pathJoin(tasksDir, `${task.id}.json`),
+      JSON.stringify(taskWithoutLocale),
+      'utf8',
+    )
 
     const loaded = await loadTask(task.id, tasksDir)
     expect(loaded.locale).toBe('zh-CN')

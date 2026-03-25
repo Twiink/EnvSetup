@@ -318,9 +318,7 @@ describe('detectConflicts with installedVersions', () => {
     ])
     const conflicts = detectConflicts(plan, [], {}, { node: '20.0.0' })
     expect(conflicts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'version_mismatch', key: 'node' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ type: 'version_mismatch', key: 'node' })]),
     )
   })
 

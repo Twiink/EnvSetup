@@ -21,9 +21,7 @@ function makeField(overrides: Partial<ResolvedTemplateField> = {}): ResolvedTemp
   }
 }
 
-function makeTemplate(
-  fields: Record<string, ResolvedTemplateField>,
-): ResolvedTemplate {
+function makeTemplate(fields: Record<string, ResolvedTemplateField>): ResolvedTemplate {
   return {
     id: 'tpl',
     name: 'Tpl',
@@ -126,7 +124,12 @@ describe('validateResolvedTemplateValues', () => {
 
   it('validates range min boundary', () => {
     const template = makeTemplate({
-      'x.count': makeField({ key: 'x.count', type: 'number', value: 5, range: { min: 1, max: 10 } }),
+      'x.count': makeField({
+        key: 'x.count',
+        type: 'number',
+        value: 5,
+        range: { min: 1, max: 10 },
+      }),
     })
     const errors = validateResolvedTemplateValues(template, { 'x.count': 0 })
     expect(errors['x.count']).toBeDefined()
@@ -134,7 +137,12 @@ describe('validateResolvedTemplateValues', () => {
 
   it('validates range max boundary', () => {
     const template = makeTemplate({
-      'x.count': makeField({ key: 'x.count', type: 'number', value: 5, range: { min: 1, max: 10 } }),
+      'x.count': makeField({
+        key: 'x.count',
+        type: 'number',
+        value: 5,
+        range: { min: 1, max: 10 },
+      }),
     })
     const errors = validateResolvedTemplateValues(template, { 'x.count': 11 })
     expect(errors['x.count']).toBeDefined()
@@ -142,7 +150,12 @@ describe('validateResolvedTemplateValues', () => {
 
   it('passes when value is exactly at range boundary', () => {
     const template = makeTemplate({
-      'x.count': makeField({ key: 'x.count', type: 'number', value: 5, range: { min: 1, max: 10 } }),
+      'x.count': makeField({
+        key: 'x.count',
+        type: 'number',
+        value: 5,
+        range: { min: 1, max: 10 },
+      }),
     })
     expect(validateResolvedTemplateValues(template, { 'x.count': 1 })).toEqual({})
     expect(validateResolvedTemplateValues(template, { 'x.count': 10 })).toEqual({})

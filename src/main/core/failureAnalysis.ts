@@ -1,9 +1,4 @@
-import type {
-  ErrorCode,
-  FailureAnalysis,
-  FailureCategory,
-  PluginInstallResult,
-} from './contracts'
+import type { ErrorCode, FailureAnalysis, FailureCategory, PluginInstallResult } from './contracts'
 
 function categoryFromErrorCode(errorCode?: ErrorCode): FailureCategory | undefined {
   switch (errorCode) {

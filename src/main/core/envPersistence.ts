@@ -4,12 +4,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { readFile, writeFile } from 'node:fs/promises'
 
-import type {
-  AppPlatform,
-  ApplyEnvChangesResult,
-  EnvChange,
-  EnvChangesPreview,
-} from './contracts'
+import type { AppPlatform, ApplyEnvChangesResult, EnvChange, EnvChangesPreview } from './contracts'
 
 const execFileAsync = promisify(execFile)
 

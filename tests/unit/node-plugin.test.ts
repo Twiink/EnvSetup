@@ -7,9 +7,15 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi.fn().mockResolvedValue([
-    { artifact: { url: 'https://mock.test/file.tar.gz' }, localPath: '/tmp/cached', cacheHit: true },
-  ]),
+  downloadArtifacts: vi
+    .fn()
+    .mockResolvedValue([
+      {
+        artifact: { url: 'https://mock.test/file.tar.gz' },
+        localPath: '/tmp/cached',
+        cacheHit: true,
+      },
+    ]),
   validateOfficialDownloads: vi.fn(),
 }))
 

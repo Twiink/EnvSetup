@@ -129,7 +129,7 @@ function toJavaParams(input: PluginExecutionInput): JavaPluginParams {
   const installRootDir =
     typeof input.installRootDir === 'string' && input.installRootDir.length > 0
       ? input.installRootDir
-      : process.env.ENVSETUP_INSTALL_ROOT ?? ''
+      : (process.env.ENVSETUP_INSTALL_ROOT ?? '')
 
   if (installRootDir.length === 0) {
     throw new Error(
@@ -155,7 +155,8 @@ function toJavaParams(input: PluginExecutionInput): JavaPluginParams {
     installRootDir,
     platform: input.platform,
     dryRun: input.dryRun,
-    downloadCacheDir: typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
+    downloadCacheDir:
+      typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
   }
 }
 
@@ -246,9 +247,7 @@ function buildVerifyCommands(input: JavaPluginParams): string[] {
   }
 
   if (input.platform === 'darwin') {
-    return [
-      `${quoteShell(`${installPaths.standaloneJdkBinDir}/java`)} -version`,
-    ]
+    return [`${quoteShell(`${installPaths.standaloneJdkBinDir}/java`)} -version`]
   }
 
   if (input.javaManager === 'sdkman') {
@@ -257,9 +256,7 @@ function buildVerifyCommands(input: JavaPluginParams): string[] {
     ]
   }
 
-  return [
-    `& ${quotePowerShell(installPaths.standaloneJdkBinDir + '\\java.exe')} -version`,
-  ]
+  return [`& ${quotePowerShell(installPaths.standaloneJdkBinDir + '\\java.exe')} -version`]
 }
 
 async function runCommands(
@@ -315,7 +312,9 @@ async function runCommands(
         message: command,
         commandIndex: index + 1,
         commandTotal: commands.length,
-        output: [e.stdout?.trim(), e.stderr?.trim(), e.message ?? String(err)].filter(Boolean).join('\n'),
+        output: [e.stdout?.trim(), e.stderr?.trim(), e.message ?? String(err)]
+          .filter(Boolean)
+          .join('\n'),
         timestamp: new Date().toISOString(),
       })
       throw Object.assign(new Error(e.message ?? String(err)), { commandOutput: output })
@@ -352,7 +351,11 @@ const javaEnvPlugin = {
         downloads,
         cacheDir: params.downloadCacheDir,
       })
-      logs.push(...resolvedDownloads.map((item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`))
+      logs.push(
+        ...resolvedDownloads.map(
+          (item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`,
+        ),
+      )
 
       const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
       logs.push(...cmdOutput)
@@ -408,7 +411,11 @@ const javaEnvPlugin = {
       }
     }
 
-    const verifyOutput = await runCommands(buildVerifyCommands(params), params.platform, input.onProgress)
+    const verifyOutput = await runCommands(
+      buildVerifyCommands(params),
+      params.platform,
+      input.onProgress,
+    )
 
     return {
       status: 'verified_success',

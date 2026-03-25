@@ -1,6 +1,5 @@
 const ADOPTIUM_RELEASES_URL = 'https://api.adoptium.net/v3/info/available_releases'
-const ADOPTIUM_LATEST_ASSETS_URL =
-  'https://api.adoptium.net/v3/assets/latest'
+const ADOPTIUM_LATEST_ASSETS_URL = 'https://api.adoptium.net/v3/assets/latest'
 
 export const DEFAULT_JAVA_LTS_VERSIONS = ['21.0.6+7', '17.0.14+7'] as const
 
@@ -15,7 +14,6 @@ type AdoptiumAssetEntry = {
   }
 }
 
-
 const FETCH_TIMEOUT_MS = 8000
 
 async function fetchLatestVersionForFeature(
@@ -26,10 +24,9 @@ async function fetchLatestVersionForFeature(
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
   try {
-    const response = await fetchImpl(
-      `${ADOPTIUM_LATEST_ASSETS_URL}/${featureVersion}/hotspot`,
-      { signal: controller.signal },
-    )
+    const response = await fetchImpl(`${ADOPTIUM_LATEST_ASSETS_URL}/${featureVersion}/hotspot`, {
+      signal: controller.signal,
+    })
     if (!response.ok) return undefined
 
     const assets = (await response.json()) as AdoptiumAssetEntry[]

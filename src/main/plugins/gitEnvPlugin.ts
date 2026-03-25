@@ -89,7 +89,11 @@ function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
 function toGitParams(input: PluginExecutionInput): GitPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
-  if (input.gitManager !== 'git' && input.gitManager !== 'homebrew' && input.gitManager !== 'scoop') {
+  if (
+    input.gitManager !== 'git' &&
+    input.gitManager !== 'homebrew' &&
+    input.gitManager !== 'scoop'
+  ) {
     throw new Error(
       translate(locale, {
         'zh-CN': 'git-env 需要 gitManager=git|homebrew|scoop',
@@ -101,7 +105,7 @@ function toGitParams(input: PluginExecutionInput): GitPluginParams {
   const installRootDir =
     typeof input.installRootDir === 'string' && input.installRootDir.length > 0
       ? input.installRootDir
-      : process.env.ENVSETUP_INSTALL_ROOT ?? ''
+      : (process.env.ENVSETUP_INSTALL_ROOT ?? '')
 
   if (installRootDir.length === 0) {
     throw new Error(
@@ -141,9 +145,13 @@ function toGitParams(input: PluginExecutionInput): GitPluginParams {
 
   return {
     gitManager: input.gitManager,
-    gitVersion: typeof input.gitVersion === 'string' && input.gitVersion.length > 0 ? input.gitVersion : undefined,
+    gitVersion:
+      typeof input.gitVersion === 'string' && input.gitVersion.length > 0
+        ? input.gitVersion
+        : undefined,
     installRootDir,
-    downloadCacheDir: typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
+    downloadCacheDir:
+      typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
     platform: input.platform,
     dryRun: input.dryRun,
   }
@@ -190,7 +198,9 @@ function buildWindowsScoopCommands(): string[] {
 
 function buildInstallCommands(input: GitPluginParams): string[] {
   if (input.gitManager === 'git') {
-    return input.platform === 'darwin' ? buildDarwinDirectCommands(input) : buildWindowsDirectCommands(input)
+    return input.platform === 'darwin'
+      ? buildDarwinDirectCommands(input)
+      : buildWindowsDirectCommands(input)
   }
 
   if (input.gitManager === 'homebrew') {
@@ -241,7 +251,13 @@ async function runCommands(
     try {
       const result =
         platform === 'win32'
-          ? await execFileAsync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command])
+          ? await execFileAsync('powershell', [
+              '-NoProfile',
+              '-ExecutionPolicy',
+              'Bypass',
+              '-Command',
+              command,
+            ])
           : await execFileAsync('sh', ['-c', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
@@ -295,7 +311,11 @@ const gitEnvPlugin = {
         downloads,
         cacheDir: params.downloadCacheDir,
       })
-      logs.push(...resolvedDownloads.map((item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`))
+      logs.push(
+        ...resolvedDownloads.map(
+          (item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`,
+        ),
+      )
       logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
     }
 

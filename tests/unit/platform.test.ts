@@ -220,7 +220,9 @@ describe('buildGitEnvChanges', () => {
   it('includes Homebrew PATH change on darwin', () => {
     const changes = buildGitEnvChanges({ ...darwinGit, gitManager: 'homebrew' as const })
     expect(changes).toEqual(
-      expect.arrayContaining([expect.objectContaining({ key: 'PATH', value: '/opt/homebrew/bin' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'PATH', value: '/opt/homebrew/bin' }),
+      ]),
     )
   })
 

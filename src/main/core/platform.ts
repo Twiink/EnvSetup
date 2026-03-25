@@ -182,7 +182,8 @@ export function resolveGitInstallPaths(input: GitPluginParams): GitInstallPaths 
   return {
     installRootDir: input.installRootDir,
     gitDir,
-    gitBinDir: input.platform === 'win32' ? pathApi.join(gitDir, 'cmd') : pathApi.join(gitDir, 'bin'),
+    gitBinDir:
+      input.platform === 'win32' ? pathApi.join(gitDir, 'cmd') : pathApi.join(gitDir, 'bin'),
     homebrewDir: '/opt/homebrew/bin',
     scoopDir: pathApi.join(input.installRootDir, 'scoop', 'shims'),
   }
@@ -342,8 +343,7 @@ export function resolvePythonInstallPaths(input: PythonPluginParams): PythonInst
     standalonePythonBinDir:
       input.platform === 'win32' ? standalonePythonDir : pathApi.join(standalonePythonDir, 'bin'),
     condaDir,
-    condaEnvDir:
-      condaEnvName === 'base' ? condaDir : pathApi.join(condaDir, 'envs', condaEnvName),
+    condaEnvDir: condaEnvName === 'base' ? condaDir : pathApi.join(condaDir, 'envs', condaEnvName),
   }
 }
 

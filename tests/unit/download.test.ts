@@ -74,7 +74,9 @@ describe('downloadArtifacts', () => {
       },
     ]
 
-    const fetchImpl = vi.fn(async () => new Response(Buffer.from('archive-content'), { status: 200 }))
+    const fetchImpl = vi.fn(
+      async () => new Response(Buffer.from('archive-content'), { status: 200 }),
+    )
 
     const first = await downloadArtifacts({ downloads, cacheDir, fetchImpl })
     expect(first[0].cacheHit).toBe(false)

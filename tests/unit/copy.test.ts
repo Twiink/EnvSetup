@@ -51,8 +51,14 @@ describe('getLocaleButtonLabel', () => {
 
 describe('getTaskStatusLabel', () => {
   const statuses = [
-    'draft', 'prechecking', 'ready', 'running',
-    'failed', 'partially_succeeded', 'succeeded', 'cancelled',
+    'draft',
+    'prechecking',
+    'ready',
+    'running',
+    'failed',
+    'partially_succeeded',
+    'succeeded',
+    'cancelled',
   ] as const
 
   for (const status of statuses) {
@@ -78,8 +84,12 @@ describe('getTaskStatusLabel', () => {
 
 describe('getPluginStatusLabel', () => {
   const statuses = [
-    'not_started', 'running', 'installed_unverified',
-    'verified_success', 'failed', 'needs_rerun',
+    'not_started',
+    'running',
+    'installed_unverified',
+    'verified_success',
+    'failed',
+    'needs_rerun',
   ] as const
 
   for (const status of statuses) {

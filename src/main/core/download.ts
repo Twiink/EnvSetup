@@ -55,7 +55,10 @@ function ensureOfficialHost(download: DownloadArtifact): void {
   if (download.checksumUrl) {
     const checksumHost = new URL(download.checksumUrl).host
     if (!allowedHosts.has(checksumHost)) {
-      throw makeError('DOWNLOAD_HOST_UNTRUSTED', `Unofficial checksum host: ${download.checksumUrl}`)
+      throw makeError(
+        'DOWNLOAD_HOST_UNTRUSTED',
+        `Unofficial checksum host: ${download.checksumUrl}`,
+      )
     }
   }
 }
@@ -103,7 +106,8 @@ async function fetchWithRetry(options: {
       return response
     } catch (error) {
       lastError = error
-      const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
       const retryable = code === undefined || DOWNLOAD_RETRYABLE_CODES.has(code as ErrorCode)
       if (!retryable || attempt >= maxAttempts) {
         break
@@ -140,7 +144,12 @@ async function downloadArchive(options: {
   try {
     const cacheStat = await stat(cacheFile)
     if (cacheStat.isFile()) {
-      await verifyChecksumIfNeeded(options.download, cacheFile, options.fetchImpl, options.retryCount)
+      await verifyChecksumIfNeeded(
+        options.download,
+        cacheFile,
+        options.fetchImpl,
+        options.retryCount,
+      )
       return {
         artifact: options.download,
         localPath: cacheFile,

@@ -145,6 +145,9 @@ export function OverrideForm({
                     }
                     style={{
                       ...commonStyle,
+                      width: 'auto',
+                      flex: 1,
+                      minWidth: 0,
                       opacity: !field.editable ? 0.6 : 1,
                     }}
                   />

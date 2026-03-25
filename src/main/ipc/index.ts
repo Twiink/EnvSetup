@@ -49,7 +49,10 @@ import pythonEnvPlugin from '../plugins/pythonEnvPlugin'
 import gitEnvPlugin from '../plugins/gitEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
-const BUILTIN_TEMPLATE_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures/templates')
+const BUILTIN_TEMPLATE_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../fixtures/templates',
+)
 const BUILTIN_PLUGINS: PluginRegistry = {
   'node-env': nodeEnvPlugin,
   'java-env': javaEnvPlugin,
