@@ -77,8 +77,7 @@ async function extractZipArchive(zipPath: string, stagingDir: string): Promise<s
 
   if (process.platform === 'win32') {
     const command = [
-      '& {',
-      'param([string]$archivePathArg, [string]$destinationPathArg)',
+      '& { param([string]$archivePathArg, [string]$destinationPathArg)',
       "$ErrorActionPreference = 'Stop'",
       '$archivePath = (Get-Item -LiteralPath $archivePathArg).FullName',
       '$destinationPath = (Get-Item -LiteralPath $destinationPathArg).FullName',
