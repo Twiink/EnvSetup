@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { DownloadArtifact } from '../../src/main/core/contracts'
-import { downloadArtifacts } from '../../src/main/core/download'
+import { downloadArtifacts, validateOfficialDownloads } from '../../src/main/core/download'
 
 function textResponse(text: string): Response {
   return new Response(text, {
@@ -15,6 +15,19 @@ function textResponse(text: string): Response {
 }
 
 describe('downloadArtifacts', () => {
+  it('rejects untrusted installer hosts during validation', () => {
+    const downloads: DownloadArtifact[] = [
+      {
+        kind: 'installer',
+        tool: 'sdkman',
+        url: 'https://example.com/sdkman-install.sh',
+        official: true,
+      },
+    ]
+
+    expect(() => validateOfficialDownloads(downloads)).toThrow('Unofficial download host')
+  })
+
   it('rejects untrusted download host', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'envsetup-download-'))
     const downloads: DownloadArtifact[] = [

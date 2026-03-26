@@ -7,15 +7,13 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi
-    .fn()
-    .mockResolvedValue([
-      {
-        artifact: { url: 'https://mock.test/file.tar.gz' },
-        localPath: '/tmp/cached',
-        cacheHit: true,
-      },
-    ]),
+  downloadArtifacts: vi.fn().mockResolvedValue([
+    {
+      artifact: { url: 'https://mock.test/file.tar.gz' },
+      localPath: '/tmp/cached',
+      cacheHit: true,
+    },
+  ]),
   validateOfficialDownloads: vi.fn(),
 }))
 
@@ -136,5 +134,20 @@ describe('node env plugin', () => {
     expect(result.downloads[0].url).toContain('nodejs.org/dist/v20.11.1/')
     expect(result.downloads[0].checksumUrl).toContain('nodejs.org/dist/v20.11.1/SHASUMS256.txt')
     expect(result.commands.join('\n')).toContain('shasum -a 256 -c -')
+  })
+
+  it('uses .NET SHA256 instead of Get-FileHash on win32 direct installs', async () => {
+    const result = await nodePlugin.install({
+      nodeManager: 'node',
+      nodeVersion: '20.11.1',
+      installRootDir: 'C:\\envsetup\\toolchain',
+      npmCacheDir: 'C:\\envsetup\\npm-cache',
+      npmGlobalPrefix: 'C:\\envsetup\\npm-global',
+      dryRun: true,
+      platform: 'win32',
+    })
+
+    expect(result.commands.join('\n')).toContain('System.Security.Cryptography.SHA256')
+    expect(result.commands.join('\n')).not.toContain('Get-FileHash')
   })
 })

@@ -271,7 +271,7 @@ async function resolveHomebrewGitPrefix(executablePath: string): Promise<string 
   }
 
   try {
-    const { stdout } = await execFileAsync('sh', [
+    const { stdout } = await execFileAsync('/bin/sh', [
       '-c',
       'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions git >/dev/null 2>&1 && "$BREW_BIN" --prefix git; fi',
     ])
@@ -303,7 +303,7 @@ function buildHomebrewGitCleanupCommand(): string {
 }
 
 function buildScoopGitCleanupCommand(): string {
-  return "$scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }"
+  return "$scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }"
 }
 
 function buildCondaEnvCleanupCommand(cleanupPath: string): string {

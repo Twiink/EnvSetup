@@ -209,15 +209,16 @@ function buildDarwinPkgCommands(input: PythonPluginParams): string[] {
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
     `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
+    `FRAMEWORK_DIR=$(find ${quoteShell(expandDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); [ -n "$FRAMEWORK_DIR" ]`,
     `mkdir -p ${quoteShell(installPaths.standalonePythonDir)}`,
-    `cp -R ${quoteShell(`${expandDir}/Python_Framework.pkg/Payload/Python.framework/Versions/${majorMinor}`)}/. ${quoteShell(installPaths.standalonePythonDir)}/`,
+    `cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
     `rm -rf ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
   ]
 }
 
 /** @deprecated Retained for potential future source-compilation option. Not called in production. */
-function buildDarwinStandaloneCommands(input: PythonPluginParams): string[] {
+function _buildDarwinStandaloneCommands(input: PythonPluginParams): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const archiveUrl = buildPythonSourceUrl(input)
   const archivePath = `${installPaths.installRootDir}/Python-${input.pythonVersion}.tar.xz`
@@ -290,25 +291,25 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
   const installerUrl = buildMinicondaUrl(input)
   const installerPath = `${installPaths.installRootDir}\\Miniconda3-installer.exe`
   const condaEnvName = input.condaEnvName ?? 'base'
+  const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
 
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(installerUrl)} -OutFile ${quotePowerShell(installerPath)}`,
-    `Start-Process -FilePath ${quotePowerShell(installerPath)} -ArgumentList '/S','/D=${installPaths.condaDir}' -Wait -NoNewWindow`,
+    `Start-Process -FilePath ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) -ArgumentList '/S','/D=${installPaths.condaDir}' -Wait -NoNewWindow`,
     `Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`,
+    `$condaExe = [System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)})`,
   ]
-
-  const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
 
   if (condaEnvName !== 'base') {
     commands.push(
-      `& ${quotePowerShell(condaExe)} create -y -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
+      `& $condaExe create -y -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
     )
   } else {
-    commands.push(`& ${quotePowerShell(condaExe)} install -y python=${input.pythonVersion}`)
+    commands.push(`& $condaExe install -y python=${input.pythonVersion}`)
   }
 
-  commands.push(`& ${quotePowerShell(condaExe)} run python --version`)
+  commands.push(`& $condaExe run python --version`)
 
   return commands
 }
@@ -344,7 +345,9 @@ function buildVerifyCommands(input: PythonPluginParams): string[] {
 
   if (input.pythonManager === 'conda') {
     const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
-    return [`& ${quotePowerShell(condaExe)} run python --version`]
+    return [
+      `$condaExe = [System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)}); & $condaExe run python --version`,
+    ]
   }
 
   return [`& ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} --version`]

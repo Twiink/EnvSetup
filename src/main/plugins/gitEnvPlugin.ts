@@ -34,6 +34,14 @@ function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
+function buildResolveHomebrewCommand(): string {
+  return 'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi'
+}
+
+function buildResolveScoopCommand(): string {
+  return "$scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }"
+}
+
 function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
   if (input.gitManager === 'git') {
     if (input.platform === 'darwin') {
@@ -170,18 +178,19 @@ function buildDarwinDirectCommands(input: GitPluginParams): string[] {
   const mountPoint = `${paths.installRootDir}/git-installer-mount`
 
   return [
-    `mkdir -p ${quoteShell(paths.installRootDir)} ${quoteShell(paths.gitDir)}`,
+    `mkdir -p ${quoteShell(paths.installRootDir)}`,
     `curl -fL ${quoteShell(GIT_MACOS_DMG_URL)} -o ${quoteShell(dmgPath)}`,
     `hdiutil attach ${quoteShell(dmgPath)} -mountpoint ${quoteShell(mountPoint)}`,
-    `pkgutil --expand-full $(find ${quoteShell(mountPoint)} -name '*.pkg' | head -n 1) ${quoteShell(paths.gitDir)}`,
+    `rm -rf ${quoteShell(paths.gitDir)}`,
+    `PKG_PATH=$(find ${quoteShell(mountPoint)} -path '*/.Trashes' -prune -o -name '*.pkg' -print | head -n 1); [ -n "$PKG_PATH" ] && pkgutil --expand-full "$PKG_PATH" ${quoteShell(paths.gitDir)}`,
     `hdiutil detach ${quoteShell(mountPoint)} || true`,
   ]
 }
 
 function buildDarwinHomebrewCommands(): string[] {
+  const resolveBrewCommand = buildResolveHomebrewCommand()
   return [
-    `command -v brew >/dev/null 2>&1 || /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"`,
-    'brew install git || brew upgrade git',
+    `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; "$BREW_BIN" install git || "$BREW_BIN" upgrade git`,
   ]
 }
 
@@ -197,9 +206,9 @@ function buildWindowsDirectCommands(input: GitPluginParams): string[] {
 }
 
 function buildWindowsScoopCommands(): string[] {
+  const resolveScoopCommand = buildResolveScoopCommand()
   return [
-    `if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) { Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Invoke-RestMethod -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} | Invoke-Expression }`,
-    'scoop install git',
+    `${resolveScoopCommand}; if (-not $scoop) { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop; Invoke-RestMethod -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} | Invoke-Expression; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
   ]
 }
 
@@ -226,7 +235,7 @@ function buildRollbackCommands(input: GitPluginParams): string[] {
 
   if (input.gitManager === 'scoop') {
     return [
-      `$scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }`,
+      `${buildResolveScoopCommand()}; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }`,
     ]
   }
 
@@ -245,10 +254,15 @@ function buildVerifyCommands(input: GitPluginParams): string[] {
   }
 
   if (input.gitManager === 'homebrew') {
-    return ['brew --prefix git', 'git --version']
+    const resolveBrewCommand = buildResolveHomebrewCommand()
+    return [
+      `${resolveBrewCommand}; [ -n "$BREW_BIN" ] || exit 1; BREW_PREFIX="$("$BREW_BIN" --prefix git)"; printf '%s\n' "$BREW_PREFIX"; "$BREW_PREFIX/bin/git" --version`,
+    ]
   }
 
-  return ['scoop prefix git', 'git --version']
+  return [
+    `${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $prefix = (& $scoop prefix git).Trim(); Write-Output $prefix; $shimDir = Split-Path $scoop -Parent; $gitExe = Join-Path $shimDir 'git.exe'; if (-not (Test-Path $gitExe)) { $gitExe = Join-Path $shimDir 'git.cmd' }; & $gitExe --version`,
+  ]
 }
 
 async function runCommands(
@@ -281,7 +295,7 @@ async function runCommands(
               '-Command',
               command,
             ])
-          : await execFileAsync('sh', ['-c', command])
+          : await execFileAsync('/bin/sh', ['-c', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({

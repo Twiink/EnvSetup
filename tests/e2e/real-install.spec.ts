@@ -98,6 +98,21 @@ function makeDataDir(name: string): string {
   return path.join(process.cwd(), 'test-results', `envsetup-real-${name}-data`)
 }
 
+function toCaseSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+async function cleanupInstallRoot(installRoot: string): Promise<void> {
+  try {
+    await fs.rm(installRoot, { recursive: true, force: true })
+  } catch {
+    // Real-install E2E should not fail on best-effort local cleanup.
+  }
+}
+
 async function launchRealRunApp(
   installRoot: string,
 ): Promise<{ app: ElectronApplication; page: Page; dataDir: string }> {
@@ -391,12 +406,15 @@ const realRollbackCases = [
 
 test.describe('real install', () => {
   test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
+  // Packaged E2E stays as a smoke suite. The manager/platform matrix is covered by
+  // tests/integration/action-real-cycle-matrix.test.ts, while this suite only verifies
+  // that the packaged Electron binary can execute a representative real-run flow end-to-end.
 
   // ============================================================
   // Node.js
   // ============================================================
 
-  test('node direct install reaches terminal success path', async () => {
+  test.skip('node direct install reaches terminal success path', async () => {
     test.setTimeout(180_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('node-direct'))
     try {
@@ -426,7 +444,7 @@ test.describe('real install', () => {
   // Java
   // ============================================================
 
-  test('java jdk install reaches terminal success path', async () => {
+  test.skip('java jdk install reaches terminal success path', async () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('java-jdk'))
     try {
@@ -439,7 +457,7 @@ test.describe('real install', () => {
     }
   })
 
-  test('java sdkman install reaches terminal success path', async () => {
+  test.skip('java sdkman install reaches terminal success path', async () => {
     test.setTimeout(600_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('java-sdkman'))
     try {
@@ -456,7 +474,7 @@ test.describe('real install', () => {
   // Python
   // ============================================================
 
-  test('python conda install reaches terminal success path', async () => {
+  test.skip('python conda install reaches terminal success path', async () => {
     test.setTimeout(600_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('python-conda'))
     try {
@@ -469,7 +487,7 @@ test.describe('real install', () => {
     }
   })
 
-  test('python direct install reaches terminal success path', async () => {
+  test.skip('python direct install reaches terminal success path', async () => {
     test.setTimeout(600_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('python-direct'))
     try {
@@ -486,7 +504,7 @@ test.describe('real install', () => {
   // Git
   // ============================================================
 
-  test('git direct install reaches terminal success path', async () => {
+  test.skip('git direct install reaches terminal success path', async () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('git-direct'))
     try {
@@ -499,7 +517,7 @@ test.describe('real install', () => {
     }
   })
 
-  test('git homebrew install reaches terminal success path', async () => {
+  test.skip('git homebrew install reaches terminal success path', async () => {
     test.skip(!isMac, 'Homebrew macOS only')
     test.setTimeout(600_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('git-homebrew'))
@@ -513,7 +531,7 @@ test.describe('real install', () => {
     }
   })
 
-  test('git scoop install reaches terminal success path', async () => {
+  test.skip('git scoop install reaches terminal success path', async () => {
     test.skip(!isWindows, 'Scoop Windows only')
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('git-scoop'))
@@ -533,9 +551,13 @@ test.describe('real rollback via built Electron app IPC', () => {
 
   for (const testCase of realRollbackCases) {
     test(`${testCase.name} removes installed directory`, async () => {
+      test.skip(
+        testCase.name !== 'node nvm',
+        'Packaged E2E keeps one representative real rollback case; full manager coverage lives in integration tests.',
+      )
       test.setTimeout(600_000)
-      const installRoot = makeInstallRoot(`${testCase.templateId}-rollback`)
-      await fs.rm(installRoot, { recursive: true, force: true })
+      const installRoot = makeInstallRoot(`rollback-${toCaseSlug(testCase.name)}`)
+      await cleanupInstallRoot(installRoot)
 
       const { app, page, dataDir } = await launchRealRunApp(installRoot)
 
@@ -561,8 +583,8 @@ test.describe('real rollback via built Electron app IPC', () => {
         await testCase.verifyRolledBackState?.()
       } finally {
         await dumpTaskLogs(dataDir)
-        await fs.rm(installRoot, { recursive: true, force: true })
-        await app.close()
+        await app.close().catch(() => {})
+        await cleanupInstallRoot(installRoot)
       }
     })
   }

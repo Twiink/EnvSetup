@@ -82,9 +82,11 @@ jobs:
           retention-days: 7
 
   # ============================================================
-  # Job 3: E2E real install tests against the packaged app
-  # Builds the unpacked application bundle first, then verifies real
-  # install + rollback through the packaged Electron binary.
+  # Job 3: Packaged-app E2E smoke tests
+  # Builds the unpacked application bundle first, then verifies one
+  # representative real install + rollback flow through the packaged
+  # Electron binary. The full manager/platform matrix stays in the
+  # real-install integration job above.
   # ============================================================
   e2e:
     strategy:

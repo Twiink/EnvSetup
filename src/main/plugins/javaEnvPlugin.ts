@@ -17,9 +17,7 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 const execFileAsync = promisify(execFile)
 
 const ADOPTIUM_BINARY_BASE_URL = 'https://api.adoptium.net/v3/binary/latest'
-const ADOPTIUM_CHECKSUM_BASE_URL = 'https://api.adoptium.net/v3/checksum/latest'
-const SDKMAN_ARCHIVE_BASE_URL = 'https://github.com/sdkman/sdkman-cli/archive/refs/tags'
-const PINNED_SDKMAN_VERSION = '5.18.2'
+const SDKMAN_INSTALL_URL = 'https://get.sdkman.io?ci=true&rcupdate=false'
 const GIT_FOR_WINDOWS_VERSION = '2.47.1'
 const GIT_FOR_WINDOWS_EXE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
 
@@ -33,6 +31,10 @@ function quoteShell(value: string): string {
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
+}
+
+function quotePowerShellSingle(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
 /** Extract the major feature version from a Temurin version string like '21.0.6+7' or '21' */
@@ -51,13 +53,6 @@ function buildTemurinBinaryUrl(input: JavaPluginParams): string {
   return `${ADOPTIUM_BINARY_BASE_URL}/${featureVersion}/ga/${os}/${arch}/jdk/hotspot/normal/eclipse`
 }
 
-function buildTemurinChecksumUrl(input: JavaPluginParams): string {
-  const featureVersion = extractFeatureVersion(input.javaVersion)
-  const os = input.platform === 'win32' ? 'windows' : 'mac'
-  const arch = input.platform === 'win32' ? 'x64' : resolveTemurinArch()
-  return `${ADOPTIUM_CHECKSUM_BASE_URL}/${featureVersion}/ga/${os}/${arch}/jdk/hotspot/normal/eclipse`
-}
-
 function resolveTemurinArchiveExtension(platform: JavaPluginParams['platform']): string {
   return platform === 'win32' ? '.zip' : '.tar.gz'
 }
@@ -70,36 +65,29 @@ function buildDownloadPlan(input: JavaPluginParams): DownloadArtifact[] {
         tool: 'temurin',
         url: buildTemurinBinaryUrl(input),
         official: true,
-        checksumUrl: buildTemurinChecksumUrl(input),
-        checksumAlgorithm: 'sha256',
         fileName: `temurin-jdk-${input.javaVersion}${resolveTemurinArchiveExtension(input.platform)}`,
         note: 'Download the Eclipse Temurin JDK from Adoptium.',
       },
     ]
   }
 
-  // SDKMAN mode
+  const downloads: DownloadArtifact[] = [
+    {
+      kind: 'installer',
+      tool: 'sdkman',
+      url: SDKMAN_INSTALL_URL,
+      official: true,
+      fileName: 'sdkman-install.sh',
+      note: 'Download the official SDKMAN install script with rc updates disabled.',
+    },
+  ]
+
   if (input.platform === 'darwin') {
-    return [
-      {
-        kind: 'archive',
-        tool: 'sdkman',
-        url: `${SDKMAN_ARCHIVE_BASE_URL}/${PINNED_SDKMAN_VERSION}.tar.gz`,
-        official: true,
-        note: 'Download SDKMAN from the official GitHub repository archive.',
-      },
-    ]
+    return downloads
   }
 
-  // Windows: SDKMAN through Git Bash
   return [
-    {
-      kind: 'archive',
-      tool: 'sdkman',
-      url: `${SDKMAN_ARCHIVE_BASE_URL}/${PINNED_SDKMAN_VERSION}.tar.gz`,
-      official: true,
-      note: 'Download SDKMAN from the official GitHub repository archive (for Git Bash).',
-    },
+    ...downloads,
     {
       kind: 'installer',
       tool: 'git-for-windows',
@@ -194,18 +182,12 @@ function buildDarwinStandaloneCommands(input: JavaPluginParams): string[] {
 
 function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   const installPaths = resolveJavaInstallPaths(input)
-  const archiveUrl = `${SDKMAN_ARCHIVE_BASE_URL}/${PINNED_SDKMAN_VERSION}.tar.gz`
-  const archivePath = `${installPaths.installRootDir}/sdkman-${PINNED_SDKMAN_VERSION}.tar.gz`
-  const extractedDir = `${installPaths.installRootDir}/sdkman-cli-${PINNED_SDKMAN_VERSION}`
   const featureVersion = extractFeatureVersion(input.javaVersion)
 
   return [
-    `mkdir -p ${quoteShell(installPaths.installRootDir)} ${quoteShell(installPaths.sdkmanDir)}`,
-    `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`,
-    `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
-    `cp -R ${quoteShell(`${extractedDir}/.`)} ${quoteShell(installPaths.sdkmanDir)}`,
-    `rm -rf ${quoteShell(extractedDir)} ${quoteShell(archivePath)}`,
-    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && source ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && sdk install java ${featureVersion}.0-tem && java -version`,
+    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
+    `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
+    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && sdk install java ${featureVersion}.0-tem && java -version`,
   ]
 }
 
@@ -228,16 +210,23 @@ function buildWindowsStandaloneCommands(input: JavaPluginParams): string[] {
 
 function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
   const installPaths = resolveJavaInstallPaths(input)
-  const archiveUrl = `${SDKMAN_ARCHIVE_BASE_URL}/${PINNED_SDKMAN_VERSION}.tar.gz`
-  const archivePath = `${installPaths.installRootDir}\\sdkman-${PINNED_SDKMAN_VERSION}.tar.gz`
   const featureVersion = extractFeatureVersion(input.javaVersion)
+  const gitBashDir = `${installPaths.installRootDir}\\git-bash`
+  const fallbackBashPath = `${gitBashDir}\\bin\\bash.exe`
+  const bashScript = [
+    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir.replace(/\\/g, '/'))}`,
+    'rm -rf "$SDKMAN_DIR"',
+    `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
+    '. "$SDKMAN_DIR/bin/sdkman-init.sh"',
+    `sdk install java ${featureVersion}.0-tem`,
+    'java -version',
+  ].join(' && ')
 
   // SDKMAN on Windows requires Git Bash
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
-    `$gitBash = (Get-Command 'bash.exe' -ErrorAction SilentlyContinue).Source; if (-not $gitBash) { $gitInstaller = ${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}; Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT','/NORESTART' -Wait -NoNewWindow; Remove-Item -LiteralPath $gitInstaller -Force; $gitBash = (Get-Command 'bash.exe' -ErrorAction SilentlyContinue).Source; if (-not $gitBash) { throw 'Failed to install Git for Windows.' } }`,
-    `& $gitBash -c "export SDKMAN_DIR='${installPaths.sdkmanDir.replace(/\\/g, '/')}' && mkdir -p \\$SDKMAN_DIR && tar -xzf '${archivePath.replace(/\\/g, '/')}' -C '${installPaths.installRootDir.replace(/\\/g, '/')}' && cp -R '${installPaths.installRootDir.replace(/\\/g, '/')}/sdkman-cli-${PINNED_SDKMAN_VERSION}/.' \\$SDKMAN_DIR && rm -rf '${installPaths.installRootDir.replace(/\\/g, '/')}/sdkman-cli-${PINNED_SDKMAN_VERSION}' && source \\$SDKMAN_DIR/bin/sdkman-init.sh && sdk install java ${featureVersion}.0-tem && java -version"`,
+    `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT','/NORESTART','/DIR=${gitBashDir}' -Wait -NoNewWindow; Remove-Item -LiteralPath $gitInstaller -Force; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }; if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
+    `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
   ]
 }
 
@@ -258,8 +247,8 @@ function buildVerifyCommands(input: JavaPluginParams): string[] {
 
   if (input.platform === 'darwin' && input.javaManager === 'sdkman') {
     return [
-      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && source ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && java -version`,
-      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && source ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && which java`,
+      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && java -version`,
+      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && which java`,
     ]
   }
 
@@ -268,8 +257,14 @@ function buildVerifyCommands(input: JavaPluginParams): string[] {
   }
 
   if (input.javaManager === 'sdkman') {
+    const fallbackBashPath = `${installPaths.installRootDir}\\git-bash\\bin\\bash.exe`
+    const verifyScript = [
+      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir.replace(/\\/g, '/'))}`,
+      '. "$SDKMAN_DIR/bin/sdkman-init.sh"',
+      'java -version',
+    ].join(' && ')
     return [
-      `$gitBash = (Get-Command 'bash.exe' -ErrorAction SilentlyContinue).Source; & $gitBash -c "export SDKMAN_DIR='${installPaths.sdkmanDir.replace(/\\/g, '/')}' && source \\$SDKMAN_DIR/bin/sdkman-init.sh && java -version"`,
+      `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $gitBash) { $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }; if (-not $gitBash) { throw 'Git Bash not found for SDKMAN verify.' }; & $gitBash -lc ${quotePowerShellSingle(verifyScript)}`,
     ]
   }
 

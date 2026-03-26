@@ -237,7 +237,7 @@ function buildWindowsStandaloneCommands(input: NodePluginParams): string[] {
     `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
     `Invoke-WebRequest -Uri ${quotePowerShell(checksumUrl)} -OutFile ${quotePowerShell(checksumPath)}`,
     `$expectedHash = ((Select-String -Path ${quotePowerShell(checksumPath)} -Pattern ${quotePowerShell(` ${archiveName}$`)}).Line -split '\\s+')[0]`,
-    `if ((Get-FileHash -Algorithm SHA256 -Path ${quotePowerShell(archivePath)}).Hash.ToLower() -ne $expectedHash.ToLower()) { throw 'Node.js checksum verification failed.' }`,
+    `$_archive = [System.IO.Path]::GetFullPath(${quotePowerShell(archivePath)}); $_sha256 = [System.Security.Cryptography.SHA256]::Create(); $_stream = [System.IO.File]::OpenRead($_archive); try { $_actualHash = ([System.BitConverter]::ToString($_sha256.ComputeHash($_stream))).Replace('-', '').ToLower() } finally { $_stream.Dispose(); $_sha256.Dispose() }; if ($_actualHash -ne $expectedHash.ToLower()) { throw 'Node.js checksum verification failed.' }`,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
     `if (Test-Path ${quotePowerShell(installPaths.standaloneNodeDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneNodeDir)} -Recurse -Force }`,
     `Move-Item -LiteralPath ${quotePowerShell(extractedNodeDir)} -Destination ${quotePowerShell(installPaths.standaloneNodeDir)} -Force`,
@@ -304,7 +304,7 @@ function buildVerifyCommands(input: NodePluginParams): string[] {
   }
 
   return [
-    `$_bin = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneNodeBinDir)}); & "$_bin\\node.exe" --version; & "$_bin\\npm.cmd" config get cache; & "$_bin\\npm.cmd" config get prefix`,
+    `$_bin = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneNodeBinDir)}); $_node = Join-Path $_bin 'node.exe'; $_npm = Join-Path $_bin 'npm.cmd'; & $_node --version; & $_npm config get cache; & $_npm config get prefix`,
   ]
 }
 

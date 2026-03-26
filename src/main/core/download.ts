@@ -230,7 +230,7 @@ function parseExpectedChecksum(checksumText: string, fileName: string): string |
 }
 
 export function validateOfficialDownloads(downloads: DownloadArtifact[]): void {
-  for (const download of getArchiveArtifacts(downloads)) {
+  for (const download of downloads) {
     ensureOfficialHost(download)
   }
 }

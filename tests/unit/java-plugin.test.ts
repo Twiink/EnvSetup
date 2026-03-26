@@ -7,15 +7,13 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi
-    .fn()
-    .mockResolvedValue([
-      {
-        artifact: { url: 'https://mock.test/file.tar.gz' },
-        localPath: '/tmp/cached',
-        cacheHit: true,
-      },
-    ]),
+  downloadArtifacts: vi.fn().mockResolvedValue([
+    {
+      artifact: { url: 'https://mock.test/file.tar.gz' },
+      localPath: '/tmp/cached',
+      cacheHit: true,
+    },
+  ]),
   validateOfficialDownloads: vi.fn(),
 }))
 
@@ -56,7 +54,7 @@ describe('java env plugin', () => {
     expect(result.executionMode).toBe('dry_run')
     expect(result.downloads.length).toBe(1)
     expect(result.downloads[0].tool).toBe('sdkman')
-    expect(result.downloads[0].url).toContain('github.com/sdkman')
+    expect(result.downloads[0].url).toContain('get.sdkman.io')
     expect(result.envChanges.some((e) => e.key === 'SDKMAN_DIR')).toBe(true)
     expect(result.commands.join('\n')).toContain('sdkman-init.sh')
   })
@@ -73,6 +71,7 @@ describe('java env plugin', () => {
     expect(result.status).toBe('installed_unverified')
     expect(result.downloads[0].url).toContain('windows')
     expect(result.commands.join('\n')).toContain('Expand-Archive')
+    expect(result.downloads[0].checksumUrl).toBeUndefined()
   })
 
   it('returns dry-run install result with sdkman on win32', async () => {
@@ -85,7 +84,8 @@ describe('java env plugin', () => {
     })
 
     expect(result.status).toBe('installed_unverified')
-    expect(result.commands.join('\n')).toContain('bash')
+    expect(result.commands.join('\n')).toContain("Get-Command 'bash.exe'")
+    expect(result.commands.join('\n')).toContain('& $gitBash -lc')
   })
 
   it('verifies dry-run output without touching the system', async () => {

@@ -7,15 +7,13 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi
-    .fn()
-    .mockResolvedValue([
-      {
-        artifact: { url: 'https://mock.test/file.tar.gz' },
-        localPath: '/tmp/cached',
-        cacheHit: true,
-      },
-    ]),
+  downloadArtifacts: vi.fn().mockResolvedValue([
+    {
+      artifact: { url: 'https://mock.test/file.tar.gz' },
+      localPath: '/tmp/cached',
+      cacheHit: true,
+    },
+  ]),
   validateOfficialDownloads: vi.fn(),
 }))
 
@@ -204,8 +202,21 @@ describe('python env plugin', () => {
     expect(result.downloads[0].kind).toBe('installer')
     expect(result.downloads[0].url).toContain('macos11.pkg')
     expect(result.commands.join('\n')).toContain('pkgutil')
-    expect(result.commands.join('\n')).toContain('Python_Framework')
+    expect(result.commands.join('\n')).toContain('FRAMEWORK_DIR=$(find')
     expect(result.envChanges.length).toBeGreaterThan(0)
+  })
+
+  it('normalizes conda.exe to an absolute path on win32', async () => {
+    const result = await pythonPlugin.install({
+      pythonManager: 'conda',
+      pythonVersion: '3.12.10',
+      installRootDir: 'C:\\envsetup\\toolchain',
+      dryRun: true,
+      platform: 'win32',
+    })
+
+    expect(result.commands.join('\n')).toContain('$condaExe = [System.IO.Path]::GetFullPath')
+    expect(result.commands.join('\n')).toContain('& $condaExe install -y python=3.12.10')
   })
 
   it('pkg manager throws on win32', async () => {
