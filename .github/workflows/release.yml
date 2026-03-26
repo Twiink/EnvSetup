@@ -5,7 +5,33 @@ on:
     tags: ['v*']
 
 jobs:
+  real-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        tool: [node, java, python, git]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run real integration matrix
+        env:
+          ENVSETUP_REAL_RUN: '1'
+          ENVSETUP_CI_TOOL: ${{ matrix.tool }}
+        run: npm run test:integration:real -- --reporter=verbose
+        timeout-minutes: 80
+
   build:
+    needs: real-install
     strategy:
       fail-fast: false
       matrix:
@@ -22,12 +48,6 @@ jobs:
           cache: npm
 
       - run: npm ci
-
-      - name: Run real integration matrix
-        env:
-          ENVSETUP_REAL_RUN: '1'
-        run: npm run test:integration:real -- --reporter=verbose
-        timeout-minutes: 120
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

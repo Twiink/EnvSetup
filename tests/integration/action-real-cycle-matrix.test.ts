@@ -215,19 +215,10 @@ const allRealCycleCases: RealCycleCase[] = [
 ]
 
 function shouldRunRealCycleCaseInCi(testCase: RealCycleCase): boolean {
-  if (!isCi) {
-    return true
-  }
-
-  if (isMac) {
-    return testCase.name === 'Node.js direct' || testCase.name === 'Node.js nvm'
-  }
-
-  if (isWindows) {
-    return testCase.name === 'Python direct'
-  }
-
-  return false
+  if (!isCi) return true
+  const ciTool = process.env.ENVSETUP_CI_TOOL
+  if (ciTool) return testCase.tool === ciTool
+  return true
 }
 
 const realCycleCases = allRealCycleCases.filter(shouldRunRealCycleCaseInCi)

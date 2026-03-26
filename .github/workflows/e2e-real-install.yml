@@ -50,6 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
+        tool: [node, java, python, git]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     steps:
@@ -66,6 +67,7 @@ jobs:
       - name: Run real install + rollback matrix
         env:
           ENVSETUP_REAL_RUN: '1'
+          ENVSETUP_CI_TOOL: ${{ matrix.tool }}
         run: npm run test:integration:real -- --reporter=verbose
         timeout-minutes: 80
 
@@ -73,7 +75,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: real-install-logs-${{ matrix.os }}
+          name: real-install-logs-${{ matrix.os }}-${{ matrix.tool }}
           path: |
             tests/integration/
             /tmp/envsetup-real-*
