@@ -69,6 +69,19 @@ vi.mock('../../src/main/core/envPersistence', () => ({
 
 vi.mock('../../src/main/core/environment', () => ({
   cleanupDetectedEnvironment: vi.fn(async (detection) => ({ ok: true, detection })),
+  cleanupDetectedEnvironments: vi.fn(async (detections) => ({
+    results: detections.map((detection) => ({
+      detectionId: detection.id,
+      message: `cleaned ${detection.id}`,
+    })),
+    errors: [],
+    message: `cleaned ${detections.length}`,
+  })),
+  collectCleanupTrackedPaths: vi.fn(async (detections) =>
+    detections
+      .map((detection) => detection.cleanupPath)
+      .filter((path): path is string => typeof path === 'string'),
+  ),
 }))
 
 vi.mock('../../src/main/core/executionMode', () => ({ resolveDryRun: vi.fn(() => true) }))
@@ -120,9 +133,9 @@ vi.mock('../../src/main/core/precheck', () => ({
   })),
 }))
 vi.mock('../../src/main/core/rollback', () => ({
-  executeRollback: vi.fn(async (baseDir, snapshotId, trackedPaths) => ({
+  executeRollback: vi.fn(async (baseDir, snapshotId, trackedPaths, _installPaths, options) => ({
     success: true,
-    executionMode: 'dry_run',
+    executionMode: options?.dryRun ? 'dry_run' : 'real_run',
     snapshotId,
     filesRestored: trackedPaths.length,
     envVariablesRestored: 0,
@@ -136,9 +149,20 @@ vi.mock('../../src/main/core/rollback', () => ({
 vi.mock('../../src/main/core/snapshot', () => ({
   createSnapshot: vi.fn(async () => ({ id: 'snapshot-1' })),
   deleteSnapshot: vi.fn(async () => undefined),
+  loadSnapshot: vi.fn(async (_baseDir, snapshotId) => ({
+    id: snapshotId,
+    taskId: 'task-1',
+    createdAt: '2026-03-25T00:00:00.000Z',
+    type: 'auto',
+    files: {},
+    environment: { variables: {}, path: [] },
+    shellConfigs: {},
+    metadata: { platform: 'darwin', diskUsage: 0, fileCount: 0 },
+  })),
   loadSnapshotMeta: vi.fn(async () => ({ snapshots: [], maxSnapshots: 5 })),
   markSnapshotDeletable: vi.fn(async () => undefined),
   saveSnapshotMeta: vi.fn(async () => undefined),
+  updateSnapshotMeta: vi.fn(async () => undefined),
 }))
 vi.mock('../../src/main/core/task', () => ({
   cancelTask: vi.fn(async ({ task }) => ({ ...task, status: 'cancelled' })),
@@ -189,6 +213,18 @@ vi.mock('../../src/main/core/task', () => ({
           installRootDir: '/tmp/toolchain',
           npmCacheDir: '/tmp/npm-cache',
           npmGlobalPrefix: '/tmp/npm-global',
+        },
+        lastResult: {
+          status: 'installed_unverified',
+          executionMode: 'real_run',
+          version: '20.11.1',
+          paths: {},
+          envChanges: [],
+          downloads: [],
+          commands: [],
+          rollbackCommands: ['brew uninstall git'],
+          logs: [],
+          summary: 'ok',
         },
         logs: [],
         context: {},
@@ -247,6 +283,8 @@ beforeEach(async () => {
   vi.mocked(envMod.previewEnvChanges).mockClear()
   vi.mocked(envMod.applyEnvChanges).mockClear()
   vi.mocked(envCoreMod.cleanupDetectedEnvironment).mockClear()
+  vi.mocked(envCoreMod.cleanupDetectedEnvironments).mockClear()
+  vi.mocked(envCoreMod.collectCleanupTrackedPaths).mockClear()
   vi.mocked(rollbackMod.executeRollback).mockClear()
   vi.mocked(rollbackMod.suggestRollbackSnapshots).mockClear()
   vi.mocked(snapshotMod.createSnapshot).mockClear()
@@ -254,6 +292,7 @@ beforeEach(async () => {
   vi.mocked(snapshotMod.loadSnapshotMeta).mockClear()
   vi.mocked(snapshotMod.markSnapshotDeletable).mockClear()
   vi.mocked(snapshotMod.saveSnapshotMeta).mockClear()
+  vi.mocked(snapshotMod.updateSnapshotMeta).mockClear()
   vi.mocked(taskMod.cancelTask).mockClear()
   vi.mocked(taskMod.createTask).mockClear()
   vi.mocked(taskMod.executeTask).mockClear()
@@ -264,6 +303,7 @@ beforeEach(async () => {
 
   vi.mocked(rollbackMod.suggestRollbackSnapshots).mockResolvedValue([])
   vi.mocked(snapshotMod.createSnapshot).mockResolvedValue(snapshotStub)
+  vi.mocked(snapshotMod.loadSnapshot).mockClear()
   vi.mocked(snapshotMod.loadSnapshotMeta).mockResolvedValue({ snapshots: [], maxSnapshots: 5 })
 })
 
@@ -275,6 +315,7 @@ describe('registerIpcHandlers', () => {
     expect(handlers.has('task:cancel')).toBe(true)
     expect(handlers.has('task:retry-plugin')).toBe(true)
     expect(handlers.has('environment:cleanup')).toBe(true)
+    expect(handlers.has('environment:cleanup-batch')).toBe(true)
     expect(handlers.has('environment:preview-changes')).toBe(true)
     expect(handlers.has('environment:apply-changes')).toBe(true)
     expect(handlers.has('snapshot:list')).toBe(true)
@@ -431,6 +472,47 @@ describe('registerIpcHandlers', () => {
     expect(result).toEqual({ ok: true, detection })
   })
 
+  it('creates cleanup snapshot before batch cleanup and returns snapshot id', async () => {
+    const envMod = await import('../../src/main/core/environment')
+    const snapshotMod = await import('../../src/main/core/snapshot')
+    const detections = [
+      {
+        id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+        tool: 'node',
+        kind: 'manager_root',
+        path: '/tmp/.nvm',
+        source: 'NVM_DIR',
+        cleanupSupported: true,
+        cleanupPath: '/tmp/.nvm',
+        cleanupEnvKey: 'NVM_DIR',
+      },
+    ]
+
+    const result = await handlers.get('environment:cleanup-batch')?.({}, detections)
+
+    expect(envMod.collectCleanupTrackedPaths).toHaveBeenCalledWith(detections)
+    expect(snapshotMod.createSnapshot).toHaveBeenCalledWith({
+      baseDir: '/tmp/snapshots',
+      taskId: expect.stringMatching(/^cleanup-/),
+      type: 'manual',
+      label: 'cleanup-backup',
+      trackedPaths: ['/tmp/.nvm'],
+    })
+    expect(snapshotMod.updateSnapshotMeta).toHaveBeenCalledWith('/tmp/snapshots', snapshotStub)
+    expect(envMod.cleanupDetectedEnvironments).toHaveBeenCalledWith(detections)
+    expect(result).toEqual({
+      snapshotId: 'snapshot-1',
+      results: [
+        {
+          detectionId: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+          message: 'cleaned node:manager_root:NVM_DIR:/tmp/.nvm',
+        },
+      ],
+      errors: [],
+      message: 'cleaned 1',
+    })
+  })
+
   it('preview changes handler delegates to previewEnvChanges', async () => {
     const envMod = await import('../../src/main/core/envPersistence')
     const result = await handlers.get('environment:preview-changes')?.({}, [
@@ -576,7 +658,7 @@ describe('registerIpcHandlers', () => {
       'snapshot-1',
       ['/tmp/toolchain'],
       undefined,
-      { dryRun: true },
+      { dryRun: true, rollbackCommands: ['brew uninstall git'] },
     )
     expect(suggestions).toHaveLength(1)
     expect(rollbackResult.success).toBe(true)

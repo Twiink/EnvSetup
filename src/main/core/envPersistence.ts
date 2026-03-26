@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile)
 
 const MANAGED_BLOCK_START = '# envsetup: managed block:start'
 const MANAGED_BLOCK_END = '# envsetup: managed block:end'
+const DEFAULT_UNIX_PROFILE_TARGETS = ['.zshrc', '.bash_profile', '.bashrc', '.profile']
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))]
@@ -39,6 +40,14 @@ function mapProfileTarget(target?: string): string {
   }
 
   return target
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
 function buildManagedBlock(changes: EnvChange[]): string {
@@ -97,6 +106,68 @@ async function applyWindowsEnvChanges(changes: EnvChange[]): Promise<ApplyEnvCha
   }
 
   return { applied, skipped }
+}
+
+function removeEnvKeyFromShellContent(content: string, key: string): string {
+  const escapedKey = escapeRegExp(key)
+  const exportRegex = new RegExp(`^\\s*(?:export\\s+)?${escapedKey}\\s*=.*(?:\\r?\\n)?`, 'gm')
+  const unsetRegex = new RegExp(`^\\s*unset\\s+${escapedKey}\\s*(?:\\r?\\n)?`, 'gm')
+  const escapedStart = escapeRegExp(MANAGED_BLOCK_START)
+  const escapedEnd = escapeRegExp(MANAGED_BLOCK_END)
+  const emptyManagedBlockRegex = new RegExp(`\\n?${escapedStart}\\s*\\n${escapedEnd}\\n?`, 'g')
+
+  return content
+    .replace(exportRegex, '')
+    .replace(unsetRegex, '')
+    .replace(emptyManagedBlockRegex, '')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+async function clearUnixEnvKey(key: string, profileTargets?: string[]): Promise<void> {
+  const targets =
+    profileTargets?.map(mapProfileTarget) ??
+    DEFAULT_UNIX_PROFILE_TARGETS.map((target) => join(homedir(), target))
+
+  for (const target of [...new Set(targets)]) {
+    let existing = ''
+    try {
+      existing = await readFile(target, 'utf8')
+    } catch {
+      continue
+    }
+
+    const next = removeEnvKeyFromShellContent(existing, key)
+    if (next !== existing) {
+      await writeFile(target, next, 'utf8')
+    }
+  }
+}
+
+async function clearWindowsEnvKey(key: string): Promise<void> {
+  await execFileAsync('powershell', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    `[Environment]::SetEnvironmentVariable(${quotePowerShellString(key)}, $null, 'User')`,
+  ])
+}
+
+export async function clearPersistedEnvKey(options: {
+  key: string
+  platform: AppPlatform
+  profileTargets?: string[]
+}): Promise<void> {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(options.key)) {
+    throw new Error(`Invalid environment variable key: ${options.key}`)
+  }
+
+  if (options.platform === 'win32') {
+    await clearWindowsEnvKey(options.key)
+    return
+  }
+
+  await clearUnixEnvKey(options.key, options.profileTargets)
 }
 
 export async function applyEnvChanges(options: {

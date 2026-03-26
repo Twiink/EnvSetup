@@ -130,6 +130,14 @@ describe('getPrecheckItemMessage', () => {
     expect(msg).toContain('操作系统')
   })
 
+  it('preserves fallback text for existing environment warnings', () => {
+    const zhFallback = '检测到已有相关运行时环境，请谨慎继续。'
+    const enFallback = 'Template-declared check found existing environment conflict for: python'
+
+    expect(getPrecheckItemMessage('zh-CN', 'EXISTING_ENV_DETECTED', zhFallback)).toBe(zhFallback)
+    expect(getPrecheckItemMessage('en', 'EXISTING_ENV_DETECTED', enFallback)).toBe(enFallback)
+  })
+
   it('returns fallback for unmapped error codes', () => {
     const msg = getPrecheckItemMessage('en', 'PERMISSION_DENIED', 'my fallback')
     expect(msg).toBe('my fallback')

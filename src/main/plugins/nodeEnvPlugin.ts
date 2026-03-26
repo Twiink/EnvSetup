@@ -108,6 +108,13 @@ function buildDownloadPlan(input: NodePluginParams): DownloadArtifact[] {
   ]
 }
 
+export function planNodeDownloads(input: PluginExecutionInput): DownloadArtifact[] {
+  const params = toNodeParams(input)
+  const downloads = buildDownloadPlan(params)
+  assertOfficialDownloadPlan(downloads)
+  return downloads
+}
+
 function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
   validateOfficialDownloads(downloads)
 }

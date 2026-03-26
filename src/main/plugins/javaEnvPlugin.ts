@@ -111,6 +111,13 @@ function buildDownloadPlan(input: JavaPluginParams): DownloadArtifact[] {
   ]
 }
 
+export function planJavaDownloads(input: PluginExecutionInput): DownloadArtifact[] {
+  const params = toJavaParams(input)
+  const downloads = buildDownloadPlan(params)
+  assertOfficialDownloadPlan(downloads)
+  return downloads
+}
+
 function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
   validateOfficialDownloads(downloads)
 }

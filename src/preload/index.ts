@@ -16,6 +16,7 @@ const api: EnvSetupApi = {
   cancelTask: (taskId) => ipcRenderer.invoke('task:cancel', taskId),
   retryPlugin: (taskId, pluginId) => ipcRenderer.invoke('task:retry-plugin', { taskId, pluginId }),
   cleanupEnvironment: (detection) => ipcRenderer.invoke('environment:cleanup', detection),
+  cleanupEnvironments: (detections) => ipcRenderer.invoke('environment:cleanup-batch', detections),
   pickDirectory: (defaultPath) => ipcRenderer.invoke('dialog:pick-directory', { defaultPath }),
   importPluginFromPath: (pluginPath) => ipcRenderer.invoke('plugin:import', { path: pluginPath }),
   previewEnvChanges: (changes) => ipcRenderer.invoke('environment:preview-changes', changes),

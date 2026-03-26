@@ -183,8 +183,10 @@ const startTask = vi.fn()
 const cancelTask = vi.fn()
 const retryPlugin = vi.fn()
 const cleanupEnvironment = vi.fn()
+const cleanupEnvironments = vi.fn()
 const previewEnvChanges = vi.fn()
 const applyEnvChanges = vi.fn()
+const executeRollback = vi.fn()
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -203,8 +205,10 @@ beforeEach(() => {
   cancelTask.mockReset()
   retryPlugin.mockReset()
   cleanupEnvironment.mockReset()
+  cleanupEnvironments.mockReset()
   previewEnvChanges.mockReset()
   applyEnvChanges.mockReset()
+  executeRollback.mockReset()
   previewEnvChanges.mockResolvedValue({
     envCount: 0,
     pathCount: 0,
@@ -212,7 +216,25 @@ beforeEach(() => {
     targets: [],
   })
   cleanupEnvironment.mockResolvedValue({ ok: true })
+  cleanupEnvironments.mockResolvedValue({
+    snapshotId: 'snapshot-cleanup-1',
+    results: [],
+    errors: [],
+    message: 'Successfully cleaned 2 environment(s)',
+  })
   applyEnvChanges.mockResolvedValue({ applied: [], skipped: [] })
+  executeRollback.mockResolvedValue({
+    success: true,
+    executionMode: 'real_run',
+    snapshotId: 'snapshot-cleanup-1',
+    filesRestored: 2,
+    envVariablesRestored: 1,
+    shellConfigsRestored: 1,
+    directoriesRemoved: 0,
+    errors: [],
+    message:
+      'Successfully restored 2 file(s), 1 shell config(s), ran 0 rollback command(s), removed 0 dir(s)',
+  })
   cancelTask.mockResolvedValue({
     id: 'task-1',
     templateId: 'node-template',
@@ -281,12 +303,14 @@ beforeEach(() => {
   })
 
   const api: EnvSetupApi = {
-    listTemplates: vi.fn().mockResolvedValue([
-      nodeTemplateFixture,
-      javaTemplateFixture,
-      pythonTemplateFixture,
-      gitTemplateFixture,
-    ]),
+    listTemplates: vi
+      .fn()
+      .mockResolvedValue([
+        nodeTemplateFixture,
+        javaTemplateFixture,
+        pythonTemplateFixture,
+        gitTemplateFixture,
+      ]),
     listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
     listJavaLtsVersions: vi.fn().mockResolvedValue(['21.0.6', '17.0.14', '11.0.26']),
     listPythonVersions: vi.fn().mockResolvedValue(['3.12.10', '3.11.10', '3.10.15']),
@@ -339,6 +363,7 @@ beforeEach(() => {
     cancelTask,
     retryPlugin,
     cleanupEnvironment,
+    cleanupEnvironments,
     pickDirectory,
     importPluginFromPath: vi.fn(),
     previewEnvChanges,
@@ -349,7 +374,7 @@ beforeEach(() => {
     createSnapshot: vi.fn(),
     deleteSnapshot: vi.fn(),
     suggestRollback: vi.fn(),
-    executeRollback: vi.fn(),
+    executeRollback,
     runEnhancedPrecheck: vi.fn(),
   }
 
@@ -541,6 +566,24 @@ describe('App', () => {
             cleanupPath: '/tmp/.nvm',
             cleanupEnvKey: 'NVM_DIR',
           },
+          {
+            id: 'python:virtual_env:CONDA_PREFIX:/tmp/miniconda',
+            tool: 'python',
+            kind: 'virtual_env',
+            path: '/tmp/miniconda',
+            source: 'CONDA_PREFIX',
+            cleanupSupported: true,
+            cleanupPath: '/tmp/miniconda',
+            cleanupEnvKey: 'CONDA_PREFIX',
+          },
+          {
+            id: 'java:runtime_executable:PATH:/usr/bin/java',
+            tool: 'java',
+            kind: 'runtime_executable',
+            path: '/usr/bin/java',
+            source: 'PATH',
+            cleanupSupported: false,
+          },
         ],
         createdAt: new Date().toISOString(),
       })
@@ -557,15 +600,77 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: '一键清理' }))
 
     await waitFor(() => {
-      expect(cleanupEnvironment).toHaveBeenCalledWith(
+      expect(cleanupEnvironments).toHaveBeenCalledWith([
         expect.objectContaining({
           id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
           cleanupPath: '/tmp/.nvm',
         }),
-      )
+        expect.objectContaining({
+          id: 'python:virtual_env:CONDA_PREFIX:/tmp/miniconda',
+          cleanupPath: '/tmp/miniconda',
+        }),
+      ])
       expect(runPrecheck).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('通过')).toBeInTheDocument()
+  })
+
+  it('shows cleanup rollback entry and executes rollback from cleanup snapshot', async () => {
+    runPrecheck
+      .mockResolvedValueOnce({
+        level: 'warn',
+        items: [],
+        detections: [
+          {
+            id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+            tool: 'node',
+            kind: 'manager_root',
+            path: '/tmp/.nvm',
+            source: 'NVM_DIR',
+            cleanupSupported: true,
+            cleanupPath: '/tmp/.nvm',
+            cleanupEnvKey: 'NVM_DIR',
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      })
+      .mockResolvedValueOnce({
+        level: 'pass',
+        items: [],
+        detections: [],
+        createdAt: new Date().toISOString(),
+      })
+      .mockResolvedValueOnce({
+        level: 'warn',
+        items: [],
+        detections: [
+          {
+            id: 'node:manager_root:NVM_DIR:/tmp/.nvm',
+            tool: 'node',
+            kind: 'manager_root',
+            path: '/tmp/.nvm',
+            source: 'NVM_DIR',
+            cleanupSupported: true,
+            cleanupPath: '/tmp/.nvm',
+            cleanupEnvKey: 'NVM_DIR',
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      })
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    fireEvent.click(await screen.findByRole('button', { name: '一键清理' }))
+
+    expect(await screen.findByRole('button', { name: '一键回滚清理' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '一键回滚清理' }))
+
+    await waitFor(() => {
+      expect(executeRollback).toHaveBeenCalledWith({ snapshotId: 'snapshot-cleanup-1' })
+      expect(runPrecheck).toHaveBeenCalledTimes(3)
+    })
   })
 
   it('retries failed plugin and rebinds progress listener', async () => {

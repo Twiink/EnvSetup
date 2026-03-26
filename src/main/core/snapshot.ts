@@ -1,13 +1,30 @@
-import { exec, execFile } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, chmod, mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import {
+  access,
+  chmod,
+  lstat,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  rmdir,
+  writeFile,
+} from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { AppPlatform, ObjectRefs, Snapshot, SnapshotMeta } from './contracts'
+import {
+  buildCopyFileCommand,
+  buildEnsureDirectoryCommand,
+  buildReadFileBase64Command,
+  executePlatformCommand,
+  isPermissionError,
+} from './elevation'
 
-const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
 // ============================================================
@@ -137,7 +154,7 @@ async function batchDecrementRefCounts(baseDir: string, hashes: string[]): Promi
 // ============================================================
 
 /**
- * 创建快照：对 trackedPaths 中的文件进行内容寻址存储，并记录当前环境变量
+ * 创建快照：递归备份 trackedPaths 中的文件/目录，并记录当前环境变量
  */
 export async function createSnapshot(options: {
   baseDir: string
@@ -148,27 +165,73 @@ export async function createSnapshot(options: {
 }): Promise<Snapshot> {
   const objectsDir = join(options.baseDir, 'objects')
   const files: Snapshot['files'] = {}
+  const directories: NonNullable<Snapshot['directories']> = {}
+  const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
 
-  // 并行处理所有 trackedPaths
-  const fileResults = await Promise.all(
-    options.trackedPaths.map(async (filePath) => {
+  async function collectTrackedPath(targetPath: string): Promise<void> {
+    let targetStat
+
+    try {
+      targetStat = await lstat(targetPath)
+    } catch {
+      return
+    }
+
+    if (targetStat.isSymbolicLink()) {
+      return
+    }
+
+    if (targetStat.isDirectory()) {
+      directories[targetPath] = { mode: targetStat.mode }
+      const entries = await readdir(targetPath, { withFileTypes: true })
+
+      await Promise.all(
+        entries.map(async (entry) => {
+          const entryPath = join(targetPath, entry.name)
+          if (entry.isSymbolicLink()) {
+            return
+          }
+          if (entry.isDirectory() || entry.isFile()) {
+            await collectTrackedPath(entryPath)
+            return
+          }
+
+          try {
+            const nestedStat = await lstat(entryPath)
+            if (nestedStat.isDirectory() || nestedStat.isFile()) {
+              await collectTrackedPath(entryPath)
+            }
+          } catch {
+            // 跳过瞬时消失或不可读的条目
+          }
+        }),
+      )
+      return
+    }
+
+    if (!targetStat.isFile()) {
+      return
+    }
+
+    try {
+      let content: Buffer
       try {
-        const [content, fileStat] = await Promise.all([readFile(filePath), stat(filePath)])
-        const hash = await storeObject(objectsDir, content)
-        return { filePath, hash, mode: fileStat.mode, size: fileStat.size } as const
-      } catch {
-        return null
+        content = await readFile(targetPath)
+      } catch (error) {
+        if (!isPermissionError(error)) {
+          throw error
+        }
+        content = await readFileWithElevation(targetPath, currentPlatform)
       }
-    }),
-  )
-
-  const fileHashes: string[] = []
-  for (const r of fileResults) {
-    if (r) {
-      files[r.filePath] = { hash: r.hash, mode: r.mode, size: r.size }
-      fileHashes.push(r.hash)
+      const hash = await storeObject(objectsDir, content)
+      files[targetPath] = { hash, mode: targetStat.mode, size: targetStat.size }
+    } catch {
+      // 跳过不可读文件
     }
   }
+
+  await Promise.all(options.trackedPaths.map((trackedPath) => collectTrackedPath(trackedPath)))
+  const fileHashes = Object.values(files).map((entry) => entry.hash)
 
   const environment = {
     variables: { ...process.env } as Record<string, string>,
@@ -214,12 +277,14 @@ export async function createSnapshot(options: {
     type: options.type,
     label: options.label,
     files,
+    directories,
     environment,
     shellConfigs,
     metadata: {
       platform: process.platform as AppPlatform,
       diskUsage: Object.values(files).reduce((sum, f) => sum + f.size, 0),
       fileCount: Object.keys(files).length,
+      directoryCount: Object.keys(directories).length,
     },
   }
 
@@ -356,6 +421,37 @@ export async function deleteSnapshot(baseDir: string, snapshotId: string): Promi
   await rm(join(baseDir, 'snapshots', `snapshot-${snapshotId}.json`))
 }
 
+async function readFileWithElevation(targetPath: string, platform: AppPlatform): Promise<Buffer> {
+  const { stdout } = await executePlatformCommand(
+    buildReadFileBase64Command(targetPath, platform),
+    platform,
+    { elevated: true },
+  )
+
+  return Buffer.from(stdout.trim(), 'base64')
+}
+
+async function restoreFileWithElevation(
+  targetPath: string,
+  content: Buffer,
+  mode: number | undefined,
+  platform: AppPlatform,
+): Promise<void> {
+  const stagingDir = await mkdtemp(join(tmpdir(), 'envsetup-restore-'))
+  const stagingPath = join(stagingDir, 'payload')
+
+  try {
+    await writeFile(stagingPath, content)
+    await executePlatformCommand(
+      buildCopyFileCommand(stagingPath, targetPath, platform, mode),
+      platform,
+      { elevated: true },
+    )
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true })
+  }
+}
+
 // ============================================================
 // 快照应用与恢复
 // ============================================================
@@ -368,6 +464,8 @@ export type ApplySnapshotOptions = {
   filePaths?: string[]
   /** 是否恢复环境变量 */
   restoreEnv?: boolean
+  /** 遇到权限错误时，尝试提升为系统管理员权限后重试 */
+  allowElevation?: boolean
 }
 
 export type ApplySnapshotResult = {
@@ -383,16 +481,24 @@ export type ApplySnapshotResult = {
 export async function applySnapshot(options: ApplySnapshotOptions): Promise<ApplySnapshotResult> {
   const snapshot = await loadSnapshot(options.baseDir, options.snapshotId)
   const objectsDir = join(options.baseDir, 'objects')
+  const snapshotDirectories = snapshot.directories ?? {}
+  const snapshotFilePaths = Object.keys(snapshot.files)
+  const snapshotDirectoryPaths = Object.keys(snapshotDirectories)
+  const pathSeparator = process.platform === 'win32' ? '\\' : '/'
+  const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
+
+  function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
+    const normalizedCandidate = resolve(candidatePath)
+    const normalizedRoot = resolve(rootPath)
+    return (
+      normalizedCandidate === normalizedRoot ||
+      normalizedCandidate.startsWith(`${normalizedRoot}${pathSeparator}`)
+    )
+  }
 
   // 确定要恢复的文件列表
   let filesToRestore: string[]
-  if (options.mode === 'full') {
-    filesToRestore = Object.keys(snapshot.files)
-  } else {
-    // partial：只恢复 filePaths 中同时存在于快照的文件
-    filesToRestore = (options.filePaths ?? []).filter((p) => p in snapshot.files)
-  }
-
+  let directoriesToRestore: string[]
   const result: ApplySnapshotResult = {
     filesRestored: 0,
     filesSkipped: 0,
@@ -400,10 +506,88 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
     errors: [],
   }
 
-  // partial 模式下，filePaths 中不在快照里的路径计为 skipped
-  if (options.mode === 'partial') {
-    const skippedCount = (options.filePaths ?? []).filter((p) => !(p in snapshot.files)).length
-    result.filesSkipped += skippedCount
+  if (options.mode === 'full') {
+    filesToRestore = snapshotFilePaths
+    directoriesToRestore = snapshotDirectoryPaths
+  } else {
+    const matchedTargets = new Set<string>()
+    const fileSet = new Set<string>()
+    const directorySet = new Set<string>()
+
+    for (const requestedPath of options.filePaths ?? []) {
+      if (requestedPath in snapshot.files) {
+        fileSet.add(requestedPath)
+        matchedTargets.add(requestedPath)
+      }
+
+      if (requestedPath in snapshotDirectories) {
+        directorySet.add(requestedPath)
+        matchedTargets.add(requestedPath)
+      }
+
+      for (const directoryPath of snapshotDirectoryPaths) {
+        if (isPathWithinRoot(directoryPath, requestedPath)) {
+          directorySet.add(directoryPath)
+          matchedTargets.add(requestedPath)
+        }
+      }
+
+      for (const filePath of snapshotFilePaths) {
+        if (isPathWithinRoot(filePath, requestedPath)) {
+          fileSet.add(filePath)
+          matchedTargets.add(requestedPath)
+        }
+      }
+    }
+
+    filesToRestore = Array.from(fileSet)
+    directoriesToRestore = Array.from(directorySet)
+
+    const skippedCount = (options.filePaths ?? []).filter(
+      (path) => !matchedTargets.has(path),
+    ).length
+    if (skippedCount > 0) {
+      // partial 模式下，filePaths 中不在快照里的路径计为 skipped
+      result.filesSkipped += skippedCount
+    }
+  }
+
+  directoriesToRestore = directoriesToRestore.sort((a, b) => a.length - b.length)
+
+  for (const directoryPath of directoriesToRestore) {
+    const directoryEntry = snapshotDirectories[directoryPath]
+    if (!directoryEntry) {
+      continue
+    }
+
+    try {
+      await mkdir(directoryPath, { recursive: true })
+      if (process.platform !== 'win32') {
+        await chmod(directoryPath, directoryEntry.mode)
+      }
+    } catch (error) {
+      if (options.allowElevation && isPermissionError(error)) {
+        try {
+          await executePlatformCommand(
+            buildEnsureDirectoryCommand(directoryPath, currentPlatform, directoryEntry.mode),
+            currentPlatform,
+            { elevated: true },
+          )
+          continue
+        } catch (elevatedError) {
+          result.errors.push({
+            path: directoryPath,
+            error: elevatedError instanceof Error ? elevatedError.message : String(elevatedError),
+          })
+          continue
+        }
+      }
+
+      result.errors.push({
+        path: directoryPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   for (const filePath of filesToRestore) {
@@ -422,6 +606,21 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
       }
       result.filesRestored++
     } catch (error) {
+      if (options.allowElevation && isPermissionError(error)) {
+        try {
+          const content = await loadObject(objectsDir, fileEntry.hash)
+          await restoreFileWithElevation(filePath, content, fileEntry.mode, currentPlatform)
+          result.filesRestored++
+          continue
+        } catch (elevatedError) {
+          result.errors.push({
+            path: filePath,
+            error: elevatedError instanceof Error ? elevatedError.message : String(elevatedError),
+          })
+          continue
+        }
+      }
+
       result.errors.push({
         path: filePath,
         error: error instanceof Error ? error.message : String(error),
@@ -511,8 +710,11 @@ export async function restoreEnvironment(
 export async function restoreShellConfigs(
   baseDir: string,
   shellConfigs: Snapshot['shellConfigs'],
+  options: { allowElevation?: boolean; platform?: AppPlatform } = {},
 ): Promise<number> {
   const objectsDir = join(baseDir, 'objects')
+  const currentPlatform =
+    options.platform ?? ((process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform)
   let count = 0
 
   for (const [configPath, config] of Object.entries(shellConfigs)) {
@@ -521,8 +723,16 @@ export async function restoreShellConfigs(
       await mkdir(dirname(configPath), { recursive: true })
       await writeFile(configPath, content)
       count++
-    } catch {
-      // 忽略单条失败
+    } catch (error) {
+      if (options.allowElevation && isPermissionError(error)) {
+        try {
+          const content = await loadObject(objectsDir, config.hash)
+          await restoreFileWithElevation(configPath, content, undefined, currentPlatform)
+          count++
+        } catch {
+          // 忽略单条失败
+        }
+      }
     }
   }
 

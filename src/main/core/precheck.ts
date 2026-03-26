@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_LOCALE } from '../../shared/locale'
 import { detectTemplateEnvironments, findExecutable } from './environment'
 import { getPrecheckMessage } from './i18n'
+import { runTemplateNetworkChecks } from './networkCheck'
 import { mapTemplateValuesToPluginParams } from './template'
 
 function isSupportedArchForPlatform(platform: 'darwin' | 'win32', arch: string): boolean {
@@ -94,6 +95,12 @@ export async function buildRuntimePrecheckInput(
     gitBashMissing = bashExe === undefined
   }
 
+  const networkChecks = await runTemplateNetworkChecks(template, values, {
+    platform: currentPlatform,
+    gitBashMissing,
+  })
+  const networkAvailable = networkChecks.every((check) => check.reachable)
+
   return {
     platformSupported: template.platforms.includes(currentPlatform),
     archSupported: isSupportedArchForPlatform(currentPlatform, process.arch),
@@ -104,7 +111,8 @@ export async function buildRuntimePrecheckInput(
     versionCompatible: true,
     existingEnvConflict: detections.length > 0,
     detections,
-    networkAvailable: true,
+    networkAvailable,
+    networkChecks,
     elevationRequired: false,
     failedTemplateChecks: failedTemplateChecks.length > 0 ? failedTemplateChecks : undefined,
     gitBashMissing,
@@ -217,6 +225,7 @@ export async function runPrecheck(
     level,
     items,
     detections,
+    networkChecks: input.networkChecks ?? [],
     createdAt: new Date().toISOString(),
   }
 }

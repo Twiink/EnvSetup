@@ -6,6 +6,16 @@ import { suggestRollbackSnapshots, executeRollback } from '../../src/main/core/r
 // Mocks
 // ---------------------------------------------------------------------------
 
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn((_file, _args, callback) => {
+    callback(null, { stdout: '', stderr: '' })
+  }),
+}))
+
+vi.mock('node:child_process', () => ({
+  execFile: execFileMock,
+}))
+
 vi.mock('../../src/main/core/snapshot', () => ({
   loadSnapshotMeta: vi.fn(),
   applySnapshot: vi.fn(),
@@ -232,6 +242,9 @@ describe('suggestRollbackSnapshots', () => {
 describe('executeRollback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    execFileMock.mockImplementation((_file, _args, callback) => {
+      callback(null, { stdout: '', stderr: '' })
+    })
     // Default: loadSnapshot returns a snapshot with empty shellConfigs
     mockLoadSnapshot.mockResolvedValue({
       id: 'snap-1',
@@ -343,16 +356,75 @@ describe('executeRollback', () => {
       ['/tmp/toolchain'],
       {
         dryRun: true,
+        rollbackCommands: ['brew uninstall git'],
       },
     )
 
     expect(mockLoadSnapshot).toHaveBeenCalledWith('/base', 'snap-1')
     expect(mockApplySnapshot).not.toHaveBeenCalled()
     expect(mockRestoreShellConfigs).not.toHaveBeenCalled()
+    expect(execFileMock).not.toHaveBeenCalled()
     expect(result.success).toBe(true)
     expect(result.executionMode).toBe('dry_run')
     expect(result.filesRestored).toBe(0)
     expect(result.directoriesRemoved).toBe(0)
     expect(result.message).toContain('Dry-run rollback plan prepared')
+    expect(result.message).toContain('run 1 rollback command(s)')
+  })
+
+  it('executes plugin rollback commands during real-run rollback', async () => {
+    mockApplySnapshot.mockResolvedValue({
+      filesRestored: 1,
+      filesSkipped: 0,
+      envVariablesRestored: 0,
+      errors: [],
+    })
+
+    const result = await executeRollback('/base', 'snap-1', [], undefined, {
+      rollbackCommands: ['brew uninstall git'],
+    })
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      'sh',
+      ['-c', 'brew uninstall git'],
+      expect.any(Function),
+    )
+    expect(result.success).toBe(true)
+    expect(result.message).toContain('ran 1 rollback command(s)')
+  })
+
+  it('retries rollback commands with administrator elevation after permission errors', async () => {
+    mockApplySnapshot.mockResolvedValue({
+      filesRestored: 1,
+      filesSkipped: 0,
+      envVariablesRestored: 0,
+      errors: [],
+    })
+
+    execFileMock
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(new Error('Permission denied'))
+      })
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: '', stderr: '' })
+      })
+
+    const result = await executeRollback('/base', 'snap-1', [], undefined, {
+      rollbackCommands: ['brew uninstall git'],
+    })
+
+    expect(execFileMock).toHaveBeenNthCalledWith(
+      1,
+      'sh',
+      ['-c', 'brew uninstall git'],
+      expect.any(Function),
+    )
+    expect(execFileMock).toHaveBeenNthCalledWith(
+      2,
+      'osascript',
+      [expect.any(String), expect.stringContaining('with administrator privileges')],
+      expect.any(Function),
+    )
+    expect(result.success).toBe(true)
   })
 })

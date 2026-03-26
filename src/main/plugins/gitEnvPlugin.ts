@@ -86,6 +86,13 @@ function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
   ]
 }
 
+export function planGitDownloads(input: PluginExecutionInput): DownloadArtifact[] {
+  const params = toGitParams(input)
+  const downloads = buildDownloadPlan(params)
+  validateOfficialDownloads(downloads)
+  return downloads
+}
+
 function toGitParams(input: PluginExecutionInput): GitPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
@@ -210,6 +217,22 @@ function buildInstallCommands(input: GitPluginParams): string[] {
   return buildWindowsScoopCommands()
 }
 
+function buildRollbackCommands(input: GitPluginParams): string[] {
+  if (input.gitManager === 'homebrew') {
+    return [
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions git >/dev/null 2>&1 && "$BREW_BIN" uninstall --formula git || true; fi`,
+    ]
+  }
+
+  if (input.gitManager === 'scoop') {
+    return [
+      `$scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }`,
+    ]
+  }
+
+  return []
+}
+
 function buildVerifyCommands(input: GitPluginParams): string[] {
   const paths = resolveGitInstallPaths(input)
 
@@ -289,6 +312,7 @@ const gitEnvPlugin = {
     const paths = resolveGitInstallPaths(params)
     const downloads = buildDownloadPlan(params)
     const commands = buildInstallCommands(params)
+    const rollbackCommands = buildRollbackCommands(params)
     const envChanges = buildGitEnvChanges(params)
 
     validateOfficialDownloads(downloads)
@@ -331,6 +355,7 @@ const gitEnvPlugin = {
       envChanges,
       downloads,
       commands,
+      rollbackCommands,
       logs,
       summary: params.dryRun
         ? 'Prepared an official-source dry-run plan for the Git environment.'

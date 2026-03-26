@@ -5,15 +5,21 @@ import { execFile } from 'node:child_process'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { EnvChange } from '../../src/main/core/contracts'
-import { previewEnvChanges, applyEnvChanges } from '../../src/main/core/envPersistence'
+import {
+  previewEnvChanges,
+  applyEnvChanges,
+  clearPersistedEnvKey,
+} from '../../src/main/core/envPersistence'
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>()
   return {
     ...actual,
-    execFile: vi.fn((_cmd: string, _args: string[] | null, callback: (...args: unknown[]) => void) => {
-      callback(null, '', '')
-    }),
+    execFile: vi.fn(
+      (_cmd: string, _args: string[] | null, callback: (...args: unknown[]) => void) => {
+        callback(null, '', '')
+      },
+    ),
   }
 })
 
@@ -204,6 +210,31 @@ describe('applyEnvChanges (darwin)', () => {
     const content = await readFile(profilePath, 'utf8')
     expect(content).toContain('source ~/.nvm/nvm.sh')
   })
+
+  it('clears a specific persisted env key without disturbing other exports', async () => {
+    await writeFile(
+      profilePath,
+      [
+        'export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin"',
+        'export PYTHON_HOME="/opt/python"',
+        '# envsetup: managed block:start',
+        'export JAVA_HOME="/tmp/java"',
+        '# envsetup: managed block:end',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+
+    await clearPersistedEnvKey({
+      key: 'JAVA_HOME',
+      platform: 'darwin',
+      profileTargets: [profilePath],
+    })
+
+    const content = await readFile(profilePath, 'utf8')
+    expect(content).not.toContain('JAVA_HOME')
+    expect(content).toContain('export PYTHON_HOME="/opt/python"')
+  })
 })
 
 describe('applyEnvChanges (win32)', () => {
@@ -228,7 +259,11 @@ describe('applyEnvChanges (win32)', () => {
 
     expect(result.applied).toHaveLength(1)
     expect(result.applied[0].key).toBe('NODE_HOME')
-    expect(mockedExecFile).toHaveBeenCalledWith('setx', ['NODE_HOME', '/opt/node'], expect.any(Function))
+    expect(mockedExecFile).toHaveBeenCalledWith(
+      'setx',
+      ['NODE_HOME', '/opt/node'],
+      expect.any(Function),
+    )
   })
 
   it('calls setx for path kind changes with key PATH', async () => {
@@ -246,7 +281,11 @@ describe('applyEnvChanges (win32)', () => {
 
     expect(result.applied).toHaveLength(1)
     expect(result.applied[0].kind).toBe('path')
-    expect(mockedExecFile).toHaveBeenCalledWith('setx', ['PATH', 'C:\\nodejs\\bin'], expect.any(Function))
+    expect(mockedExecFile).toHaveBeenCalledWith(
+      'setx',
+      ['PATH', 'C:\\nodejs\\bin'],
+      expect.any(Function),
+    )
   })
 
   it('skips profile kind changes on win32', async () => {
@@ -292,5 +331,21 @@ describe('applyEnvChanges (win32)', () => {
     expect(result.applied[0].key).toBe('PERSIST')
     expect(mockedExecFile).toHaveBeenCalledTimes(1)
     expect(mockedExecFile).toHaveBeenCalledWith('setx', ['PERSIST', '1'], expect.any(Function))
+  })
+
+  it('clears a persisted user env key via PowerShell on win32', async () => {
+    await clearPersistedEnvKey({ key: 'JAVA_HOME', platform: 'win32' })
+
+    expect(mockedExecFile).toHaveBeenCalledWith(
+      'powershell',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        "[Environment]::SetEnvironmentVariable('JAVA_HOME', $null, 'User')",
+      ],
+      expect.any(Function),
+    )
   })
 })

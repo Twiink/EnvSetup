@@ -12,7 +12,18 @@ import {
 async function launchZhApp(
   env?: NodeJS.ProcessEnv,
 ): Promise<{ app: ElectronApplication; page: Page }> {
-  const app = await electron.launch({ args: ['.'], env: { ...process.env, ...env } })
+  const dataDir = path.join(
+    process.env.RUNNER_TEMP ?? os.tmpdir(),
+    `envsetup-dev-data-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  )
+  const app = await electron.launch({
+    args: ['.'],
+    env: {
+      ...process.env,
+      ENVSETUP_DATA_DIR: dataDir,
+      ...env,
+    },
+  })
   const page = await app.firstWindow()
   await page.evaluate(() => localStorage.setItem('envsetup.locale', 'zh-CN'))
   await page.reload()

@@ -1,6 +1,7 @@
 import type {
   DetectedEnvironment,
   ErrorCode,
+  NetworkCheckTarget,
   PluginExecutionStatus,
   PrecheckLevel,
   TaskStatus,
@@ -93,9 +94,45 @@ const uiText = {
     'zh-CN': '已发现环境',
     en: 'Detected Environments',
   },
+  networkCheckTitle: {
+    'zh-CN': '网络检测',
+    en: 'Network Check',
+  },
+  networkCheckDescription: {
+    'zh-CN': '检查当前模板依赖的官方下载站点是否可访问。',
+    en: 'Check whether the official download sites required by the current template are reachable.',
+  },
+  networkCheckReachable: {
+    'zh-CN': '可访问',
+    en: 'Reachable',
+  },
+  networkCheckUnreachable: {
+    'zh-CN': '不可访问',
+    en: 'Unreachable',
+  },
+  networkCheckLatency: {
+    'zh-CN': '响应耗时',
+    en: 'Response Time',
+  },
+  networkCheckStatus: {
+    'zh-CN': 'HTTP 状态',
+    en: 'HTTP Status',
+  },
+  networkCheckError: {
+    'zh-CN': '错误信息',
+    en: 'Error',
+  },
   cleanupEnvironment: {
     'zh-CN': '一键清理',
     en: 'Clean Up',
+  },
+  rollbackCleanup: {
+    'zh-CN': '一键回滚清理',
+    en: 'Rollback Cleanup',
+  },
+  cleanupRollbackReady: {
+    'zh-CN': '已创建清理备份，可随时一键回滚到清理前状态。',
+    en: 'A cleanup backup is ready. You can roll back to the pre-cleanup state at any time.',
   },
   cleanupUnavailable: {
     'zh-CN': '仅展示路径',
@@ -238,10 +275,6 @@ const precheckItemTextMap: Partial<Record<ErrorCode, LocalizedTextInput>> = {
   NETWORK_UNAVAILABLE: {
     'zh-CN': '当前网络不可用，无法执行需要下载的步骤。',
     en: 'Network access is unavailable for download-based steps.',
-  },
-  EXISTING_ENV_DETECTED: {
-    'zh-CN': '检测到已有 Node 或 npm 环境，请谨慎继续。',
-    en: 'An existing Node or npm environment was detected. Continue with care.',
   },
   ELEVATION_REQUIRED: {
     'zh-CN': '部分操作可能需要管理员授权。',
@@ -408,6 +441,53 @@ const detectedEnvironmentKindMap: Record<
   },
 }
 
+const networkCheckToolLabelMap: Record<NetworkCheckTarget['tool'], LocalizedTextInput> = {
+  node: {
+    'zh-CN': 'Node.js 官方源',
+    en: 'Node.js Official Source',
+  },
+  nvm: {
+    'zh-CN': 'nvm 官方源',
+    en: 'nvm Official Source',
+  },
+  'nvm-windows': {
+    'zh-CN': 'nvm-windows 官方源',
+    en: 'nvm-windows Official Source',
+  },
+  temurin: {
+    'zh-CN': 'Temurin 官方源',
+    en: 'Temurin Official Source',
+  },
+  sdkman: {
+    'zh-CN': 'SDKMAN 官方源',
+    en: 'SDKMAN Official Source',
+  },
+  python: {
+    'zh-CN': 'Python 官方源',
+    en: 'Python Official Source',
+  },
+  miniconda: {
+    'zh-CN': 'Miniconda 官方源',
+    en: 'Miniconda Official Source',
+  },
+  git: {
+    'zh-CN': 'Git 官方源',
+    en: 'Git Official Source',
+  },
+  'git-for-windows': {
+    'zh-CN': 'Git for Windows 官方源',
+    en: 'Git for Windows Official Source',
+  },
+  homebrew: {
+    'zh-CN': 'Homebrew 官方源',
+    en: 'Homebrew Official Source',
+  },
+  scoop: {
+    'zh-CN': 'Scoop 官方源',
+    en: 'Scoop Official Source',
+  },
+}
+
 export type UiTextKey = keyof typeof uiText
 
 export function getUiText(locale: AppLocale, key: UiTextKey): string {
@@ -471,4 +551,11 @@ export function getDetectedEnvironmentSourceLabel(
   detection: DetectedEnvironment,
 ): string {
   return locale === 'zh-CN' ? `来源：${detection.source}` : `Source: ${detection.source}`
+}
+
+export function getNetworkCheckToolLabel(
+  locale: AppLocale,
+  tool: NetworkCheckTarget['tool'],
+): string {
+  return resolveLocalizedText(networkCheckToolLabelMap[tool], locale, tool)
 }

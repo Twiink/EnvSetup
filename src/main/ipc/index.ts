@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { getMainWindow } from '../index'
 import { ensureAppPaths } from '../core/appPaths'
 import { applyEnvChanges, previewEnvChanges } from '../core/envPersistence'
-import { cleanupDetectedEnvironment } from '../core/environment'
+import {
+  cleanupDetectedEnvironment,
+  cleanupDetectedEnvironments,
+  collectCleanupTrackedPaths,
+} from '../core/environment'
 import { resolveDryRun } from '../core/executionMode'
 import { runPrecheck as runEnhancedPrecheck } from '../core/enhancedPrecheck'
 import { listNodeLtsVersions } from '../core/nodeVersions'
@@ -19,9 +23,11 @@ import { executeRollback, suggestRollbackSnapshots } from '../core/rollback'
 import {
   createSnapshot,
   deleteSnapshot,
+  loadSnapshot,
   loadSnapshotMeta,
   markSnapshotDeletable,
   saveSnapshotMeta,
+  updateSnapshotMeta,
 } from '../core/snapshot'
 import {
   cancelTask,
@@ -109,6 +115,29 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) =>
     cleanupDetectedEnvironment(detection),
   )
+  ipcMain.handle('environment:cleanup-batch', async (_event, detections: DetectedEnvironment[]) => {
+    const cleanupTargets = (detections ?? []).filter((detection) => detection.cleanupSupported)
+    if (cleanupTargets.length === 0) {
+      throw new Error('No cleanup-supported environments were provided')
+    }
+
+    const paths = await ensureAppPaths()
+    const trackedPaths = await collectCleanupTrackedPaths(cleanupTargets)
+    const snapshot = await createSnapshot({
+      baseDir: paths.snapshotsDir,
+      taskId: `cleanup-${Date.now()}`,
+      type: 'manual',
+      label: 'cleanup-backup',
+      trackedPaths,
+    })
+    await updateSnapshotMeta(paths.snapshotsDir, snapshot)
+
+    const cleanupResult = await cleanupDetectedEnvironments(cleanupTargets)
+    return {
+      snapshotId: snapshot.id,
+      ...cleanupResult,
+    }
+  })
   ipcMain.handle('environment:preview-changes', async (_event, changes: EnvChange[]) =>
     previewEnvChanges(changes ?? []),
   )
@@ -338,12 +367,27 @@ export function registerIpcHandlers(): void {
       payload: { snapshotId: string; trackedPaths?: string[]; installPaths?: string[] },
     ) => {
       const paths = await ensureAppPaths()
+      let rollbackCommands: string[] = []
+
+      try {
+        const snapshot = await loadSnapshot(paths.snapshotsDir, payload.snapshotId)
+        const task = await getTask(snapshot.taskId, paths.tasksDir)
+        rollbackCommands = [
+          ...new Set(task.plugins.flatMap((plugin) => plugin.lastResult?.rollbackCommands ?? [])),
+        ]
+      } catch {
+        rollbackCommands = []
+      }
+
       return executeRollback(
         paths.snapshotsDir,
         payload.snapshotId,
         payload.trackedPaths ?? [],
         payload.installPaths,
-        { dryRun: resolveDryRun(app.isPackaged) },
+        {
+          dryRun: resolveDryRun(app.isPackaged),
+          rollbackCommands,
+        },
       )
     },
   )

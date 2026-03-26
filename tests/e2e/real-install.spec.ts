@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import {
   test,
   expect,
@@ -12,6 +14,7 @@ import {
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
+const execFileAsync = promisify(execFile)
 
 async function dumpTaskLogs(dataDir: string): Promise<void> {
   const tasksDir = path.join(dataDir, 'tasks')
@@ -33,16 +36,22 @@ function makeInstallRoot(name: string): string {
     : path.join(os.tmpdir(), `envsetup-e2e-${name}`)
 }
 
+function makeDataDir(name: string): string {
+  return path.join(process.cwd(), 'test-results', `envsetup-real-${name}-data`)
+}
+
 async function launchRealRunApp(
   installRoot: string,
 ): Promise<{ app: ElectronApplication; page: Page; dataDir: string }> {
-  const dataDir = path.join(process.cwd(), '.envsetup-data')
+  const dataDir = makeDataDir(path.basename(installRoot))
+  await fs.rm(dataDir, { recursive: true, force: true })
   const app = await electron.launch({
     args: ['.'],
     env: {
       ...process.env,
       ENVSETUP_REAL_RUN: '1',
       ENVSETUP_INSTALL_ROOT: installRoot,
+      ENVSETUP_DATA_DIR: dataDir,
     },
   })
   const page = await app.firstWindow()
@@ -129,6 +138,33 @@ async function executeRollbackViaApp(page: Page, snapshotId: string, installRoot
   )
 }
 
+async function isHomebrewGitInstalled(): Promise<boolean> {
+  try {
+    await execFileAsync('sh', [
+      '-c',
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; [ -n "$BREW_BIN" ] && "$BREW_BIN" list --versions git >/dev/null 2>&1`,
+    ])
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function isScoopGitInstalled(): Promise<boolean> {
+  try {
+    await execFileAsync('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `$scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if (-not $scoop) { exit 1 }; & $scoop prefix git *> $null; exit $LASTEXITCODE`,
+    ])
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function runNodeInstallFlow(page: Page, managerLabel: string) {
   await expect(page.getByRole('button', { name: 'Node.js 开发环境' })).toBeVisible({
     timeout: 15_000,
@@ -202,11 +238,38 @@ const realRollbackCases = [
     }),
   },
   {
+    name: 'node nvm',
+    templateId: 'node-template',
+    buildOverrides: (installRoot: string) => ({
+      'node.nodeManager': 'nvm',
+      'node.installRootDir': installRoot,
+      'node.npmCacheDir': `${installRoot}-cache`,
+      'node.npmGlobalPrefix': `${installRoot}-global`,
+    }),
+  },
+  {
     name: 'java jdk',
     templateId: 'java-template',
     buildOverrides: (installRoot: string) => ({
       'java.javaManager': 'jdk',
       'java.installRootDir': installRoot,
+    }),
+  },
+  {
+    name: 'java sdkman',
+    templateId: 'java-template',
+    buildOverrides: (installRoot: string) => ({
+      'java.javaManager': 'sdkman',
+      'java.installRootDir': installRoot,
+    }),
+  },
+  {
+    name: 'python direct',
+    templateId: 'python-template',
+    buildOverrides: (installRoot: string) => ({
+      'python.pythonManager': 'python',
+      'python.pythonVersion': '3.12.10',
+      'python.installRootDir': installRoot,
     }),
   },
   {
@@ -226,6 +289,42 @@ const realRollbackCases = [
       'git.installRootDir': installRoot,
     }),
   },
+  ...(isMac
+    ? [
+        {
+          name: 'git homebrew',
+          templateId: 'git-template',
+          buildOverrides: (installRoot: string) => ({
+            'git.gitManager': 'homebrew',
+            'git.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isHomebrewGitInstalled()).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isHomebrewGitInstalled()).toBe(false)
+          },
+        },
+      ]
+    : []),
+  ...(isWindows
+    ? [
+        {
+          name: 'git scoop',
+          templateId: 'git-template',
+          buildOverrides: (installRoot: string) => ({
+            'git.gitManager': 'scoop',
+            'git.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isScoopGitInstalled()).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isScoopGitInstalled()).toBe(false)
+          },
+        },
+      ]
+    : []),
 ] as const
 
 test.describe('real install', () => {
@@ -308,6 +407,19 @@ test.describe('real install', () => {
     }
   })
 
+  test('python direct install reaches terminal success path', async () => {
+    test.setTimeout(600_000)
+    const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('python-direct'))
+    try {
+      await runPythonInstallFlow(page, '直接安装 Python', 600_000)
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
   // ============================================================
   // Git
   // ============================================================
@@ -376,7 +488,7 @@ test.describe('real rollback via built Electron app IPC', () => {
         expect(started.snapshotId).toBeTruthy()
         expect(started.pluginStatuses).toContain('verified_success')
         expect(started.pluginExecutionModes).toContain('real_run')
-        await expect(fs.access(installRoot)).resolves.toBeUndefined()
+        await testCase.verifyInstalledState?.()
 
         const rollbackResult = await executeRollbackViaApp(page, started.snapshotId!, installRoot)
 
@@ -384,6 +496,7 @@ test.describe('real rollback via built Electron app IPC', () => {
         expect(rollbackResult.executionMode).toBe('real_run')
         expect(rollbackResult.directoriesRemoved).toBe(1)
         await expect(fs.access(installRoot)).rejects.toThrow()
+        await testCase.verifyRolledBackState?.()
       } finally {
         await dumpTaskLogs(dataDir)
         await fs.rm(installRoot, { recursive: true, force: true })

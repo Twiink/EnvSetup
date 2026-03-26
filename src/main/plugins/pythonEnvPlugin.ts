@@ -108,6 +108,13 @@ function buildDownloadPlan(input: PythonPluginParams): DownloadArtifact[] {
   ]
 }
 
+export function planPythonDownloads(input: PluginExecutionInput): DownloadArtifact[] {
+  const params = toPythonParams(input)
+  const downloads = buildDownloadPlan(params)
+  assertOfficialDownloadPlan(downloads)
+  return downloads
+}
+
 function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
   validateOfficialDownloads(downloads)
 }
@@ -115,7 +122,11 @@ function assertOfficialDownloadPlan(downloads: DownloadArtifact[]): void {
 function toPythonParams(input: PluginExecutionInput): PythonPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
-  if (input.pythonManager !== 'python' && input.pythonManager !== 'conda' && input.pythonManager !== 'pkg') {
+  if (
+    input.pythonManager !== 'python' &&
+    input.pythonManager !== 'conda' &&
+    input.pythonManager !== 'pkg'
+  ) {
     throw new Error(
       translate(locale, {
         'zh-CN': 'python-env 需要 pythonManager=python|conda|pkg',

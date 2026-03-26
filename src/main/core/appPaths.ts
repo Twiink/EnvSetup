@@ -10,7 +10,15 @@ export type AppPaths = {
   downloadCacheDir: string
 }
 
-export function getAppPaths(baseDir = join(process.cwd(), '.envsetup-data')): AppPaths {
+function resolveDefaultAppDataDir(): string {
+  const overriddenBaseDir = process.env.ENVSETUP_DATA_DIR
+
+  return overriddenBaseDir && overriddenBaseDir.trim().length > 0
+    ? overriddenBaseDir
+    : join(process.cwd(), '.envsetup-data')
+}
+
+export function getAppPaths(baseDir = resolveDefaultAppDataDir()): AppPaths {
   return {
     rootDir: baseDir,
     tasksDir: join(baseDir, 'tasks'),

@@ -41,8 +41,9 @@ jobs:
   # Uses REAL plugins with dryRun=false. Downloads real artifacts,
   # runs real shell commands, verifies installed binaries, then
   # executes real rollback for both fresh-install and cleanup→install flows.
-  # Covers managed install roots for:
-  #   Node (direct+nvm), Java (jdk+sdkman), Python (conda+direct), Git (direct)
+  # Covers:
+  #   Node (direct+nvm), Java (jdk+sdkman), Python (conda+direct),
+  #   Git (direct+homebrew/scoop with package-manager uninstall rollback)
   # ============================================================
   real-install:
     strategy:
@@ -50,7 +51,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +77,7 @@ jobs:
           path: |
             tests/integration/
             /tmp/envsetup-real-*
+            test-results/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -124,6 +126,8 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: task-logs-${{ matrix.os }}
-          path: .envsetup-data/tasks/
+          path: |
+            test-results/envsetup-real-*-data/tasks/
+            test-results/envsetup-real-*-data/*.log
           if-no-files-found: ignore
           retention-days: 7

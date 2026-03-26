@@ -134,6 +134,7 @@ export default function App() {
   const [importMessage, setImportMessage] = useState<string>()
   const [taskProgressEvents, setTaskProgressEvents] = useState<TaskProgressEvent[]>([])
   const [taskMessage, setTaskMessage] = useState<string>()
+  const [cleanupBackup, setCleanupBackup] = useState<{ snapshotId: string; message: string }>()
   useEffect(() => {
     document.documentElement.lang = locale
     document.title = getUiText(locale, 'documentTitle')
@@ -228,6 +229,7 @@ export default function App() {
     setTask(undefined)
     setTaskProgressEvents([])
     setError(undefined)
+    setCleanupBackup(undefined)
   }
 
   function handleChange(key: string, value: Primitive) {
@@ -405,8 +407,8 @@ export default function App() {
     }
   }
 
-  async function handleCleanupDetection(detection: DetectedEnvironment) {
-    if (!selectedTemplate) {
+  async function handleCleanupDetections(detections: DetectedEnvironment[]) {
+    if (!selectedTemplate || detections.length === 0) {
       return
     }
 
@@ -414,15 +416,62 @@ export default function App() {
     setError(undefined)
 
     try {
-      await window.envSetup.cleanupEnvironment(detection)
+      const cleanupTargets = detections.filter((detection) => detection.cleanupSupported)
+      const cleanupResult = await window.envSetup.cleanupEnvironments(cleanupTargets)
+      const cleanupErrors = cleanupResult.errors.map((entry) => entry.error)
+      setCleanupBackup({
+        snapshotId: cleanupResult.snapshotId,
+        message: cleanupResult.message,
+      })
+      setTaskMessage(cleanupResult.message)
+
       const nextPrecheck = await window.envSetup.runPrecheck({
         templateId: selectedTemplate.id,
         values,
         locale,
       })
       setPrecheck(nextPrecheck)
+
+      if (cleanupErrors.length > 0) {
+        setError(cleanupErrors.join(' | '))
+      }
     } catch (cleanupError) {
       setError(cleanupError instanceof Error ? cleanupError.message : String(cleanupError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRollbackCleanup() {
+    if (!selectedTemplate || !cleanupBackup) {
+      return
+    }
+
+    setBusy(true)
+    setError(undefined)
+
+    try {
+      const rollbackResult = await window.envSetup.executeRollback({
+        snapshotId: cleanupBackup.snapshotId,
+      })
+      setTaskMessage(rollbackResult.message)
+
+      const nextPrecheck = await window.envSetup.runPrecheck({
+        templateId: selectedTemplate.id,
+        values,
+        locale,
+      })
+      setPrecheck(nextPrecheck)
+
+      if (rollbackResult.success) {
+        setCleanupBackup(undefined)
+      } else {
+        setError(
+          rollbackResult.errors.map((entry) => entry.error).join(' | ') || rollbackResult.message,
+        )
+      }
+    } catch (rollbackError) {
+      setError(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
     } finally {
       setBusy(false)
     }
@@ -572,6 +621,47 @@ export default function App() {
           </div>
         ) : null}
 
+        {cleanupBackup ? (
+          <div
+            role="status"
+            style={{
+              padding: '1.25rem',
+              borderRadius: '12px',
+              background: '#FFF8EC',
+              color: '#8B5A2B',
+              border: '1px solid #F3D8AC',
+              fontSize: '0.95rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              <strong>{getUiText(locale, 'cleanupRollbackReady')}</strong>
+              <span>{cleanupBackup.message}</span>
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleRollbackCleanup}
+              style={{
+                borderRadius: '6px',
+                border: '1px solid #D47A6A',
+                padding: '0.5rem 1rem',
+                background: busy ? '#F7F3EE' : '#FFF0EE',
+                color: busy ? '#A49C95' : '#D47A6A',
+                cursor: busy ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              }}
+            >
+              {getUiText(locale, 'rollbackCleanup')}
+            </button>
+          </div>
+        ) : null}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -624,7 +714,7 @@ export default function App() {
             disabled={!selectedTemplate || busy || Object.keys(validationErrors).length > 0}
             busy={busy}
             onRun={handleRunPrecheck}
-            onCleanup={handleCleanupDetection}
+            onCleanup={handleCleanupDetections}
           />
 
           <TaskPanel

@@ -1,32 +1,57 @@
+import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
-import { access, mkdir, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, rm } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { promisify } from 'node:util'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import type {
   AppPlatform,
   DetectedEnvironment,
+  EnvChange,
+  PluginInstallResult,
   PluginLifecycle,
+  Primitive,
+  ResolvedTemplate,
 } from '../../src/main/core/contracts'
-import { cleanupDetectedEnvironment } from '../../src/main/core/environment'
+import {
+  cleanupDetectedEnvironments,
+  collectCleanupTrackedPaths,
+  detectTemplateEnvironments,
+} from '../../src/main/core/environment'
+import { applyEnvChanges } from '../../src/main/core/envPersistence'
 import { executeRollback } from '../../src/main/core/rollback'
 import { createSnapshot, updateSnapshotMeta } from '../../src/main/core/snapshot'
 import { createTask, executeTask } from '../../src/main/core/task'
+import {
+  inferTemplateFieldPrefix,
+  loadTemplatesFromDirectory,
+} from '../../src/main/core/template'
 import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
 import javaEnvPlugin from '../../src/main/plugins/javaEnvPlugin'
 import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
 import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
+import {
+  resolvePythonInstallPaths,
+  resolveJavaInstallPaths,
+} from '../../src/main/core/platform'
 
+const execFileAsync = promisify(execFile)
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
+const isMac = process.platform === 'darwin'
+const isWindows = process.platform === 'win32'
 const platform: AppPlatform = process.platform as AppPlatform
+const originalEnv = { ...process.env }
 
 let suiteDir: string
 let sharedDownloadCacheDir: string
 let tmpDir: string
 let tasksDir: string
 let snapshotsDir: string
+let homeDir: string
+let templatesById = new Map<string, ResolvedTemplate>()
 
 type RealCycleCase = {
   name: string
@@ -36,6 +61,9 @@ type RealCycleCase = {
   templateId: string
   buildParams: (installRootDir: string) => Record<string, string>
   verifyPattern: RegExp
+  expectInstallRootAfterInstall?: boolean
+  verifyInstalledState?: () => Promise<void>
+  verifyRolledBackState?: () => Promise<void>
 }
 
 const realCycleCases: RealCycleCase[] = [
@@ -141,21 +169,82 @@ const realCycleCases: RealCycleCase[] = [
     }),
     verifyPattern: /git version/i,
   },
+  ...(isMac
+    ? [
+        {
+          name: 'Git Homebrew',
+          tool: 'git',
+          pluginId: 'git-env',
+          plugin: gitEnvPlugin,
+          templateId: 'git-template',
+          buildParams: (installRootDir: string) => ({
+            installRootDir,
+            gitManager: 'homebrew',
+            downloadCacheDir: sharedDownloadCacheDir,
+          }),
+          verifyPattern: /git version/i,
+          expectInstallRootAfterInstall: false,
+          verifyInstalledState: async () => {
+            expect(await isHomebrewGitInstalled()).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isHomebrewGitInstalled()).toBe(false)
+          },
+        } satisfies RealCycleCase,
+      ]
+    : []),
+  ...(isWindows
+    ? [
+        {
+          name: 'Git Scoop',
+          tool: 'git',
+          pluginId: 'git-env',
+          plugin: gitEnvPlugin,
+          templateId: 'git-template',
+          buildParams: (installRootDir: string) => ({
+            installRootDir,
+            gitManager: 'scoop',
+            downloadCacheDir: sharedDownloadCacheDir,
+          }),
+          verifyPattern: /git version/i,
+          expectInstallRootAfterInstall: false,
+          verifyInstalledState: async () => {
+            expect(await isScoopGitInstalled()).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isScoopGitInstalled()).toBe(false)
+          },
+        } satisfies RealCycleCase,
+      ]
+    : []),
 ]
 
 beforeAll(async () => {
   suiteDir = await mkdtemp(join(tmpdir(), 'envsetup-real-cycle-suite-'))
   sharedDownloadCacheDir = join(suiteDir, 'download-cache')
   await mkdir(sharedDownloadCacheDir, { recursive: true })
+  templatesById = new Map(
+    (await loadTemplatesFromDirectory(join(process.cwd(), 'fixtures', 'templates'))).map(
+      (template) => [template.id, template],
+    ),
+  )
 })
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'envsetup-real-cycle-'))
   tasksDir = join(tmpDir, 'tasks')
   snapshotsDir = join(tmpDir, 'snapshots')
+  homeDir = join(tmpDir, 'home')
+  await mkdir(homeDir, { recursive: true })
+  process.env = {
+    ...originalEnv,
+    HOME: homeDir,
+    ...(isWindows ? { USERPROFILE: homeDir } : {}),
+  }
 })
 
 afterEach(async () => {
+  process.env = { ...originalEnv }
   await rm(tmpDir, { recursive: true, force: true })
 })
 
@@ -169,18 +258,6 @@ async function pathExists(targetPath: string): Promise<boolean> {
     return true
   } catch {
     return false
-  }
-}
-
-function makeDetection(tool: RealCycleCase['tool'], installRootDir: string): DetectedEnvironment {
-  return {
-    id: `${tool}:managed_root:test:${installRootDir}`,
-    tool,
-    kind: 'managed_root',
-    path: installRootDir,
-    source: 'test',
-    cleanupSupported: true,
-    cleanupPath: installRootDir,
   }
 }
 
@@ -219,37 +296,237 @@ async function runRealInstall(testCase: RealCycleCase, installRootDir: string) {
     dryRun: false,
   })
 
-  return { snapshot, result }
+  return { snapshot, result, params }
 }
 
 async function assertRealInstallSucceeded(
   testCase: RealCycleCase,
   installRootDir: string,
+  pluginResult: PluginInstallResult | undefined,
   verifyChecks: string[],
-  executionMode: string | undefined,
   status: string,
   pluginStatus: string,
 ) {
   expect(status).toBe('succeeded')
   expect(pluginStatus).toBe('verified_success')
-  expect(executionMode).toBe('real_run')
+  expect(pluginResult?.executionMode).toBe('real_run')
   expect(verifyChecks.join('\n')).toMatch(testCase.verifyPattern)
-  expect(await pathExists(installRootDir)).toBe(true)
+
+  if (testCase.expectInstallRootAfterInstall === false) {
+    expect(await pathExists(installRootDir)).toBe(false)
+  } else {
+    expect(await pathExists(installRootDir)).toBe(true)
+  }
+
+  await testCase.verifyInstalledState?.()
 }
 
-async function assertRealRollbackSucceeded(snapshotId: string, installRootDir: string) {
-  const rollbackResult = await executeRollback(snapshotsDir, snapshotId, [], [installRootDir])
+async function assertRealRollbackSucceeded(
+  testCase: RealCycleCase,
+  snapshotId: string,
+  installRootDir: string,
+  rollbackCommands?: string[],
+) {
+  const rollbackResult = await executeRollback(snapshotsDir, snapshotId, [], [installRootDir], {
+    rollbackCommands,
+  })
 
   expect(rollbackResult.success).toBe(true)
   expect(rollbackResult.executionMode).toBe('real_run')
-  expect(rollbackResult.directoriesRemoved).toBe(1)
+  if (testCase.expectInstallRootAfterInstall !== false) {
+    expect(rollbackResult.directoriesRemoved).toBe(1)
+  }
   expect(await pathExists(installRootDir)).toBe(false)
+  await testCase.verifyRolledBackState?.()
+}
+
+async function commandSucceeds(file: string, args: string[]): Promise<boolean> {
+  try {
+    await execFileAsync(file, args)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function isHomebrewGitInstalled(): Promise<boolean> {
+  return commandSucceeds('sh', [
+    '-c',
+    `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; [ -n "$BREW_BIN" ] && "$BREW_BIN" list --versions git >/dev/null 2>&1`,
+  ])
+}
+
+async function isScoopGitInstalled(): Promise<boolean> {
+  return commandSucceeds('powershell', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    `$scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if (-not $scoop) { exit 1 }; & $scoop prefix git *> $null; exit $LASTEXITCODE`,
+  ])
+}
+
+function toTemplateValues(
+  testCase: RealCycleCase,
+  params: Record<string, string>,
+): Record<string, Primitive> {
+  const prefix = `${inferTemplateFieldPrefix(testCase.pluginId)}.`
+  return Object.fromEntries(Object.entries(params).map(([key, value]) => [`${prefix}${key}`, value]))
+}
+
+function getTemplate(testCase: RealCycleCase): ResolvedTemplate {
+  const template = templatesById.get(testCase.templateId)
+  if (!template) {
+    throw new Error(`Template not found: ${testCase.templateId}`)
+  }
+  return template
+}
+
+function expandWindowsEnv(value: string): string {
+  return value.replace(/%([^%]+)%/g, (_match, key: string) => process.env[key] ?? '')
+}
+
+function prependProcessPath(value: string) {
+  const pathSeparator = process.platform === 'win32' ? ';' : ':'
+  const normalizedValue = process.platform === 'win32' ? expandWindowsEnv(value) : value
+  process.env.PATH = [normalizedValue, process.env.PATH ?? ''].filter(Boolean).join(pathSeparator)
+}
+
+async function persistUserEnvChanges(changes: EnvChange[]) {
+  const userChanges = changes.filter((change) => change.scope === 'user')
+  await applyEnvChanges({ changes: userChanges, platform })
+
+  for (const change of userChanges) {
+    if (change.kind === 'env') {
+      process.env[change.key] = change.value
+      continue
+    }
+
+    if (change.kind === 'path') {
+      prependProcessPath(change.value)
+    }
+  }
+}
+
+async function hydrateDetectionEnvironment(
+  testCase: RealCycleCase,
+  params: Record<string, string>,
+) {
+  if (testCase.tool === 'python' && params.pythonManager === 'conda') {
+    const installPaths = resolvePythonInstallPaths({
+      ...params,
+      platform,
+      dryRun: false,
+    } as Parameters<typeof resolvePythonInstallPaths>[0])
+    process.env.CONDA_PREFIX = installPaths.condaEnvDir
+    if (platform === 'darwin') {
+      prependProcessPath(join(installPaths.condaDir, 'bin'))
+    }
+  }
+
+  if (testCase.tool === 'java' && params.javaManager === 'sdkman') {
+    const installPaths = resolveJavaInstallPaths({
+      ...params,
+      platform,
+      dryRun: false,
+    } as Parameters<typeof resolveJavaInstallPaths>[0])
+    process.env.SDKMAN_DIR = installPaths.sdkmanDir
+  }
+
+  if (testCase.name === 'Git Homebrew') {
+    try {
+      const { stdout } = await execFileAsync('sh', [
+        '-c',
+        'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" --prefix git; fi',
+      ])
+      const prefix = stdout.trim()
+      if (prefix.length > 0) {
+        prependProcessPath(join(prefix, 'bin'))
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  if (testCase.name === 'Git Scoop') {
+    const scoopRoot = join(process.env.USERPROFILE ?? homeDir, 'scoop')
+    process.env.SCOOP = scoopRoot
+    prependProcessPath(join(scoopRoot, 'shims'))
+  }
+}
+
+function pathBelongsToInstallRoot(candidatePath: string | undefined, installRootDir: string): boolean {
+  if (!candidatePath) {
+    return false
+  }
+
+  const normalizedCandidate = resolve(candidatePath)
+  const normalizedRoot = resolve(installRootDir)
+  const separator = process.platform === 'win32' ? '\\' : '/'
+
+  return (
+    normalizedCandidate === normalizedRoot ||
+    normalizedCandidate.startsWith(`${normalizedRoot}${separator}`)
+  )
+}
+
+function isHomebrewGitPath(candidatePath: string | undefined): boolean {
+  if (!candidatePath) {
+    return false
+  }
+
+  const normalizedPath = resolve(candidatePath)
+  return (
+    normalizedPath === '/opt/homebrew/bin/git' ||
+    normalizedPath === '/usr/local/bin/git' ||
+    normalizedPath.includes('/Cellar/git/') ||
+    normalizedPath.includes('/Homebrew/Cellar/git/')
+  )
+}
+
+function isScoopGitPath(candidatePath: string | undefined): boolean {
+  return Boolean(candidatePath && resolve(candidatePath).toLowerCase().includes('\\scoop\\'))
+}
+
+function isRelevantCleanupDetection(
+  testCase: RealCycleCase,
+  detection: DetectedEnvironment,
+  installRootDir: string,
+): boolean {
+  if (detection.tool !== testCase.tool) {
+    return false
+  }
+
+  if (
+    pathBelongsToInstallRoot(detection.path, installRootDir) ||
+    pathBelongsToInstallRoot(detection.cleanupPath, installRootDir)
+  ) {
+    return true
+  }
+
+  if (testCase.name === 'Git Homebrew') {
+    return isHomebrewGitPath(detection.path) || isHomebrewGitPath(detection.cleanupPath)
+  }
+
+  if (testCase.name === 'Git Scoop') {
+    return (
+      detection.source === 'SCOOP' ||
+      isScoopGitPath(detection.path) ||
+      isScoopGitPath(detection.cleanupPath)
+    )
+  }
+
+  return false
 }
 
 describe.skipIf(!isRealRun)('action real cycle matrix', () => {
   describe.each(realCycleCases)('$name', (testCase) => {
     const timeout =
-      testCase.tool === 'python' || testCase.name.includes('SDKMAN') ? 900_000 : 600_000
+      testCase.tool === 'python' ||
+      testCase.name.includes('SDKMAN') ||
+      testCase.name.includes('Homebrew')
+        ? 900_000
+        : 600_000
 
     it(
       'installs successfully with no existing environment and rolls back for real',
@@ -267,13 +544,18 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         await assertRealInstallSucceeded(
           testCase,
           installRootDir,
+          plugin.lastResult,
           plugin.verifyResult?.checks ?? [],
-          plugin.lastResult?.executionMode,
           result.status,
           plugin.status,
         )
 
-        await assertRealRollbackSucceeded(snapshot.id, installRootDir)
+        await assertRealRollbackSucceeded(
+          testCase,
+          snapshot.id,
+          installRootDir,
+          plugin.lastResult?.rollbackCommands,
+        )
       },
       timeout,
     )
@@ -286,28 +568,75 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           `${testCase.tool}-${testCase.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-cleanup`,
         )
 
-        await mkdir(installRootDir, { recursive: true })
-        await writeFile(join(installRootDir, 'stale.txt'), 'stale')
+        const seededInstall = await runRealInstall(testCase, installRootDir)
+        const seededPlugin = seededInstall.result.plugins[0]
 
-        const cleanupResult = await cleanupDetectedEnvironment(
-          makeDetection(testCase.tool, installRootDir),
+        await assertRealInstallSucceeded(
+          testCase,
+          installRootDir,
+          seededPlugin.lastResult,
+          seededPlugin.verifyResult?.checks ?? [],
+          seededInstall.result.status,
+          seededPlugin.status,
         )
-        expect(cleanupResult.removedPath).toBe(installRootDir)
-        expect(await pathExists(installRootDir)).toBe(false)
 
-        const { snapshot, result } = await runRealInstall(testCase, installRootDir)
+        await persistUserEnvChanges(seededPlugin.lastResult?.envChanges ?? [])
+        await hydrateDetectionEnvironment(testCase, seededInstall.params)
+
+        const detections = await detectTemplateEnvironments(
+          getTemplate(testCase),
+          toTemplateValues(testCase, seededInstall.params),
+        )
+        const cleanupTargets = detections.filter(
+          (detection) =>
+            detection.cleanupSupported &&
+            isRelevantCleanupDetection(testCase, detection, installRootDir),
+        )
+
+        expect(cleanupTargets.length).toBeGreaterThan(0)
+
+        const cleanupTrackedPaths = await collectCleanupTrackedPaths(cleanupTargets)
+        expect(cleanupTrackedPaths.length).toBeGreaterThan(0)
+
+        const cleanupSnapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: `${seededInstall.result.id}-cleanup`,
+          type: 'manual',
+          label: 'cleanup-backup',
+          trackedPaths: cleanupTrackedPaths,
+        })
+        await updateSnapshotMeta(snapshotsDir, cleanupSnapshot)
+
+        const cleanupResult = await cleanupDetectedEnvironments(cleanupTargets)
+        expect(cleanupResult.errors).toEqual([])
+
+        if (testCase.expectInstallRootAfterInstall === false) {
+          await testCase.verifyRolledBackState?.()
+        } else {
+          expect(await pathExists(installRootDir)).toBe(false)
+        }
+
+        const { snapshot, result, params } = await runRealInstall(testCase, installRootDir)
         const plugin = result.plugins[0]
 
         await assertRealInstallSucceeded(
           testCase,
           installRootDir,
+          plugin.lastResult,
           plugin.verifyResult?.checks ?? [],
-          plugin.lastResult?.executionMode,
           result.status,
           plugin.status,
         )
 
-        await assertRealRollbackSucceeded(snapshot.id, installRootDir)
+        await persistUserEnvChanges(plugin.lastResult?.envChanges ?? [])
+        await hydrateDetectionEnvironment(testCase, params)
+
+        await assertRealRollbackSucceeded(
+          testCase,
+          snapshot.id,
+          installRootDir,
+          plugin.lastResult?.rollbackCommands,
+        )
       },
       timeout,
     )

@@ -23,6 +23,21 @@ jobs:
 
       - run: npm ci
 
+      - name: Run real integration matrix
+        env:
+          ENVSETUP_REAL_RUN: '1'
+        run: npm run test:integration:real -- --reporter=verbose
+        timeout-minutes: 120
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E real install + rollback
+        env:
+          ENVSETUP_REAL_RUN: '1'
+        run: npm run test:e2e:real
+        timeout-minutes: 45
+
       - name: Build and package (without publish)
         run: npx electron-vite build && npx electron-builder --publish never
         env:

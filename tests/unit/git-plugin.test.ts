@@ -7,15 +7,13 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi
-    .fn()
-    .mockResolvedValue([
-      {
-        artifact: { url: 'https://mock.test/git-installer' },
-        localPath: '/tmp/cached',
-        cacheHit: true,
-      },
-    ]),
+  downloadArtifacts: vi.fn().mockResolvedValue([
+    {
+      artifact: { url: 'https://mock.test/git-installer' },
+      localPath: '/tmp/cached',
+      cacheHit: true,
+    },
+  ]),
   validateOfficialDownloads: vi.fn(),
 }))
 
@@ -60,6 +58,7 @@ describe('git env plugin', () => {
 
     expect(result.downloads[0].url).toContain('raw.githubusercontent.com/Homebrew/install')
     expect(result.commands.join('\n')).toContain('brew install git')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula git')
   })
 
   it('returns dry-run result for scoop mode on win32', async () => {
@@ -72,6 +71,7 @@ describe('git env plugin', () => {
 
     expect(result.downloads[0].url).toContain('get.scoop.sh')
     expect(result.commands.join('\n')).toContain('scoop install git')
+    expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
   })
 
   it('rejects homebrew mode on win32', async () => {

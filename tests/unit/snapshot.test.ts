@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { access, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -212,6 +212,28 @@ describe('Snapshot - Index Creation', () => {
     expect(loaded.id).toBe(snapshot.id)
     expect(loaded.taskId).toBe('task-abc')
     expect(loaded.label).toBe('my snapshot')
+  })
+
+  it('should recursively capture directory trees and empty directories', async () => {
+    const rootDir = join(testDir, 'toolchain')
+    const nestedDir = join(rootDir, 'bin')
+    const emptyDir = join(rootDir, 'empty')
+    await mkdir(nestedDir, { recursive: true })
+    await mkdir(emptyDir, { recursive: true })
+    await writeFile(join(nestedDir, 'node'), 'node-binary')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-dir',
+      type: 'auto',
+      trackedPaths: [rootDir],
+    })
+
+    expect(snapshot.directories?.[rootDir]).toBeDefined()
+    expect(snapshot.directories?.[nestedDir]).toBeDefined()
+    expect(snapshot.directories?.[emptyDir]).toBeDefined()
+    expect(snapshot.files[join(nestedDir, 'node')]).toBeDefined()
+    expect(snapshot.metadata.directoryCount).toBe(3)
   })
 })
 
@@ -513,5 +535,36 @@ describe('Snapshot - Apply & Restore', () => {
     expect(result.filesSkipped).toBe(1)
     expect(result.envVariablesRestored).toBe(0)
     expect(result.errors).toHaveLength(0)
+  })
+
+  it('should restore nested files and empty directories when restoring a tracked directory', async () => {
+    const rootDir = join(testDir, 'toolchain')
+    const nestedDir = join(rootDir, 'bin')
+    const emptyDir = join(rootDir, 'empty')
+    const nestedFile = join(nestedDir, 'node')
+    await mkdir(nestedDir, { recursive: true })
+    await mkdir(emptyDir, { recursive: true })
+    await writeFile(nestedFile, 'node-binary')
+
+    const snapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-dir-restore',
+      type: 'auto',
+      trackedPaths: [rootDir],
+    })
+
+    await rm(rootDir, { recursive: true, force: true })
+
+    const result = await applySnapshot({
+      baseDir: testDir,
+      snapshotId: snapshot.id,
+      mode: 'partial',
+      filePaths: [rootDir],
+    })
+
+    expect(result.filesRestored).toBe(1)
+    expect(result.filesSkipped).toBe(0)
+    await expect(access(emptyDir, constants.F_OK)).resolves.toBeUndefined()
+    expect(await readFile(nestedFile, 'utf8')).toBe('node-binary')
   })
 })

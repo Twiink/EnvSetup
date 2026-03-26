@@ -18,6 +18,23 @@ describe('getAppPaths', () => {
     expect(paths.snapshotsDir).toBe(join(base, 'snapshots'))
     expect(paths.downloadCacheDir).toBe(join(base, 'downloads-cache'))
   })
+
+  it('uses ENVSETUP_DATA_DIR when baseDir is omitted', () => {
+    const originalOverride = process.env.ENVSETUP_DATA_DIR
+    process.env.ENVSETUP_DATA_DIR = '/tmp/envsetup-custom-data'
+
+    try {
+      const paths = getAppPaths()
+      expect(paths.rootDir).toBe('/tmp/envsetup-custom-data')
+      expect(paths.tasksDir).toBe(join('/tmp/envsetup-custom-data', 'tasks'))
+    } finally {
+      if (originalOverride === undefined) {
+        delete process.env.ENVSETUP_DATA_DIR
+      } else {
+        process.env.ENVSETUP_DATA_DIR = originalOverride
+      }
+    }
+  })
 })
 
 describe('ensureAppPaths', () => {

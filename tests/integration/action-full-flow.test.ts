@@ -4,9 +4,20 @@ import { join } from 'node:path'
 import { mkdtemp } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import type { AppPlatform, DetectedEnvironment, PluginExecutionInput, PluginInstallResult, PluginLifecycle, PluginVerifyResult } from '../../src/main/core/contracts'
+import type {
+  AppPlatform,
+  DetectedEnvironment,
+  PluginExecutionInput,
+  PluginInstallResult,
+  PluginLifecycle,
+  PluginVerifyResult,
+} from '../../src/main/core/contracts'
 import { cleanupDetectedEnvironment } from '../../src/main/core/environment'
-import { createSnapshot, markSnapshotDeletable, updateSnapshotMeta } from '../../src/main/core/snapshot'
+import {
+  createSnapshot,
+  markSnapshotDeletable,
+  updateSnapshotMeta,
+} from '../../src/main/core/snapshot'
 import { createTask, executeTask, loadTask } from '../../src/main/core/task'
 
 import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
@@ -51,7 +62,7 @@ const cases: Case[] = [
   { tool: 'git', managerKey: 'gitManager', manager: 'git', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'homebrew', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'scoop', versionKey: 'gitVersion' },
-].filter(c => {
+].filter((c) => {
   if (c.manager === 'homebrew' && process.platform !== 'darwin') return false
   if (c.manager === 'scoop' && process.platform !== 'win32') return false
   return true
@@ -68,7 +79,14 @@ function makePlugin(tool: string, manager: string): PluginLifecycle {
       return {
         status: 'installed_unverified',
         executionMode: 'real_run',
-        version: String(input.version ?? input.nodeVersion ?? input.javaVersion ?? input.pythonVersion ?? input.gitVersion ?? '1.0.0'),
+        version: String(
+          input.version ??
+            input.nodeVersion ??
+            input.javaVersion ??
+            input.pythonVersion ??
+            input.gitVersion ??
+            '1.0.0',
+        ),
         paths: { installRootDir, markerPath },
         envChanges: [
           {
@@ -109,6 +127,16 @@ function makeDetection(tool: Case['tool'], installRootDir: string): DetectedEnvi
     cleanupSupported: true,
     cleanupPath: installRootDir,
   }
+}
+
+async function expectPersistedRollbackMetadata(
+  taskId: string,
+  tasksDir: string,
+  expectedCommands?: string[],
+) {
+  const persisted = await loadTask(taskId, tasksDir)
+  expect(persisted.plugins[0].lastResult?.rollbackCommands ?? []).toEqual(expectedCommands ?? [])
+  return persisted
 }
 
 describe('action full flow integration', () => {
@@ -238,42 +266,76 @@ function buildRealCases(tmpBase: string, downloadCacheDir: string): RealCase[] {
       pluginId: 'node-env',
       plugin: nodeEnvPlugin,
       templateId: 'node-template',
-      params: { installRootDir: join(tmpBase, 'node-direct'), nodeManager: 'node', nodeVersion: '20.20.1', npmCacheDir: join(tmpBase, 'npm-cache'), npmGlobalPrefix: join(tmpBase, 'npm-global'), downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'node-direct'),
+        nodeManager: 'node',
+        nodeVersion: '20.20.1',
+        npmCacheDir: join(tmpBase, 'npm-cache'),
+        npmGlobalPrefix: join(tmpBase, 'npm-global'),
+        downloadCacheDir,
+      },
     },
     {
       tool: 'node',
       pluginId: 'node-env',
       plugin: nodeEnvPlugin,
       templateId: 'node-template',
-      params: { installRootDir: join(tmpBase, 'node-nvm'), nodeManager: 'nvm', nodeVersion: '20.20.1', npmCacheDir: join(tmpBase, 'npm-cache-nvm'), npmGlobalPrefix: join(tmpBase, 'npm-global-nvm'), downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'node-nvm'),
+        nodeManager: 'nvm',
+        nodeVersion: '20.20.1',
+        npmCacheDir: join(tmpBase, 'npm-cache-nvm'),
+        npmGlobalPrefix: join(tmpBase, 'npm-global-nvm'),
+        downloadCacheDir,
+      },
     },
     {
       tool: 'java',
       pluginId: 'java-env',
       plugin: javaEnvPlugin,
       templateId: 'java-template',
-      params: { installRootDir: join(tmpBase, 'java-jdk'), javaManager: 'jdk', javaVersion: '21', downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'java-jdk'),
+        javaManager: 'jdk',
+        javaVersion: '21',
+        downloadCacheDir,
+      },
     },
     {
       tool: 'java',
       pluginId: 'java-env',
       plugin: javaEnvPlugin,
       templateId: 'java-template',
-      params: { installRootDir: join(tmpBase, 'java-sdkman'), javaManager: 'sdkman', javaVersion: '21', downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'java-sdkman'),
+        javaManager: 'sdkman',
+        javaVersion: '21',
+        downloadCacheDir,
+      },
     },
     {
       tool: 'python',
       pluginId: 'python-env',
       plugin: pythonEnvPlugin,
       templateId: 'python-template',
-      params: { installRootDir: join(tmpBase, 'python-conda'), pythonManager: 'conda', pythonVersion: '3.12.10', downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'python-conda'),
+        pythonManager: 'conda',
+        pythonVersion: '3.12.10',
+        downloadCacheDir,
+      },
     },
     {
       tool: 'python',
       pluginId: 'python-env',
       plugin: pythonEnvPlugin,
       templateId: 'python-template',
-      params: { installRootDir: join(tmpBase, 'python-direct'), pythonManager: 'python', pythonVersion: '3.12.10', downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'python-direct'),
+        pythonManager: 'python',
+        pythonVersion: '3.12.10',
+        downloadCacheDir,
+      },
     },
     {
       tool: 'git',
@@ -290,7 +352,11 @@ function buildRealCases(tmpBase: string, downloadCacheDir: string): RealCase[] {
       pluginId: 'git-env',
       plugin: gitEnvPlugin,
       templateId: 'git-template',
-      params: { installRootDir: join(tmpBase, 'git-brew'), gitManager: 'homebrew', downloadCacheDir },
+      params: {
+        installRootDir: join(tmpBase, 'git-brew'),
+        gitManager: 'homebrew',
+        downloadCacheDir,
+      },
     })
   }
 
@@ -326,83 +392,107 @@ describe.skipIf(!isRealRun)('action full flow — real plugins', () => {
     await rm(realTmpDir, { recursive: true, force: true })
   })
 
-  it('fresh install succeeds for all tools with real plugins', async () => {
-    const realCases = buildRealCases(realTmpDir, realDownloadCacheDir)
+  it(
+    'fresh install succeeds for all tools with real plugins',
+    async () => {
+      const realCases = buildRealCases(realTmpDir, realDownloadCacheDir)
 
-    for (const rc of realCases) {
-      const task = createTask({
-        templateId: rc.templateId,
-        templateVersion: '1.0.0',
-        params: rc.params,
-        plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params: rc.params }],
-      })
+      for (const rc of realCases) {
+        const task = createTask({
+          templateId: rc.templateId,
+          templateVersion: '1.0.0',
+          params: rc.params,
+          plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params: rc.params }],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: realSnapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(realSnapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: realSnapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(realSnapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { [rc.pluginId]: rc.plugin },
-        platform,
-        tasksDir: realTasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { [rc.pluginId]: rc.plugin },
+          platform,
+          tasksDir: realTasksDir,
+          dryRun: false,
+        })
 
-      await markSnapshotDeletable(realSnapshotsDir, snapshot.id)
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }
-  }, TIMEOUT)
+        await markSnapshotDeletable(realSnapshotsDir, snapshot.id)
+        const persisted = await expectPersistedRollbackMetadata(
+          task.id,
+          realTasksDir,
+          result.plugins[0].lastResult?.rollbackCommands,
+        )
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+        if (rc.params.gitManager === 'homebrew' || rc.params.gitManager === 'scoop') {
+          expect(persisted.plugins[0].lastResult?.rollbackCommands?.length ?? 0).toBeGreaterThan(0)
+        }
+      }
+    },
+    TIMEOUT,
+  )
 
-  it('cleanup existing env then install succeeds for all tools with real plugins', async () => {
-    const realCases = buildRealCases(realTmpDir, realDownloadCacheDir)
+  it(
+    'cleanup existing env then install succeeds for all tools with real plugins',
+    async () => {
+      const realCases = buildRealCases(realTmpDir, realDownloadCacheDir)
 
-    for (const rc of realCases) {
-      const installRootDir = rc.params.installRootDir
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'stale.txt'), 'old')
+      for (const rc of realCases) {
+        const installRootDir = rc.params.installRootDir
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'stale.txt'), 'old')
 
-      await cleanupDetectedEnvironment({
-        id: `${rc.tool}:managed_root:test:${installRootDir}`,
-        tool: rc.tool,
-        kind: 'managed_root',
-        path: installRootDir,
-        source: 'test',
-        cleanupSupported: true,
-        cleanupPath: installRootDir,
-      })
+        await cleanupDetectedEnvironment({
+          id: `${rc.tool}:managed_root:test:${installRootDir}`,
+          tool: rc.tool,
+          kind: 'managed_root',
+          path: installRootDir,
+          source: 'test',
+          cleanupSupported: true,
+          cleanupPath: installRootDir,
+        })
 
-      const task = createTask({
-        templateId: rc.templateId,
-        templateVersion: '1.0.0',
-        params: rc.params,
-        plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params: rc.params }],
-      })
+        const task = createTask({
+          templateId: rc.templateId,
+          templateVersion: '1.0.0',
+          params: rc.params,
+          plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params: rc.params }],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: realSnapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(realSnapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: realSnapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(realSnapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { [rc.pluginId]: rc.plugin },
-        platform,
-        tasksDir: realTasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { [rc.pluginId]: rc.plugin },
+          platform,
+          tasksDir: realTasksDir,
+          dryRun: false,
+        })
 
-      await markSnapshotDeletable(realSnapshotsDir, snapshot.id)
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }
-  }, TIMEOUT)
+        await markSnapshotDeletable(realSnapshotsDir, snapshot.id)
+        const persisted = await expectPersistedRollbackMetadata(
+          task.id,
+          realTasksDir,
+          result.plugins[0].lastResult?.rollbackCommands,
+        )
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+        if (rc.params.gitManager === 'homebrew' || rc.params.gitManager === 'scoop') {
+          expect(persisted.plugins[0].lastResult?.rollbackCommands?.length ?? 0).toBeGreaterThan(0)
+        }
+      }
+    },
+    TIMEOUT,
+  )
 })

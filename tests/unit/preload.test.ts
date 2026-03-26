@@ -50,9 +50,11 @@ describe('preload', () => {
 
     api.cancelTask('task-1')
     api.cleanupEnvironment(detection)
+    api.cleanupEnvironments([detection])
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'task:cancel', 'task-1')
     expect(invoke).toHaveBeenNthCalledWith(2, 'environment:cleanup', detection)
+    expect(invoke).toHaveBeenNthCalledWith(3, 'environment:cleanup-batch', [detection])
   })
 
   it('maps snapshot actions to IPC invokes', async () => {
@@ -106,7 +108,16 @@ describe('preload', () => {
     expect(on).toHaveBeenCalledWith('task:progress', expect.any(Function))
 
     const handler = on.mock.calls[0][1]
-    handler({}, { taskId: 'task-1', pluginId: 'node-env', type: 'command_done', message: 'ok', timestamp: new Date().toISOString() })
+    handler(
+      {},
+      {
+        taskId: 'task-1',
+        pluginId: 'node-env',
+        type: 'command_done',
+        message: 'ok',
+        timestamp: new Date().toISOString(),
+      },
+    )
     expect(callback).toHaveBeenCalled()
 
     api.removeTaskProgressListener()

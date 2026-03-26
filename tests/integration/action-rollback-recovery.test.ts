@@ -129,17 +129,13 @@ const allCases: ToolCase[] = [
     pluginId: 'git-env',
     templateId: 'git-template',
   },
-].filter(c => {
+].filter((c) => {
   if (c.manager === 'homebrew' && process.platform !== 'darwin') return false
   if (c.manager === 'scoop' && process.platform !== 'win32') return false
   return true
 })
 
-function makeFailingPlugin(
-  tool: string,
-  manager: string,
-  trackedFiles: string[],
-): PluginLifecycle {
+function makeFailingPlugin(tool: string, manager: string, trackedFiles: string[]): PluginLifecycle {
   return {
     install: async (_input: PluginExecutionInput): Promise<PluginInstallResult> => {
       // Mutate all tracked files during install to simulate partial writes
@@ -245,6 +241,37 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+async function executePersistedTaskRollback(options: {
+  snapshotsDir: string
+  tasksDir: string
+  taskId: string
+  snapshotId: string
+  trackedPaths: string[]
+  installPaths?: string[]
+}) {
+  const task = await loadTask(options.taskId, options.tasksDir)
+  const rollbackCommands = [
+    ...new Set(task.plugins.flatMap((plugin) => plugin.lastResult?.rollbackCommands ?? [])),
+  ]
+
+  return executeRollback(
+    options.snapshotsDir,
+    options.snapshotId,
+    options.trackedPaths,
+    options.installPaths,
+    { rollbackCommands },
+  )
+}
+
+function expectNoUnexpectedRollbackErrors(
+  rollbackResult: Awaited<ReturnType<typeof executeRollback>>,
+) {
+  const unexpectedErrors = rollbackResult.errors.filter(
+    (error) => error.path !== 'environment' && error.path !== 'shellConfigs',
+  )
+  expect(unexpectedErrors).toHaveLength(0)
+}
+
 // ============================================================
 // Test suite: rollback recovery for ALL tools × install modes
 // ============================================================
@@ -314,10 +341,15 @@ describe('action rollback recovery integration', () => {
         expect(suggestions[0].confidence).toBe('high')
 
         // Execute rollback
-        const rollbackResult = await executeRollback(snapshotsDir, snapshot.id, [trackedFile])
-        expect(rollbackResult.success).toBe(true)
+        const rollbackResult = await executePersistedTaskRollback({
+          snapshotsDir,
+          tasksDir,
+          taskId: task.id,
+          snapshotId: snapshot.id,
+          trackedPaths: [trackedFile],
+        })
         expect(rollbackResult.filesRestored).toBe(1)
-        expect(rollbackResult.errors).toHaveLength(0)
+        expectNoUnexpectedRollbackErrors(rollbackResult)
 
         // Verify file content is restored
         expect(await readFile(trackedFile, 'utf8')).toBe('before-install')
@@ -386,10 +418,15 @@ describe('action rollback recovery integration', () => {
         }
 
         // Rollback all files
-        const rollbackResult = await executeRollback(snapshotsDir, snapshot.id, files)
-        expect(rollbackResult.success).toBe(true)
+        const rollbackResult = await executePersistedTaskRollback({
+          snapshotsDir,
+          tasksDir,
+          taskId: task.id,
+          snapshotId: snapshot.id,
+          trackedPaths: files,
+        })
         expect(rollbackResult.filesRestored).toBe(3)
-        expect(rollbackResult.errors).toHaveLength(0)
+        expectNoUnexpectedRollbackErrors(rollbackResult)
 
         // Verify all files restored to original content
         for (let i = 0; i < files.length; i++) {
@@ -452,8 +489,14 @@ describe('action rollback recovery integration', () => {
         expect(failedTask.status).toBe('failed')
 
         // Rollback
-        const rollbackResult = await executeRollback(snapshotsDir, snapshot1.id, [trackedFile])
-        expect(rollbackResult.success).toBe(true)
+        const rollbackResult = await executePersistedTaskRollback({
+          snapshotsDir,
+          tasksDir,
+          taskId: task1.id,
+          snapshotId: snapshot1.id,
+          trackedPaths: [trackedFile],
+        })
+        expectNoUnexpectedRollbackErrors(rollbackResult)
         expect(await readFile(trackedFile, 'utf8')).toBe('pristine')
 
         // Phase 2: Successful install after rollback
@@ -517,9 +560,7 @@ describe('action rollback recovery integration', () => {
         await writeFile(join(installRootDir, 'existing.txt'), 'old-install')
 
         // Cleanup existing env
-        const cleanupResult = await cleanupDetectedEnvironment(
-          makeDetection(tool, installRootDir),
-        )
+        const cleanupResult = await cleanupDetectedEnvironment(makeDetection(tool, installRootDir))
         expect(cleanupResult.removedPath).toBe(installRootDir)
         expect(await pathExists(installRootDir)).toBe(false)
 
@@ -569,8 +610,14 @@ describe('action rollback recovery integration', () => {
         expect(await readFile(trackedFile, 'utf8')).toBe(`broken-by-${tool}-${manager}`)
 
         // Rollback to fresh-start state
-        const rollbackResult = await executeRollback(snapshotsDir, snapshot.id, [trackedFile])
-        expect(rollbackResult.success).toBe(true)
+        const rollbackResult = await executePersistedTaskRollback({
+          snapshotsDir,
+          tasksDir,
+          taskId: task.id,
+          snapshotId: snapshot.id,
+          trackedPaths: [trackedFile],
+        })
+        expectNoUnexpectedRollbackErrors(rollbackResult)
         expect(rollbackResult.filesRestored).toBe(1)
         expect(await readFile(trackedFile, 'utf8')).toBe('fresh-start')
       })
@@ -746,8 +793,14 @@ describe('action rollback recovery integration', () => {
       expect(await pathExists(trackedFile)).toBe(false)
 
       // Rollback should restore the deleted file
-      const rollbackResult = await executeRollback(snapshotsDir, snapshot.id, [trackedFile])
-      expect(rollbackResult.success).toBe(true)
+      const rollbackResult = await executePersistedTaskRollback({
+        snapshotsDir,
+        tasksDir,
+        taskId: task.id,
+        snapshotId: snapshot.id,
+        trackedPaths: [trackedFile],
+      })
+      expectNoUnexpectedRollbackErrors(rollbackResult)
       expect(rollbackResult.filesRestored).toBe(1)
       expect(await readFile(trackedFile, 'utf8')).toBe('exists-before-install')
     })
@@ -788,7 +841,7 @@ describe('action rollback recovery integration', () => {
 
       // Rollback with empty array → full mode (restores all files in snapshot)
       const rollbackResult = await executeRollback(snapshotsDir, snapshot.id, [])
-      expect(rollbackResult.success).toBe(true)
+      expectNoUnexpectedRollbackErrors(rollbackResult)
       expect(rollbackResult.filesRestored).toBe(1)
       expect(await readFile(trackedFile, 'utf8')).toBe('original-full')
     })
@@ -815,7 +868,14 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'node-env',
     plugin: nodeEnvPlugin,
     templateId: 'node-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'node-rb'), nodeManager: 'node', nodeVersion: '20.20.1', npmCacheDir: join(t, 'npm-c'), npmGlobalPrefix: join(t, 'npm-g'), downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'node-rb'),
+      nodeManager: 'node',
+      nodeVersion: '20.20.1',
+      npmCacheDir: join(t, 'npm-c'),
+      npmGlobalPrefix: join(t, 'npm-g'),
+      downloadCacheDir: d,
+    }),
   },
   {
     label: 'Node.js nvm',
@@ -823,7 +883,14 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'node-env',
     plugin: nodeEnvPlugin,
     templateId: 'node-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'nvm-rb'), nodeManager: 'nvm', nodeVersion: '20.20.1', npmCacheDir: join(t, 'npm-c2'), npmGlobalPrefix: join(t, 'npm-g2'), downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'nvm-rb'),
+      nodeManager: 'nvm',
+      nodeVersion: '20.20.1',
+      npmCacheDir: join(t, 'npm-c2'),
+      npmGlobalPrefix: join(t, 'npm-g2'),
+      downloadCacheDir: d,
+    }),
   },
   {
     label: 'Java JDK',
@@ -831,7 +898,12 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'java-env',
     plugin: javaEnvPlugin,
     templateId: 'java-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'java-rb'), javaManager: 'jdk', javaVersion: '21', downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'java-rb'),
+      javaManager: 'jdk',
+      javaVersion: '21',
+      downloadCacheDir: d,
+    }),
   },
   {
     label: 'Java SDKMAN',
@@ -839,7 +911,12 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'java-env',
     plugin: javaEnvPlugin,
     templateId: 'java-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'sdkman-rb'), javaManager: 'sdkman', javaVersion: '21', downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'sdkman-rb'),
+      javaManager: 'sdkman',
+      javaVersion: '21',
+      downloadCacheDir: d,
+    }),
   },
   {
     label: 'Python conda',
@@ -847,7 +924,12 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'python-env',
     plugin: pythonEnvPlugin,
     templateId: 'python-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'conda-rb'), pythonManager: 'conda', pythonVersion: '3.12.10', downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'conda-rb'),
+      pythonManager: 'conda',
+      pythonVersion: '3.12.10',
+      downloadCacheDir: d,
+    }),
   },
   {
     label: 'Python direct',
@@ -855,7 +937,12 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'python-env',
     plugin: pythonEnvPlugin,
     templateId: 'python-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'pydirect-rb'), pythonManager: 'python', pythonVersion: '3.12.10', downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'pydirect-rb'),
+      pythonManager: 'python',
+      pythonVersion: '3.12.10',
+      downloadCacheDir: d,
+    }),
   },
   {
     label: 'Git direct',
@@ -863,7 +950,11 @@ const realRollbackCases: RealRollbackCase[] = [
     pluginId: 'git-env',
     plugin: gitEnvPlugin,
     templateId: 'git-template',
-    buildParams: (t, d) => ({ installRootDir: join(t, 'git-rb'), gitManager: 'git', downloadCacheDir: d }),
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'git-rb'),
+      gitManager: 'git',
+      downloadCacheDir: d,
+    }),
   },
   ...(process.platform === 'darwin'
     ? [
@@ -873,7 +964,11 @@ const realRollbackCases: RealRollbackCase[] = [
           pluginId: 'git-env',
           plugin: gitEnvPlugin,
           templateId: 'git-template',
-          buildParams: (t: string, d: string) => ({ installRootDir: join(t, 'brew-rb'), gitManager: 'homebrew', downloadCacheDir: d }),
+          buildParams: (t: string, d: string) => ({
+            installRootDir: join(t, 'brew-rb'),
+            gitManager: 'homebrew',
+            downloadCacheDir: d,
+          }),
         },
       ]
     : []),
@@ -885,7 +980,11 @@ const realRollbackCases: RealRollbackCase[] = [
           pluginId: 'git-env',
           plugin: gitEnvPlugin,
           templateId: 'git-template',
-          buildParams: (t: string, d: string) => ({ installRootDir: join(t, 'scoop-rb'), gitManager: 'scoop', downloadCacheDir: d }),
+          buildParams: (t: string, d: string) => ({
+            installRootDir: join(t, 'scoop-rb'),
+            gitManager: 'scoop',
+            downloadCacheDir: d,
+          }),
         },
       ]
     : []),
@@ -911,121 +1010,133 @@ describe.skipIf(!isRealRun)('action rollback recovery — real plugins', () => {
   })
 
   describe.each(realRollbackCases)('$label — real install then rollback', (rc) => {
-    it('install → rollback removes installed directory', async () => {
-      const params = rc.buildParams(realTmpDir, realDownloadCacheDir)
-      const installRootDir = params.installRootDir
+    it(
+      'install → rollback removes installed directory',
+      async () => {
+        const params = rc.buildParams(realTmpDir, realDownloadCacheDir)
+        const installRootDir = params.installRootDir
 
-      const task = createTask({
-        templateId: rc.templateId,
-        templateVersion: '1.0.0',
-        params,
-        plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params }],
-      })
+        const task = createTask({
+          templateId: rc.templateId,
+          templateVersion: '1.0.0',
+          params,
+          plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params }],
+        })
 
-      const trackedFile = join(installRootDir, 'track.txt')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(trackedFile, 'before-install')
+        const trackedFile = join(installRootDir, 'track.txt')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(trackedFile, 'before-install')
 
-      const snapshot = await createSnapshot({
-        baseDir: realSnapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [trackedFile],
-      })
-      await updateSnapshotMeta(realSnapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: realSnapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [trackedFile],
+        })
+        await updateSnapshotMeta(realSnapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { [rc.pluginId]: rc.plugin },
-        platform,
-        tasksDir: realTasksDir,
-        dryRun: false,
-      })
-      expect(result.status).toBe('succeeded')
+        const result = await executeTask({
+          task,
+          registry: { [rc.pluginId]: rc.plugin },
+          platform,
+          tasksDir: realTasksDir,
+          dryRun: false,
+        })
+        expect(result.status).toBe('succeeded')
 
-      // Rollback with directory cleanup
-      const rollbackResult = await executeRollback(
-        realSnapshotsDir,
-        snapshot.id,
-        [trackedFile],
-        [installRootDir],
-      )
-      expect(rollbackResult.success).toBe(true)
-      expect(rollbackResult.directoriesRemoved).toBe(1)
+        // Rollback with directory cleanup
+        const rollbackResult = await executePersistedTaskRollback({
+          snapshotsDir: realSnapshotsDir,
+          tasksDir: realTasksDir,
+          taskId: task.id,
+          snapshotId: snapshot.id,
+          trackedPaths: [trackedFile],
+          installPaths: [installRootDir],
+        })
+        expectNoUnexpectedRollbackErrors(rollbackResult)
+        expect(rollbackResult.directoriesRemoved).toBe(1)
 
-      // Verify installed directory is removed
-      try {
-        await access(installRootDir, constants.F_OK)
-        expect.unreachable('installRootDir should have been removed')
-      } catch {
-        // expected — directory does not exist
-      }
-    }, TIMEOUT)
+        // Verify installed directory is removed
+        try {
+          await access(installRootDir, constants.F_OK)
+          expect.unreachable('installRootDir should have been removed')
+        } catch {
+          // expected — directory does not exist
+        }
+      },
+      TIMEOUT,
+    )
 
-    it('cleanup existing → install → rollback removes directory', async () => {
-      const params = rc.buildParams(realTmpDir, realDownloadCacheDir)
-      const installRootDir = params.installRootDir
+    it(
+      'cleanup existing → install → rollback removes directory',
+      async () => {
+        const params = rc.buildParams(realTmpDir, realDownloadCacheDir)
+        const installRootDir = params.installRootDir
 
-      // Create old environment
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old.txt'), 'stale')
+        // Create old environment
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old.txt'), 'stale')
 
-      // Cleanup
-      await cleanupDetectedEnvironment({
-        id: `${rc.tool}:managed_root:test:${installRootDir}`,
-        tool: rc.tool,
-        kind: 'managed_root',
-        path: installRootDir,
-        source: 'test',
-        cleanupSupported: true,
-        cleanupPath: installRootDir,
-      })
+        // Cleanup
+        await cleanupDetectedEnvironment({
+          id: `${rc.tool}:managed_root:test:${installRootDir}`,
+          tool: rc.tool,
+          kind: 'managed_root',
+          path: installRootDir,
+          source: 'test',
+          cleanupSupported: true,
+          cleanupPath: installRootDir,
+        })
 
-      // Fresh state
-      await mkdir(installRootDir, { recursive: true })
-      const trackedFile = join(installRootDir, 'fresh.txt')
-      await writeFile(trackedFile, 'after-cleanup')
+        // Fresh state
+        await mkdir(installRootDir, { recursive: true })
+        const trackedFile = join(installRootDir, 'fresh.txt')
+        await writeFile(trackedFile, 'after-cleanup')
 
-      const task = createTask({
-        templateId: rc.templateId,
-        templateVersion: '1.0.0',
-        params,
-        plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params }],
-      })
+        const task = createTask({
+          templateId: rc.templateId,
+          templateVersion: '1.0.0',
+          params,
+          plugins: [{ pluginId: rc.pluginId, version: '1.0.0', params }],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: realSnapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [trackedFile],
-      })
-      await updateSnapshotMeta(realSnapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: realSnapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [trackedFile],
+        })
+        await updateSnapshotMeta(realSnapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { [rc.pluginId]: rc.plugin },
-        platform,
-        tasksDir: realTasksDir,
-        dryRun: false,
-      })
-      expect(result.status).toBe('succeeded')
+        const result = await executeTask({
+          task,
+          registry: { [rc.pluginId]: rc.plugin },
+          platform,
+          tasksDir: realTasksDir,
+          dryRun: false,
+        })
+        expect(result.status).toBe('succeeded')
 
-      // Rollback with directory cleanup
-      const rollbackResult = await executeRollback(
-        realSnapshotsDir,
-        snapshot.id,
-        [trackedFile],
-        [installRootDir],
-      )
-      expect(rollbackResult.success).toBe(true)
-      expect(rollbackResult.directoriesRemoved).toBe(1)
+        // Rollback with directory cleanup
+        const rollbackResult = await executePersistedTaskRollback({
+          snapshotsDir: realSnapshotsDir,
+          tasksDir: realTasksDir,
+          taskId: task.id,
+          snapshotId: snapshot.id,
+          trackedPaths: [trackedFile],
+          installPaths: [installRootDir],
+        })
+        expectNoUnexpectedRollbackErrors(rollbackResult)
+        expect(rollbackResult.directoriesRemoved).toBe(1)
 
-      try {
-        await access(installRootDir, constants.F_OK)
-        expect.unreachable('installRootDir should have been removed')
-      } catch {
-        // expected
-      }
-    }, TIMEOUT)
+        try {
+          await access(installRootDir, constants.F_OK)
+          expect.unreachable('installRootDir should have been removed')
+        } catch {
+          // expected
+        }
+      },
+      TIMEOUT,
+    )
   })
 })

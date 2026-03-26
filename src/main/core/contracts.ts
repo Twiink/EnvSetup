@@ -152,6 +152,7 @@ export type PrecheckInput = {
   existingEnvConflict: boolean
   detections?: DetectedEnvironment[]
   networkAvailable?: boolean
+  networkChecks?: NetworkCheckResult[]
   elevationRequired?: boolean
   /** Template-declared checks that failed (e.g. required tools not found) */
   failedTemplateChecks?: string[]
@@ -180,13 +181,23 @@ export type PrecheckResult = {
   level: PrecheckLevel
   items: PrecheckItem[]
   detections: DetectedEnvironment[]
+  networkChecks?: NetworkCheckResult[]
   createdAt: string
 }
 
 export type CleanupEnvironmentResult = {
+  detectionId?: string
   message: string
   removedPath?: string
   clearedEnvKey?: string
+  executedCommands?: string[]
+}
+
+export type CleanupTransactionResult = {
+  snapshotId: string
+  results: CleanupEnvironmentResult[]
+  errors: Array<{ path: string; error: string }>
+  message: string
 }
 
 export type EnvChange = {
@@ -220,6 +231,22 @@ export type DownloadArtifact = {
   fileName?: string
 }
 
+export type NetworkCheckTarget = {
+  id: string
+  tool: DownloadArtifact['tool']
+  kind: DownloadArtifactKind
+  url: string
+  host: string
+  note?: string
+}
+
+export type NetworkCheckResult = NetworkCheckTarget & {
+  reachable: boolean
+  durationMs: number
+  statusCode?: number
+  error?: string
+}
+
 export type PluginInstallResult = {
   status: Extract<PluginExecutionStatus, 'installed_unverified' | 'failed'>
   executionMode: 'dry_run' | 'real_run'
@@ -228,6 +255,7 @@ export type PluginInstallResult = {
   envChanges: EnvChange[]
   downloads: DownloadArtifact[]
   commands: string[]
+  rollbackCommands?: string[]
   logs: string[]
   summary: string
   context?: Record<string, Primitive>
@@ -364,6 +392,11 @@ export type Snapshot = {
       size: number // 文件大小（字节）
     }
   }
+  directories?: {
+    [dirPath: string]: {
+      mode: number
+    }
+  }
   // 环境变量快照
   environment: {
     variables: Record<string, string>
@@ -381,6 +414,7 @@ export type Snapshot = {
     platform: AppPlatform
     diskUsage: number // 快照占用磁盘空间（字节）
     fileCount: number // 快照包含的文件数量
+    directoryCount?: number
   }
 }
 
@@ -514,6 +548,7 @@ export type EnvSetupApi = {
   cancelTask: (taskId: string) => Promise<InstallTask>
   retryPlugin: (taskId: string, pluginId: string) => Promise<InstallTask>
   cleanupEnvironment: (detection: DetectedEnvironment) => Promise<CleanupEnvironmentResult>
+  cleanupEnvironments: (detections: DetectedEnvironment[]) => Promise<CleanupTransactionResult>
   pickDirectory: (defaultPath?: string) => Promise<string | undefined>
   importPluginFromPath: (pluginPath: string) => Promise<ImportedPlugin>
   previewEnvChanges: (changes: EnvChange[]) => Promise<EnvChangesPreview>
