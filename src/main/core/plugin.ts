@@ -77,11 +77,14 @@ async function extractZipArchive(zipPath: string, stagingDir: string): Promise<s
 
   if (process.platform === 'win32') {
     const command = [
+      '& {',
+      'param([string]$archivePathArg, [string]$destinationPathArg)',
       "$ErrorActionPreference = 'Stop'",
-      '$archivePath = (Get-Item -LiteralPath $args[0]).FullName',
-      '$destinationPath = (Get-Item -LiteralPath $args[1]).FullName',
+      '$archivePath = (Get-Item -LiteralPath $archivePathArg).FullName',
+      '$destinationPath = (Get-Item -LiteralPath $destinationPathArg).FullName',
       'Add-Type -AssemblyName System.IO.Compression.FileSystem',
       '[System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $destinationPath, $true)',
+      '}',
     ].join('; ')
     await execFileAsync('powershell', ['-NoProfile', '-Command', command, zipPath, tempDir])
     return resolvePluginRoot(tempDir)

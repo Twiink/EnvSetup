@@ -68,14 +68,16 @@ describe('plugin import on win32', () => {
       expect.arrayContaining([
         '-NoProfile',
         '-Command',
-        expect.stringContaining('Get-Item -LiteralPath $args[0]'),
+        expect.stringContaining('param([string]$archivePathArg, [string]$destinationPathArg)'),
         zipPath,
       ]),
       expect.any(Function),
     )
 
     const [, args] = execFileMock.mock.calls[0]
-    expect(args[2]).toContain('Get-Item -LiteralPath $args[1]')
+    expect(args[2]).toContain('& {')
+    expect(args[2]).toContain('Get-Item -LiteralPath $archivePathArg')
+    expect(args[2]).toContain('Get-Item -LiteralPath $destinationPathArg')
     expect(args[2]).toContain('System.IO.Compression.ZipFile')
     expect(args[2]).toContain('ExtractToDirectory($archivePath, $destinationPath, $true)')
     expect(args[3]).toBe(zipPath)
