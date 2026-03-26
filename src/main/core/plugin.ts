@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
 import { access, cp, mkdir, mkdtemp, readFile, readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, extname, join, resolve as resolvePath } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import type { AppPlatform, ImportedPlugin, PluginManifest } from './contracts'
@@ -76,11 +76,15 @@ async function extractZipArchive(zipPath: string, stagingDir: string): Promise<s
   const tempDir = await mkdtemp(join(stagingDir || tmpdir(), `${baseName}-`))
 
   if (process.platform === 'win32') {
-    const archivePath = resolvePath(zipPath)
-    const extractionDir = resolvePath(tempDir)
-    const command = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${extractionDir.replace(/'/g, "''")}' -Force`
-    await execFileAsync('powershell', ['-NoProfile', '-Command', command])
-    return resolvePluginRoot(extractionDir)
+    const command = [
+      "$ErrorActionPreference = 'Stop'",
+      '$archivePath = (Get-Item -LiteralPath $args[0]).FullName',
+      '$destinationPath = (Get-Item -LiteralPath $args[1]).FullName',
+      'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+      '[System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $destinationPath, $true)',
+    ].join('; ')
+    await execFileAsync('powershell', ['-NoProfile', '-Command', command, zipPath, tempDir])
+    return resolvePluginRoot(tempDir)
   }
 
   if (process.platform === 'darwin') {
