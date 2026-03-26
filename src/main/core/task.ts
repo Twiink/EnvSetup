@@ -26,6 +26,7 @@ export type CreateTaskInput = {
   templateVersion: string
   locale?: AppLocale
   params: Record<string, Primitive>
+  rollbackBaseSnapshotId?: string
   plugins: Array<{
     pluginId: string
     version: string
@@ -166,6 +167,7 @@ export function createTask(input: CreateTaskInput): InstallTask {
     locale: input.locale ?? DEFAULT_LOCALE,
     status: 'draft',
     params: input.params,
+    rollbackBaseSnapshotId: input.rollbackBaseSnapshotId,
     precheck: input.precheck,
     plugins: input.plugins.map(
       (plugin): TaskPluginSnapshot => ({

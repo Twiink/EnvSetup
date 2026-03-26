@@ -34,16 +34,53 @@ const platform: AppPlatform = process.platform as AppPlatform
 let tmpDir: string
 let tasksDir: string
 let snapshotsDir: string
+let homeDir: string
+let previousHome: string | undefined
+let previousUserProfile: string | undefined
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'envsetup-action-flow-'))
   tasksDir = join(tmpDir, 'tasks')
   snapshotsDir = join(tmpDir, 'snapshots')
+  homeDir = join(tmpDir, 'home')
+  await mkdir(homeDir, { recursive: true })
+  previousHome = process.env.HOME
+  previousUserProfile = process.env.USERPROFILE
+  process.env.HOME = homeDir
+  process.env.USERPROFILE = homeDir
 })
 
 afterEach(async () => {
+  if (previousHome === undefined) {
+    delete process.env.HOME
+  } else {
+    process.env.HOME = previousHome
+  }
+
+  if (previousUserProfile === undefined) {
+    delete process.env.USERPROFILE
+  } else {
+    process.env.USERPROFILE = previousUserProfile
+  }
+
   await rm(tmpDir, { recursive: true, force: true })
 })
+
+function normalizeCleanupPath(targetPath: string | undefined): string | undefined {
+  if (!targetPath) {
+    return targetPath
+  }
+
+  if (process.platform === 'darwin') {
+    return targetPath.replace(/^\/private(?=\/var\/)/, '')
+  }
+
+  return targetPath
+}
+
+function expectRemovedPath(actualPath: string | undefined, expectedPath: string): void {
+  expect(normalizeCleanupPath(actualPath)).toBe(normalizeCleanupPath(expectedPath))
+}
 
 type Case = {
   tool: 'node' | 'java' | 'python' | 'git'
@@ -147,7 +184,7 @@ describe('action full flow integration', () => {
       await writeFile(join(installRootDir, 'stale.txt'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection(tool, installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const task = createTask({
         templateId: `${tool}-template`,

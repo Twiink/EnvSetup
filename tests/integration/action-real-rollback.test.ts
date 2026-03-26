@@ -34,16 +34,37 @@ let tmpDir: string
 let tasksDir: string
 let snapshotsDir: string
 let downloadCacheDir: string
+let homeDir: string
+let previousHome: string | undefined
+let previousUserProfile: string | undefined
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'envsetup-real-rollback-'))
   tasksDir = join(tmpDir, 'tasks')
   snapshotsDir = join(tmpDir, 'snapshots')
   downloadCacheDir = join(tmpDir, 'download-cache')
+  homeDir = join(tmpDir, 'home')
   await mkdir(downloadCacheDir, { recursive: true })
+  await mkdir(homeDir, { recursive: true })
+  previousHome = process.env.HOME
+  previousUserProfile = process.env.USERPROFILE
+  process.env.HOME = homeDir
+  process.env.USERPROFILE = homeDir
 })
 
 afterEach(async () => {
+  if (previousHome === undefined) {
+    delete process.env.HOME
+  } else {
+    process.env.HOME = previousHome
+  }
+
+  if (previousUserProfile === undefined) {
+    delete process.env.USERPROFILE
+  } else {
+    process.env.USERPROFILE = previousUserProfile
+  }
+
   await rm(tmpDir, { recursive: true, force: true })
 })
 

@@ -261,12 +261,22 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-async function createPreInstallSnapshot(taskId: string) {
+function collectTaskTrackedPaths(params: Record<string, string>): string[] {
+  return [
+    ...new Set(
+      [params.installRootDir, params.npmCacheDir, params.npmGlobalPrefix].filter(
+        (value): value is string => typeof value === 'string' && value.length > 0,
+      ),
+    ),
+  ]
+}
+
+async function createPreInstallSnapshot(taskId: string, trackedPaths: string[]) {
   const snapshot = await createSnapshot({
     baseDir: snapshotsDir,
     taskId,
     type: 'auto',
-    trackedPaths: [],
+    trackedPaths,
   })
   await updateSnapshotMeta(snapshotsDir, snapshot)
   return snapshot
@@ -287,7 +297,7 @@ async function runRealInstall(testCase: RealCycleCase, installRootDir: string) {
     ],
   })
 
-  const snapshot = await createPreInstallSnapshot(task.id)
+  const snapshot = await createPreInstallSnapshot(task.id, collectTaskTrackedPaths(params))
   const result = await executeTask({
     task,
     registry: { [testCase.pluginId]: testCase.plugin },
@@ -338,6 +348,37 @@ async function assertRealRollbackSucceeded(
   }
   expect(await pathExists(installRootDir)).toBe(false)
   await testCase.verifyRolledBackState?.()
+}
+
+async function assertRollbackRestoredInstalledState(
+  testCase: RealCycleCase,
+  snapshotId: string,
+  installRootDir: string,
+  params: Record<string, string>,
+  installResult: PluginInstallResult,
+) {
+  const rollbackResult = await executeRollback(snapshotsDir, snapshotId, [], [installRootDir], {
+    skipRollbackCommands: true,
+  })
+
+  expect(rollbackResult.success).toBe(true)
+  expect(rollbackResult.executionMode).toBe('real_run')
+
+  if (testCase.expectInstallRootAfterInstall === false) {
+    expect(await pathExists(installRootDir)).toBe(false)
+  } else {
+    expect(await pathExists(installRootDir)).toBe(true)
+  }
+
+  const verifyResult = await testCase.plugin.verify({
+    ...params,
+    platform,
+    dryRun: false,
+    installResult,
+  })
+  expect(verifyResult.status).toBe('verified_success')
+  expect(verifyResult.checks.join('\n')).toMatch(testCase.verifyPattern)
+  await testCase.verifyInstalledState?.()
 }
 
 async function commandSucceeds(file: string, args: string[]): Promise<boolean> {
@@ -616,7 +657,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           expect(await pathExists(installRootDir)).toBe(false)
         }
 
-        const { snapshot, result, params } = await runRealInstall(testCase, installRootDir)
+        const { result, params } = await runRealInstall(testCase, installRootDir)
         const plugin = result.plugins[0]
 
         await assertRealInstallSucceeded(
@@ -631,11 +672,12 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         await persistUserEnvChanges(plugin.lastResult?.envChanges ?? [])
         await hydrateDetectionEnvironment(testCase, params)
 
-        await assertRealRollbackSucceeded(
+        await assertRollbackRestoredInstalledState(
           testCase,
-          snapshot.id,
+          cleanupSnapshot.id,
           installRootDir,
-          plugin.lastResult?.rollbackCommands,
+          seededInstall.params,
+          seededPlugin.lastResult!,
         )
       },
       timeout,

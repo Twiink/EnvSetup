@@ -20,6 +20,7 @@ vi.mock('../../src/main/core/snapshot', () => ({
   loadSnapshotMeta: vi.fn(),
   applySnapshot: vi.fn(),
   loadSnapshot: vi.fn(),
+  reconcileSnapshotState: vi.fn(),
   restoreShellConfigs: vi.fn(),
 }))
 
@@ -27,12 +28,14 @@ import {
   loadSnapshotMeta,
   applySnapshot,
   loadSnapshot,
+  reconcileSnapshotState,
   restoreShellConfigs,
 } from '../../src/main/core/snapshot'
 
 const mockLoadSnapshotMeta = vi.mocked(loadSnapshotMeta)
 const mockApplySnapshot = vi.mocked(applySnapshot)
 const mockLoadSnapshot = vi.mocked(loadSnapshot)
+const mockReconcileSnapshotState = vi.mocked(reconcileSnapshotState)
 const mockRestoreShellConfigs = vi.mocked(restoreShellConfigs)
 
 vi.mock('../../src/main/core/environment', () => ({
@@ -251,11 +254,16 @@ describe('executeRollback', () => {
       taskId: 'task-1',
       type: 'auto',
       createdAt: '2024-01-01T10:00:00Z',
+      trackedPaths: [],
       files: {},
       environment: { variables: {}, path: [] },
       shellConfigs: {},
       metadata: { platform: 'darwin', diskUsage: 0, fileCount: 0 },
     } satisfies Snapshot)
+    mockReconcileSnapshotState.mockResolvedValue({
+      directoriesRemoved: 0,
+      errors: [],
+    })
     mockRestoreShellConfigs.mockResolvedValue(0)
   })
 
@@ -362,6 +370,7 @@ describe('executeRollback', () => {
 
     expect(mockLoadSnapshot).toHaveBeenCalledWith('/base', 'snap-1')
     expect(mockApplySnapshot).not.toHaveBeenCalled()
+    expect(mockReconcileSnapshotState).not.toHaveBeenCalled()
     expect(mockRestoreShellConfigs).not.toHaveBeenCalled()
     expect(execFileMock).not.toHaveBeenCalled()
     expect(result.success).toBe(true)
@@ -426,5 +435,39 @@ describe('executeRollback', () => {
       expect.any(Function),
     )
     expect(result.success).toBe(true)
+  })
+
+  it('reconciles tracked filesystem roots against the snapshot', async () => {
+    mockApplySnapshot.mockResolvedValue({
+      filesRestored: 1,
+      filesSkipped: 0,
+      envVariablesRestored: 0,
+      errors: [],
+    })
+    mockLoadSnapshot.mockResolvedValueOnce({
+      id: 'snap-1',
+      taskId: 'task-1',
+      type: 'auto',
+      createdAt: '2024-01-01T10:00:00Z',
+      trackedPaths: ['/tmp/toolchain', '/tmp/npm-cache'],
+      files: {},
+      environment: { variables: {}, path: [] },
+      shellConfigs: {},
+      metadata: { platform: 'darwin', diskUsage: 0, fileCount: 0 },
+    } satisfies Snapshot)
+    mockReconcileSnapshotState.mockResolvedValueOnce({
+      directoriesRemoved: 2,
+      errors: [],
+    })
+
+    const result = await executeRollback('/base', 'snap-1', [])
+
+    expect(mockReconcileSnapshotState).toHaveBeenCalledWith({
+      baseDir: '/base',
+      snapshotId: 'snap-1',
+      paths: ['/tmp/toolchain', '/tmp/npm-cache'],
+      allowElevation: true,
+    })
+    expect(result.directoriesRemoved).toBe(2)
   })
 })

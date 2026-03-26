@@ -32,14 +32,18 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E real install + rollback
+      - name: Build unpacked packaged app
+        run: npm run pack
+
+      - name: Run E2E real install + rollback against packaged app
         env:
           ENVSETUP_REAL_RUN: '1'
-        run: npm run test:e2e:real
+          ENVSETUP_PACKAGED_RUN: '1'
+        run: npm run test:e2e:packaged
         timeout-minutes: 45
 
       - name: Build and package (without publish)
-        run: npx electron-vite build && npx electron-builder --publish never
+        run: npx electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

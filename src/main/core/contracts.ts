@@ -370,6 +370,7 @@ export type InstallTask = {
   finishedAt?: string
   // 快照回滚集成
   snapshotId?: string
+  rollbackBaseSnapshotId?: string
   enhancedPrecheck?: EnhancedPrecheckResult
   rollbackSuggestions?: RollbackSuggestion[]
 }
@@ -384,6 +385,7 @@ export type Snapshot = {
   createdAt: string
   type: 'auto' | 'manual'
   label?: string
+  trackedPaths: string[]
   // 文件系统快照
   files: {
     [filePath: string]: {
@@ -397,10 +399,17 @@ export type Snapshot = {
       mode: number
     }
   }
+  symlinks?: {
+    [symlinkPath: string]: {
+      target: string
+      type: 'file' | 'dir' | 'junction'
+    }
+  }
   // 环境变量快照
   environment: {
     variables: Record<string, string>
     path: string[]
+    userVariables?: Record<string, string>
   }
   // Shell 配置文件快照
   shellConfigs: {
@@ -543,6 +552,7 @@ export type EnvSetupApi = {
     values: Record<string, Primitive>
     precheck?: PrecheckResult
     locale: AppLocale
+    rollbackBaseSnapshotId?: string
   }) => Promise<InstallTask>
   startTask: (taskId: string) => Promise<InstallTask>
   cancelTask: (taskId: string) => Promise<InstallTask>

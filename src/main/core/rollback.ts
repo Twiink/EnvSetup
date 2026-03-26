@@ -1,16 +1,18 @@
-import { rm } from 'node:fs/promises'
 import type { AppPlatform, FailureAnalysis, RollbackResult, RollbackSuggestion } from './contracts'
+import { executePlatformCommandWithElevationFallback } from './elevation'
 import {
-  buildRemovePathCommand,
-  executePlatformCommandWithElevationFallback,
-  isPermissionError,
-} from './elevation'
-import { applySnapshot, loadSnapshot, loadSnapshotMeta, restoreShellConfigs } from './snapshot'
+  applySnapshot,
+  loadSnapshot,
+  loadSnapshotMeta,
+  reconcileSnapshotState,
+  restoreShellConfigs,
+} from './snapshot'
 import { isCleanupAllowedPath } from './environment'
 
 type ExecuteRollbackOptions = {
   dryRun?: boolean
   rollbackCommands?: string[]
+  skipRollbackCommands?: boolean
 }
 
 /**
@@ -133,15 +135,18 @@ export async function executeRollback(
   try {
     const rollbackCommands = options.rollbackCommands ?? []
     const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
+    const snapshot = await loadSnapshot(baseDir, snapshotId)
 
     if (options.dryRun) {
-      const snapshot = await loadSnapshot(baseDir, snapshotId)
       const plannedFiles =
         trackedPaths.length > 0
           ? trackedPaths.filter((filePath) => filePath in snapshot.files).length
           : Object.keys(snapshot.files).length
       const plannedShellConfigs = Object.keys(snapshot.shellConfigs).length
-      const removablePaths = installPaths ?? []
+      const removablePaths = [
+        ...(trackedPaths.length > 0 ? trackedPaths : snapshot.trackedPaths),
+        ...(installPaths ?? []),
+      ]
       const errors = removablePaths
         .filter((dirPath) => !isCleanupAllowedPath(dirPath))
         .map((dirPath) => ({
@@ -179,7 +184,6 @@ export async function executeRollback(
     // Step 2: Restore shell configs from snapshot
     let shellConfigsRestored = 0
     try {
-      const snapshot = await loadSnapshot(baseDir, snapshotId)
       if (snapshot.shellConfigs && Object.keys(snapshot.shellConfigs).length > 0) {
         shellConfigsRestored = await restoreShellConfigs(baseDir, snapshot.shellConfigs, {
           allowElevation: true,
@@ -193,47 +197,40 @@ export async function executeRollback(
       })
     }
 
-    // Step 3: Execute plugin-specific rollback commands
-    if (rollbackCommands.length > 0) {
+    // Step 3: Reconcile tracked roots to the exact snapshot state.
+    const reconcileRoots = [
+      ...(trackedPaths.length > 0 ? trackedPaths : snapshot.trackedPaths),
+      ...(installPaths ?? []),
+    ]
+    const protectedPathErrors = reconcileRoots
+      .filter((dirPath) => !isCleanupAllowedPath(dirPath))
+      .map((dirPath) => ({
+        path: dirPath,
+        error: `Refusing to remove protected path: ${dirPath}`,
+      }))
+    result.errors.push(...protectedPathErrors)
+
+    let directoriesRemoved = 0
+    const allowedRoots = reconcileRoots.filter((dirPath) => isCleanupAllowedPath(dirPath))
+    if (allowedRoots.length > 0) {
+      const reconcileResult = await reconcileSnapshotState({
+        baseDir,
+        snapshotId,
+        paths: allowedRoots,
+        allowElevation: true,
+      })
+      directoriesRemoved = reconcileResult.directoriesRemoved
+      result.errors.push(...reconcileResult.errors)
+    }
+
+    // Step 4: Execute plugin-specific rollback commands.
+    if (!options.skipRollbackCommands && rollbackCommands.length > 0) {
       const commandErrors = await runRollbackCommands(rollbackCommands, currentPlatform)
       result.errors.push(...commandErrors)
     }
 
-    // Step 4: Remove installed directories
-    let directoriesRemoved = 0
-    if (installPaths && installPaths.length > 0) {
-      for (const dirPath of installPaths) {
-        try {
-          if (!isCleanupAllowedPath(dirPath)) {
-            result.errors.push({
-              path: dirPath,
-              error: `Refusing to remove protected path: ${dirPath}`,
-            })
-            continue
-          }
-          try {
-            await rm(dirPath, { recursive: true, force: true })
-          } catch (error) {
-            if (!isPermissionError(error)) {
-              throw error
-            }
-
-            await executePlatformCommandWithElevationFallback(
-              buildRemovePathCommand(dirPath, currentPlatform),
-              currentPlatform,
-            )
-          }
-          directoriesRemoved++
-        } catch (dirError) {
-          result.errors.push({
-            path: dirPath,
-            error: dirError instanceof Error ? dirError.message : String(dirError),
-          })
-        }
-      }
-    }
-
     const hasErrors = result.errors.length > 0
+    const rollbackCommandCount = options.skipRollbackCommands ? 0 : rollbackCommands.length
     return {
       success: !hasErrors,
       executionMode: 'real_run',
@@ -244,8 +241,8 @@ export async function executeRollback(
       directoriesRemoved,
       errors: result.errors,
       message: hasErrors
-        ? `Restored ${result.filesRestored} file(s), ${shellConfigsRestored} shell config(s), ran ${rollbackCommands.length} rollback command(s), removed ${directoriesRemoved} dir(s) with ${result.errors.length} error(s)`
-        : `Successfully restored ${result.filesRestored} file(s), ${shellConfigsRestored} shell config(s), ran ${rollbackCommands.length} rollback command(s), removed ${directoriesRemoved} dir(s)`,
+        ? `Restored ${result.filesRestored} file(s), ${shellConfigsRestored} shell config(s), ran ${rollbackCommandCount} rollback command(s), removed ${directoriesRemoved} dir(s) with ${result.errors.length} error(s)`
+        : `Successfully restored ${result.filesRestored} file(s), ${shellConfigsRestored} shell config(s), ran ${rollbackCommandCount} rollback command(s), removed ${directoriesRemoved} dir(s)`,
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)

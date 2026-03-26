@@ -14,6 +14,7 @@ const snapshotStub: Snapshot = {
   taskId: 'task-1',
   createdAt: '2026-03-25T00:00:00.000Z',
   type: 'auto',
+  trackedPaths: [],
   files: {},
   environment: {
     variables: {},
@@ -154,6 +155,7 @@ vi.mock('../../src/main/core/snapshot', () => ({
     taskId: 'task-1',
     createdAt: '2026-03-25T00:00:00.000Z',
     type: 'auto',
+    trackedPaths: [],
     files: {},
     environment: { variables: {}, path: [] },
     shellConfigs: {},
@@ -658,11 +660,46 @@ describe('registerIpcHandlers', () => {
       'snapshot-1',
       ['/tmp/toolchain'],
       undefined,
-      { dryRun: true, rollbackCommands: ['brew uninstall git'] },
+      { dryRun: true, rollbackCommands: ['brew uninstall git'], skipRollbackCommands: false },
     )
     expect(suggestions).toHaveLength(1)
     expect(rollbackResult.success).toBe(true)
     expect(rollbackResult.executionMode).toBe('dry_run')
+  })
+
+  it('uses rollbackBaseSnapshotId as the authoritative restore target for task rollbacks', async () => {
+    const rollbackMod = await import('../../src/main/core/rollback')
+    const snapshotMod = await import('../../src/main/core/snapshot')
+    const taskMod = await import('../../src/main/core/task')
+    const rollbackTaskId = 'task-rollback-1'
+
+    vi.mocked(snapshotMod.loadSnapshot).mockResolvedValueOnce({
+      ...snapshotStub,
+      id: 'snapshot-1',
+      taskId: rollbackTaskId,
+    })
+
+    vi.mocked(taskMod.loadTask).mockResolvedValueOnce({
+      ...(await taskMod.loadTask(rollbackTaskId, '/tmp/tasks')),
+      id: rollbackTaskId,
+      snapshotId: 'snapshot-1',
+      rollbackBaseSnapshotId: 'snapshot-cleanup-1',
+    })
+
+    await handlers.get('rollback:execute')?.(
+      {},
+      {
+        snapshotId: 'snapshot-1',
+      },
+    )
+
+    expect(rollbackMod.executeRollback).toHaveBeenCalledWith(
+      '/tmp/snapshots',
+      'snapshot-cleanup-1',
+      [],
+      undefined,
+      { dryRun: true, rollbackCommands: ['brew uninstall git'], skipRollbackCommands: true },
+    )
   })
 
   it('delegates enhanced precheck handler', async () => {

@@ -24,24 +24,58 @@ import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
 import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
 
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
-const isMac = process.platform === 'darwin'
-const isWindows = process.platform === 'win32'
-
 const platform: AppPlatform = process.platform as AppPlatform
 
 let tmpDir: string
 let tasksDir: string
 let snapshotsDir: string
+let homeDir: string
+let previousHome: string | undefined
+let previousUserProfile: string | undefined
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'envsetup-rollback-flow-'))
   tasksDir = join(tmpDir, 'tasks')
   snapshotsDir = join(tmpDir, 'snapshots')
+  homeDir = join(tmpDir, 'home')
+  await mkdir(homeDir, { recursive: true })
+  previousHome = process.env.HOME
+  previousUserProfile = process.env.USERPROFILE
+  process.env.HOME = homeDir
+  process.env.USERPROFILE = homeDir
 })
 
 afterEach(async () => {
+  if (previousHome === undefined) {
+    delete process.env.HOME
+  } else {
+    process.env.HOME = previousHome
+  }
+
+  if (previousUserProfile === undefined) {
+    delete process.env.USERPROFILE
+  } else {
+    process.env.USERPROFILE = previousUserProfile
+  }
+
   await rm(tmpDir, { recursive: true, force: true })
 })
+
+function normalizeCleanupPath(targetPath: string | undefined): string | undefined {
+  if (!targetPath) {
+    return targetPath
+  }
+
+  if (process.platform === 'darwin') {
+    return targetPath.replace(/^\/private(?=\/var\/)/, '')
+  }
+
+  return targetPath
+}
+
+function expectRemovedPath(actualPath: string | undefined, expectedPath: string): void {
+  expect(normalizeCleanupPath(actualPath)).toBe(normalizeCleanupPath(expectedPath))
+}
 
 // ============================================================
 // Helper: make a failing plugin that mutates tracked files
@@ -561,7 +595,7 @@ describe('action rollback recovery integration', () => {
 
         // Cleanup existing env
         const cleanupResult = await cleanupDetectedEnvironment(makeDetection(tool, installRootDir))
-        expect(cleanupResult.removedPath).toBe(installRootDir)
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
         expect(await pathExists(installRootDir)).toBe(false)
 
         // Recreate directory and a new tracked file for fresh install

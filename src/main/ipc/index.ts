@@ -169,6 +169,7 @@ export function registerIpcHandlers(): void {
         values: Record<string, Primitive>
         precheck?: InstallTask['precheck']
         locale: string
+        rollbackBaseSnapshotId?: string
       },
     ) => {
       const [paths, template] = await Promise.all([
@@ -180,6 +181,7 @@ export function registerIpcHandlers(): void {
         templateVersion: template.version,
         locale: normalizeLocale(payload.locale),
         params: payload.values,
+        rollbackBaseSnapshotId: payload.rollbackBaseSnapshotId,
         precheck: payload.precheck,
         plugins: template.plugins.map((plugin) => ({
           pluginId: plugin.pluginId,
@@ -249,6 +251,7 @@ export function registerIpcHandlers(): void {
     }
 
     taskCache.set(taskWithSnapshot.id, taskWithSnapshot)
+    await persistTask(taskWithSnapshot, paths.tasksDir)
     return taskWithSnapshot
   })
 
@@ -368,10 +371,16 @@ export function registerIpcHandlers(): void {
     ) => {
       const paths = await ensureAppPaths()
       let rollbackCommands: string[] = []
+      let targetSnapshotId = payload.snapshotId
+      let skipRollbackCommands = false
 
       try {
         const snapshot = await loadSnapshot(paths.snapshotsDir, payload.snapshotId)
         const task = await getTask(snapshot.taskId, paths.tasksDir)
+        if (task.rollbackBaseSnapshotId && task.snapshotId === payload.snapshotId) {
+          targetSnapshotId = task.rollbackBaseSnapshotId
+          skipRollbackCommands = true
+        }
         rollbackCommands = [
           ...new Set(task.plugins.flatMap((plugin) => plugin.lastResult?.rollbackCommands ?? [])),
         ]
@@ -381,12 +390,13 @@ export function registerIpcHandlers(): void {
 
       return executeRollback(
         paths.snapshotsDir,
-        payload.snapshotId,
+        targetSnapshotId,
         payload.trackedPaths ?? [],
         payload.installPaths,
         {
           dryRun: resolveDryRun(app.isPackaged),
           rollbackCommands,
+          skipRollbackCommands,
         },
       )
     },

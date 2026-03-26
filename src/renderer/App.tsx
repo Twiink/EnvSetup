@@ -279,6 +279,7 @@ export default function App() {
         values,
         precheck,
         locale,
+        rollbackBaseSnapshotId: cleanupBackup?.snapshotId,
       })
       setTask(nextTask)
       setTaskProgressEvents([])

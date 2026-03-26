@@ -8,9 +8,12 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readlink,
   readdir,
   rm,
   rmdir,
+  stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
@@ -18,6 +21,7 @@ import { delimiter, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { AppPlatform, ObjectRefs, Snapshot, SnapshotMeta } from './contracts'
 import {
+  buildRemovePathCommand,
   buildCopyFileCommand,
   buildEnsureDirectoryCommand,
   buildReadFileBase64Command,
@@ -26,6 +30,10 @@ import {
 } from './elevation'
 
 const execFileAsync = promisify(execFile)
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string'))]
+}
 
 // ============================================================
 // 对象存储（内容寻址）
@@ -166,6 +174,7 @@ export async function createSnapshot(options: {
   const objectsDir = join(options.baseDir, 'objects')
   const files: Snapshot['files'] = {}
   const directories: NonNullable<Snapshot['directories']> = {}
+  const symlinks: NonNullable<Snapshot['symlinks']> = {}
   const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
 
   async function collectTrackedPath(targetPath: string): Promise<void> {
@@ -178,6 +187,21 @@ export async function createSnapshot(options: {
     }
 
     if (targetStat.isSymbolicLink()) {
+      try {
+        const target = await readlink(targetPath)
+        let type: 'file' | 'dir' | 'junction' = process.platform === 'win32' ? 'file' : 'file'
+        try {
+          const targetStats = await stat(targetPath)
+          if (targetStats.isDirectory()) {
+            type = process.platform === 'win32' ? 'junction' : 'dir'
+          }
+        } catch {
+          // Keep the default file-type symlink when the target is not accessible.
+        }
+        symlinks[targetPath] = { target, type }
+      } catch {
+        // 跳过不可读的符号链接
+      }
       return
     }
 
@@ -236,6 +260,8 @@ export async function createSnapshot(options: {
   const environment = {
     variables: { ...process.env } as Record<string, string>,
     path: (process.env.PATH ?? '').split(delimiter),
+    userVariables:
+      process.platform === 'win32' ? await loadWindowsUserEnvironment().catch(() => undefined) : undefined,
   }
 
   // 并行捕获 shell 配置文件
@@ -276,8 +302,10 @@ export async function createSnapshot(options: {
     createdAt: new Date().toISOString(),
     type: options.type,
     label: options.label,
+    trackedPaths: uniqueStrings(options.trackedPaths),
     files,
     directories,
+    symlinks,
     environment,
     shellConfigs,
     metadata: {
@@ -421,6 +449,32 @@ export async function deleteSnapshot(baseDir: string, snapshotId: string): Promi
   await rm(join(baseDir, 'snapshots', `snapshot-${snapshotId}.json`))
 }
 
+async function loadWindowsUserEnvironment(): Promise<Record<string, string>> {
+  if (process.platform !== 'win32') {
+    return {}
+  }
+
+  const { stdout } = await execFileAsync('powershell', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    "[Environment]::GetEnvironmentVariables('User') | ConvertTo-Json -Compress",
+  ])
+
+  const trimmed = stdout.trim()
+  if (!trimmed) {
+    return {}
+  }
+
+  const parsed = JSON.parse(trimmed) as Record<string, unknown>
+  return Object.fromEntries(
+    Object.entries(parsed).filter(
+      (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+    ),
+  )
+}
+
 async function readFileWithElevation(targetPath: string, platform: AppPlatform): Promise<Buffer> {
   const { stdout } = await executePlatformCommand(
     buildReadFileBase64Command(targetPath, platform),
@@ -449,6 +503,24 @@ async function restoreFileWithElevation(
     )
   } finally {
     await rm(stagingDir, { recursive: true, force: true })
+  }
+}
+
+async function removePathWithElevation(
+  targetPath: string,
+  platform: AppPlatform,
+  allowElevation?: boolean,
+): Promise<void> {
+  try {
+    await rm(targetPath, { recursive: true, force: true })
+  } catch (error) {
+    if (!allowElevation || !isPermissionError(error)) {
+      throw error
+    }
+
+    await executePlatformCommand(buildRemovePathCommand(targetPath, platform), platform, {
+      elevated: true,
+    })
   }
 }
 
@@ -482,8 +554,10 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
   const snapshot = await loadSnapshot(options.baseDir, options.snapshotId)
   const objectsDir = join(options.baseDir, 'objects')
   const snapshotDirectories = snapshot.directories ?? {}
+  const snapshotSymlinks = snapshot.symlinks ?? {}
   const snapshotFilePaths = Object.keys(snapshot.files)
   const snapshotDirectoryPaths = Object.keys(snapshotDirectories)
+  const snapshotSymlinkPaths = Object.keys(snapshotSymlinks)
   const pathSeparator = process.platform === 'win32' ? '\\' : '/'
   const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
 
@@ -499,6 +573,7 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
   // 确定要恢复的文件列表
   let filesToRestore: string[]
   let directoriesToRestore: string[]
+  let symlinksToRestore: string[]
   const result: ApplySnapshotResult = {
     filesRestored: 0,
     filesSkipped: 0,
@@ -509,10 +584,12 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
   if (options.mode === 'full') {
     filesToRestore = snapshotFilePaths
     directoriesToRestore = snapshotDirectoryPaths
+    symlinksToRestore = snapshotSymlinkPaths
   } else {
     const matchedTargets = new Set<string>()
     const fileSet = new Set<string>()
     const directorySet = new Set<string>()
+    const symlinkSet = new Set<string>()
 
     for (const requestedPath of options.filePaths ?? []) {
       if (requestedPath in snapshot.files) {
@@ -525,9 +602,21 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
         matchedTargets.add(requestedPath)
       }
 
+      if (requestedPath in snapshotSymlinks) {
+        symlinkSet.add(requestedPath)
+        matchedTargets.add(requestedPath)
+      }
+
       for (const directoryPath of snapshotDirectoryPaths) {
         if (isPathWithinRoot(directoryPath, requestedPath)) {
           directorySet.add(directoryPath)
+          matchedTargets.add(requestedPath)
+        }
+      }
+
+      for (const symlinkPath of snapshotSymlinkPaths) {
+        if (isPathWithinRoot(symlinkPath, requestedPath)) {
+          symlinkSet.add(symlinkPath)
           matchedTargets.add(requestedPath)
         }
       }
@@ -542,6 +631,7 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
 
     filesToRestore = Array.from(fileSet)
     directoriesToRestore = Array.from(directorySet)
+    symlinksToRestore = Array.from(symlinkSet)
 
     const skippedCount = (options.filePaths ?? []).filter(
       (path) => !matchedTargets.has(path),
@@ -553,6 +643,24 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
   }
 
   directoriesToRestore = directoriesToRestore.sort((a, b) => a.length - b.length)
+  symlinksToRestore = symlinksToRestore.sort((a, b) => a.length - b.length)
+
+  async function removeConflictingPath(
+    targetPath: string,
+    shouldRemove: (stats: Awaited<ReturnType<typeof lstat>>) => boolean,
+  ) {
+    try {
+      const targetStats = await lstat(targetPath)
+      if (shouldRemove(targetStats)) {
+        await removePathWithElevation(targetPath, currentPlatform, options.allowElevation)
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return
+      }
+      throw error
+    }
+  }
 
   for (const directoryPath of directoriesToRestore) {
     const directoryEntry = snapshotDirectories[directoryPath]
@@ -561,6 +669,7 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
     }
 
     try {
+      await removeConflictingPath(directoryPath, (targetStats) => !targetStats.isDirectory())
       await mkdir(directoryPath, { recursive: true })
       if (process.platform !== 'win32') {
         await chmod(directoryPath, directoryEntry.mode)
@@ -590,6 +699,26 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
     }
   }
 
+  for (const symlinkPath of symlinksToRestore) {
+    const symlinkEntry = snapshotSymlinks[symlinkPath]
+    if (!symlinkEntry) {
+      result.filesSkipped++
+      continue
+    }
+
+    try {
+      await mkdir(dirname(symlinkPath), { recursive: true })
+      await removeConflictingPath(symlinkPath, () => true)
+      await symlink(symlinkEntry.target, symlinkPath, symlinkEntry.type)
+      result.filesRestored++
+    } catch (error) {
+      result.errors.push({
+        path: symlinkPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   for (const filePath of filesToRestore) {
     const fileEntry = snapshot.files[filePath]
     if (!fileEntry) {
@@ -599,6 +728,7 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
 
     try {
       const content = await loadObject(objectsDir, fileEntry.hash)
+      await removeConflictingPath(filePath, (targetStats) => !targetStats.isFile())
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, content)
       if (process.platform !== 'win32') {
@@ -646,61 +776,171 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
 }
 
 /**
- * 将环境变量写入 shell 配置文件（macOS/Linux 写入 ~/.zshrc，Windows 调用 setx）
+ * 将环境变量恢复到快照记录的精确状态
  * 返回成功恢复的环境变量数量
  */
 export async function restoreEnvironment(
   environment: Snapshot['environment'],
   platform: AppPlatform,
 ): Promise<number> {
-  // 构建条目：非 PATH 变量 + 由 path 数组合并而来的 PATH
-  const entries: Array<[string, string]> = []
-  for (const [key, value] of Object.entries(environment.variables)) {
-    if (key === 'PATH') continue
-    entries.push([key, value])
+  const nextEnvironment = {
+    ...environment.variables,
+    PATH: environment.path.join(delimiter),
   }
-  const pathValue = environment.path.join(delimiter)
-  entries.push(['PATH', pathValue])
 
-  let count = 0
-
-  if (platform === 'win32') {
-    for (const [key, value] of entries) {
-      // 防止命令注入：key 只允许合法环境变量名，value 通过参数数组传入
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
-      try {
-        await execFileAsync('setx', [key, value])
-        count++
-      } catch {
-        // 忽略单条失败，继续处理其余变量
-      }
+  let restoredCount = 0
+  const currentKeys = new Set(Object.keys(process.env))
+  for (const key of currentKeys) {
+    if (!(key in nextEnvironment)) {
+      delete process.env[key]
+      restoredCount++
     }
-  } else {
-    const configPath = join(homedir(), '.zshrc')
-    const blockStart = '# EnvSetup managed block - begin'
-    const blockEnd = '# EnvSetup managed block - end'
+  }
 
-    const exportLines = entries.map(([key, value]) => `export ${key}="${value}"`)
-    const managedBlock = `${blockStart}\n${exportLines.join('\n')}\n${blockEnd}`
+  for (const [key, value] of Object.entries(nextEnvironment)) {
+    if (process.env[key] !== value) {
+      process.env[key] = value
+      restoredCount++
+    }
+  }
 
-    let existingContent = ''
+  if (platform !== 'win32' || !environment.userVariables) {
+    return restoredCount
+  }
+
+  const currentUserVariables = await loadWindowsUserEnvironment().catch(() => ({}))
+  for (const key of Object.keys(currentUserVariables)) {
+    if (!(key in environment.userVariables)) {
+      await execFileAsync('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        `[Environment]::SetEnvironmentVariable('${key.replace(/'/g, "''")}', $null, 'User')`,
+      ])
+      restoredCount++
+    }
+  }
+
+  for (const [key, value] of Object.entries(environment.userVariables)) {
+    if (currentUserVariables[key] === value) {
+      continue
+    }
+    await execFileAsync('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `[Environment]::SetEnvironmentVariable('${key.replace(/'/g, "''")}', '${value.replace(/'/g, "''")}', 'User')`,
+    ])
+    restoredCount++
+  }
+
+  return restoredCount
+}
+
+export type ReconcileSnapshotStateResult = {
+  directoriesRemoved: number
+  errors: Array<{ path: string; error: string }>
+}
+
+export async function reconcileSnapshotState(options: {
+  baseDir: string
+  snapshotId: string
+  paths?: string[]
+  allowElevation?: boolean
+}): Promise<ReconcileSnapshotStateResult> {
+  const snapshot = await loadSnapshot(options.baseDir, options.snapshotId)
+  const snapshotDirectories = new Set(Object.keys(snapshot.directories ?? {}).map((entry) => resolve(entry)))
+  const snapshotFiles = new Set(Object.keys(snapshot.files).map((entry) => resolve(entry)))
+  const snapshotSymlinks = new Set(
+    Object.keys(snapshot.symlinks ?? {}).map((entry) => resolve(entry)),
+  )
+  const snapshotPaths = [...snapshotDirectories, ...snapshotFiles, ...snapshotSymlinks]
+  const roots = uniqueStrings(
+    (options.paths && options.paths.length > 0 ? options.paths : snapshot.trackedPaths).map((entry) =>
+      resolve(entry),
+    ),
+  )
+  const pathSeparator = process.platform === 'win32' ? '\\' : '/'
+  const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
+  const result: ReconcileSnapshotStateResult = {
+    directoriesRemoved: 0,
+    errors: [],
+  }
+
+  function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
+    return (
+      candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${pathSeparator}`)
+    )
+  }
+
+  function snapshotContainsPath(targetPath: string): boolean {
+    return (
+      snapshotDirectories.has(targetPath) ||
+      snapshotFiles.has(targetPath) ||
+      snapshotSymlinks.has(targetPath)
+    )
+  }
+
+  function snapshotHasDescendant(targetPath: string): boolean {
+    return snapshotPaths.some((candidatePath) => isPathWithinRoot(candidatePath, targetPath))
+  }
+
+  async function prunePath(targetPath: string): Promise<void> {
+    let targetStats
     try {
-      existingContent = await readFile(configPath, 'utf8')
-    } catch {
-      // 文件不存在时从空白开始
+      targetStats = await lstat(targetPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return
+      }
+      result.errors.push({
+        path: targetPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return
     }
 
-    // 移除旧的 managed block
-    const escapedStart = blockStart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const escapedEnd = blockEnd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const blockRegex = new RegExp(`\\n?${escapedStart}[\\s\\S]*?${escapedEnd}\\n?`, 'g')
-    const cleaned = existingContent.replace(blockRegex, '')
+    const normalizedPath = resolve(targetPath)
+    const shouldKeep = snapshotContainsPath(normalizedPath) || snapshotHasDescendant(normalizedPath)
+    if (!shouldKeep) {
+      try {
+        await removePathWithElevation(targetPath, currentPlatform, options.allowElevation)
+        if (targetStats.isDirectory()) {
+          result.directoriesRemoved++
+        }
+      } catch (error) {
+        result.errors.push({
+          path: targetPath,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+      return
+    }
 
-    await writeFile(configPath, `${cleaned.trimEnd()}\n${managedBlock}\n`)
-    count = entries.length
+    if (!targetStats.isDirectory()) {
+      return
+    }
+
+    try {
+      const entries = await readdir(targetPath, { withFileTypes: true })
+      for (const entry of entries) {
+        await prunePath(join(targetPath, entry.name))
+      }
+    } catch (error) {
+      result.errors.push({
+        path: targetPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
-  return count
+  for (const rootPath of roots) {
+    await prunePath(rootPath)
+  }
+
+  return result
 }
 
 /**

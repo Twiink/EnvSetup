@@ -16,6 +16,64 @@ const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 const execFileAsync = promisify(execFile)
 
+async function walkFiles(rootDir: string, maxDepth = 5): Promise<string[]> {
+  async function visit(currentDir: string, depth: number, acc: string[]) {
+    if (depth > maxDepth) {
+      return
+    }
+    const entries = await fs.readdir(currentDir, { withFileTypes: true })
+    for (const entry of entries) {
+      const entryPath = path.join(currentDir, entry.name)
+      acc.push(entryPath)
+      if (entry.isDirectory()) {
+        await visit(entryPath, depth + 1, acc)
+      }
+    }
+  }
+
+  const files: string[] = []
+  await visit(rootDir, 0, files)
+  return files
+}
+
+async function resolvePackagedExecutable(): Promise<string | undefined> {
+  if (process.env.ENVSETUP_ELECTRON_EXECUTABLE) {
+    return process.env.ENVSETUP_ELECTRON_EXECUTABLE
+  }
+
+  if (process.env.ENVSETUP_PACKAGED_RUN !== '1') {
+    return undefined
+  }
+
+  const distDir = path.join(process.cwd(), 'dist')
+  const files = await walkFiles(distDir, 6)
+
+  if (isMac) {
+    const appBundle = files.find((entry) => entry.endsWith('.app'))
+    if (!appBundle) {
+      throw new Error(`Packaged macOS app not found under ${distDir}`)
+    }
+    const macOsDir = path.join(appBundle, 'Contents', 'MacOS')
+    const binaries = await fs.readdir(macOsDir)
+    if (!binaries[0]) {
+      throw new Error(`Packaged macOS binary not found in ${macOsDir}`)
+    }
+    return path.join(macOsDir, binaries[0])
+  }
+
+  if (isWindows) {
+    const executable = files.find(
+      (entry) => entry.toLowerCase().includes('unpacked') && entry.toLowerCase().endsWith('.exe'),
+    )
+    if (!executable) {
+      throw new Error(`Packaged Windows executable not found under ${distDir}`)
+    }
+    return executable
+  }
+
+  return undefined
+}
+
 async function dumpTaskLogs(dataDir: string): Promise<void> {
   const tasksDir = path.join(dataDir, 'tasks')
   try {
@@ -45,11 +103,15 @@ async function launchRealRunApp(
 ): Promise<{ app: ElectronApplication; page: Page; dataDir: string }> {
   const dataDir = makeDataDir(path.basename(installRoot))
   await fs.rm(dataDir, { recursive: true, force: true })
+  const executablePath = await resolvePackagedExecutable()
   const app = await electron.launch({
-    args: ['.'],
+    args: executablePath ? [] : ['.'],
+    cwd: process.cwd(),
+    executablePath,
     env: {
       ...process.env,
       ENVSETUP_REAL_RUN: '1',
+      ENVSETUP_PACKAGED_RUN: process.env.ENVSETUP_PACKAGED_RUN,
       ENVSETUP_INSTALL_ROOT: installRoot,
       ENVSETUP_DATA_DIR: dataDir,
     },

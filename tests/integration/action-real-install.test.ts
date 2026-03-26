@@ -12,7 +12,7 @@
  * SDKMAN tests only on macOS (Windows SDKMAN needs Git Bash which may not be present).
  * Python source compilation is skipped in CI due to extreme build time.
  */
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mkdtemp } from 'node:fs/promises'
@@ -37,18 +37,55 @@ let tmpDir: string
 let tasksDir: string
 let snapshotsDir: string
 let downloadCacheDir: string
+let homeDir: string
+let previousHome: string | undefined
+let previousUserProfile: string | undefined
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'envsetup-real-install-'))
   tasksDir = join(tmpDir, 'tasks')
   snapshotsDir = join(tmpDir, 'snapshots')
   downloadCacheDir = join(tmpDir, 'download-cache')
+  homeDir = join(tmpDir, 'home')
   await mkdir(downloadCacheDir, { recursive: true })
+  await mkdir(homeDir, { recursive: true })
+  previousHome = process.env.HOME
+  previousUserProfile = process.env.USERPROFILE
+  process.env.HOME = homeDir
+  process.env.USERPROFILE = homeDir
 })
 
 afterEach(async () => {
+  if (previousHome === undefined) {
+    delete process.env.HOME
+  } else {
+    process.env.HOME = previousHome
+  }
+
+  if (previousUserProfile === undefined) {
+    delete process.env.USERPROFILE
+  } else {
+    process.env.USERPROFILE = previousUserProfile
+  }
+
   await rm(tmpDir, { recursive: true, force: true })
 })
+
+function normalizeCleanupPath(targetPath: string | undefined): string | undefined {
+  if (!targetPath) {
+    return targetPath
+  }
+
+  if (process.platform === 'darwin') {
+    return targetPath.replace(/^\/private(?=\/var\/)/, '')
+  }
+
+  return targetPath
+}
+
+function expectRemovedPath(actualPath: string | undefined, expectedPath: string): void {
+  expect(normalizeCleanupPath(actualPath)).toBe(normalizeCleanupPath(expectedPath))
+}
 
 function makeDetection(tool: 'node' | 'java' | 'python' | 'git', installRootDir: string): DetectedEnvironment {
   return {
@@ -133,7 +170,7 @@ describe('real install — Node.js direct', () => {
       await writeFile(join(installRootDir, 'stale.txt'), 'old')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('node', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const npmCacheDir = join(tmpDir, 'npm-cache2')
       const npmGlobalPrefix = join(tmpDir, 'npm-global2')
@@ -253,7 +290,7 @@ describe('real install — Node.js nvm', () => {
       await writeFile(join(installRootDir, 'old-nvm.txt'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('node', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const npmCacheDir = join(tmpDir, 'npm-cache-nvm2')
       const npmGlobalPrefix = join(tmpDir, 'npm-global-nvm2')
@@ -367,7 +404,7 @@ describe('real install — Java JDK', () => {
       await writeFile(join(installRootDir, 'old-jdk.txt'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('java', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const task = createTask({
         templateId: 'java-template',
@@ -474,7 +511,7 @@ describe('real install — Java SDKMAN', () => {
       await writeFile(join(installRootDir, 'old-sdkman.txt'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('java', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const task = createTask({
         templateId: 'java-template',
@@ -583,7 +620,7 @@ describe('real install — Python conda', () => {
       await writeFile(join(installRootDir, 'old-conda'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('python', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const task = createTask({
         templateId: 'python-template',
@@ -693,7 +730,7 @@ describe('real install — Python direct', () => {
       await writeFile(join(installRootDir, 'old-python.txt'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('python', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const task = createTask({
         templateId: 'python-template',
@@ -798,7 +835,7 @@ describe('real install — Git direct', () => {
       await writeFile(join(installRootDir, 'old-git'), 'stale')
 
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       const task = createTask({
         templateId: 'git-template',
@@ -904,7 +941,7 @@ describe('real install — Git Homebrew', () => {
 
       // Cleanup
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       // Fresh install after cleanup
       const task = createTask({
@@ -1011,7 +1048,7 @@ describe('real install — Git Scoop', () => {
 
       // Cleanup
       const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
-      expect(cleanupResult.removedPath).toBe(installRootDir)
+      expectRemovedPath(cleanupResult.removedPath, installRootDir)
 
       // Fresh install after cleanup
       const task = createTask({
