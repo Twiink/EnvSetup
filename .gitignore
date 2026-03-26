@@ -10,3 +10,5 @@ AGENTS.md
 GEMINI.md
 .claude
 action
+.playwright-mcp
+.DS_Store
