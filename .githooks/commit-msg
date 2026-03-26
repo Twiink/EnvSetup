@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+msg_file="${1:?missing commit message file}"
+
+forbidden_pattern='^[[:space:]]*Co-Authored-By:[[:space:]]*(Claude|Anthropic|ChatGPT|OpenAI|GitHub Copilot|Copilot|Gemini|Cursor|Windsurf|Codex)\b'
+
+had_forbidden=0
+if grep -Eiq "$forbidden_pattern" "$msg_file"; then
+  had_forbidden=1
+  perl -0pi -e '
+    s/^[ \t]*Co-Authored-By:\s*(?:Claude|Anthropic|ChatGPT|OpenAI|GitHub Copilot|Copilot|Gemini|Cursor|Windsurf|Codex)\b[^\n]*(?:\n|\z)//gmi;
+    s/\n{3,}/\n\n/g;
+    s/\n+\z/\n/s;
+  ' "$msg_file"
+fi
+
+if ! grep -Eqv '^[[:space:]]*(#.*)?$' "$msg_file"; then
+  printf '%s\n' 'EnvSetup: commit message is empty after removing forbidden AI co-author trailers.' >&2
+  exit 1
+fi
+
+if [ "$had_forbidden" -eq 1 ]; then
+  printf '%s\n' 'EnvSetup: removed forbidden AI co-author trailer(s) from commit message.' >&2
+fi

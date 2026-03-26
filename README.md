@@ -166,6 +166,7 @@ npm run format:check     # 格式检查
 
 - 提交信息使用中文，并在提交前检查完整 commit message
 - 禁止保留 `Co-Authored-By: Claude ...`、`Co-Authored-By: Anthropic ...` 或其他 AI 自动追加的协作者尾注
+- 仓库提供 `.githooks/commit-msg` 自动清理这类尾注；当前仓库可用 `git config core.hooksPath .githooks` 启用
 - 详细规则见 `CONTRIBUTING.md`
 
 ## 使用流程
