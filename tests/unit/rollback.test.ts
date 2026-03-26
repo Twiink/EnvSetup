@@ -37,6 +37,7 @@ const mockApplySnapshot = vi.mocked(applySnapshot)
 const mockLoadSnapshot = vi.mocked(loadSnapshot)
 const mockReconcileSnapshotState = vi.mocked(reconcileSnapshotState)
 const mockRestoreShellConfigs = vi.mocked(restoreShellConfigs)
+const runtimePlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as const
 
 vi.mock('../../src/main/core/environment', () => ({
   isCleanupAllowedPath: vi.fn().mockReturnValue(true),
@@ -62,6 +63,50 @@ function makeSnapEntry(
   label?: string,
 ): SnapshotMeta['snapshots'][0] {
   return { id, taskId, createdAt, type, label, canDelete: false }
+}
+
+function expectRollbackCommandInvocation(callIndex: number) {
+  if (runtimePlatform === 'win32') {
+    expect(execFileMock).toHaveBeenNthCalledWith(
+      callIndex,
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'brew uninstall git'],
+      expect.any(Function),
+    )
+    return
+  }
+
+  expect(execFileMock).toHaveBeenNthCalledWith(
+    callIndex,
+    'sh',
+    ['-c', 'brew uninstall git'],
+    expect.any(Function),
+  )
+}
+
+function expectElevatedRollbackCommandInvocation(callIndex: number) {
+  if (runtimePlatform === 'win32') {
+    expect(execFileMock).toHaveBeenNthCalledWith(
+      callIndex,
+      'powershell',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        expect.stringContaining("Start-Process -FilePath 'powershell.exe' -Verb RunAs"),
+      ],
+      expect.any(Function),
+    )
+    return
+  }
+
+  expect(execFileMock).toHaveBeenNthCalledWith(
+    callIndex,
+    'osascript',
+    [expect.any(String), expect.stringContaining('with administrator privileges')],
+    expect.any(Function),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -393,11 +438,7 @@ describe('executeRollback', () => {
       rollbackCommands: ['brew uninstall git'],
     })
 
-    expect(execFileMock).toHaveBeenCalledWith(
-      'sh',
-      ['-c', 'brew uninstall git'],
-      expect.any(Function),
-    )
+    expectRollbackCommandInvocation(1)
     expect(result.success).toBe(true)
     expect(result.message).toContain('ran 1 rollback command(s)')
   })
@@ -422,18 +463,8 @@ describe('executeRollback', () => {
       rollbackCommands: ['brew uninstall git'],
     })
 
-    expect(execFileMock).toHaveBeenNthCalledWith(
-      1,
-      'sh',
-      ['-c', 'brew uninstall git'],
-      expect.any(Function),
-    )
-    expect(execFileMock).toHaveBeenNthCalledWith(
-      2,
-      'osascript',
-      [expect.any(String), expect.stringContaining('with administrator privileges')],
-      expect.any(Function),
-    )
+    expectRollbackCommandInvocation(1)
+    expectElevatedRollbackCommandInvocation(2)
     expect(result.success).toBe(true)
   })
 

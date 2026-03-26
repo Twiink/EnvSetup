@@ -389,6 +389,19 @@ afterEach(() => {
   cleanup()
 })
 
+async function clickEnabledButton(name: string) {
+  const button = await screen.findByRole('button', { name })
+  await waitFor(() => {
+    expect(button).toBeEnabled()
+  })
+  fireEvent.click(button)
+}
+
+async function runPassingPrecheck() {
+  await clickEnabledButton('运行预检')
+  await screen.findByText('当前预检项均已通过。')
+}
+
 describe('App', () => {
   it('renders template list and precheck panel', async () => {
     render(<App />)
@@ -404,9 +417,8 @@ describe('App', () => {
   it('creates a task after precheck', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
-    await screen.findByText('通过')
-    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
 
     expect(await screen.findByText('任务状态')).toBeInTheDocument()
     expect(await screen.findByText('草稿')).toBeInTheDocument()
@@ -443,7 +455,7 @@ describe('App', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await clickEnabledButton('运行预检')
 
     expect(await screen.findByText('已发现环境')).toBeInTheDocument()
     expect(await screen.findByText('Node 管理器目录')).toBeInTheDocument()
@@ -472,9 +484,8 @@ describe('App', () => {
   it('shows real_run summary after starting a task', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
-    await screen.findByText('通过')
-    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
     await screen.findByText('任务状态')
 
     fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
@@ -539,9 +550,8 @@ describe('App', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
-    await screen.findByText('通过')
-    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
     await screen.findByText('任务状态')
     fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
 
@@ -596,7 +606,7 @@ describe('App', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await clickEnabledButton('运行预检')
     fireEvent.click(await screen.findByRole('button', { name: '一键清理' }))
 
     await waitFor(() => {
@@ -612,7 +622,7 @@ describe('App', () => {
       ])
       expect(runPrecheck).toHaveBeenCalledTimes(2)
     })
-    expect(await screen.findByText('通过')).toBeInTheDocument()
+    expect(await screen.findByText('当前预检项均已通过。')).toBeInTheDocument()
   })
 
   it('shows cleanup rollback entry and executes rollback from cleanup snapshot', async () => {
@@ -660,7 +670,7 @@ describe('App', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
+    await clickEnabledButton('运行预检')
     fireEvent.click(await screen.findByRole('button', { name: '一键清理' }))
 
     expect(await screen.findByRole('button', { name: '一键回滚清理' })).toBeInTheDocument()
@@ -676,9 +686,8 @@ describe('App', () => {
   it('retries failed plugin and rebinds progress listener', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
-    await screen.findByText('通过')
-    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
     await screen.findByText('任务状态')
     fireEvent.click(await screen.findByRole('button', { name: '重试插件' }))
 
@@ -711,9 +720,8 @@ describe('App', () => {
 
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
-    await screen.findByText('通过')
-    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
     await screen.findByText('执行中')
     fireEvent.click(await screen.findByRole('button', { name: '取消任务' }))
 
@@ -724,9 +732,8 @@ describe('App', () => {
   it('previews and applies env changes from task result', async () => {
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '运行预检' }))
-    await screen.findByText('通过')
-    fireEvent.click(await screen.findByRole('button', { name: '创建任务' }))
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
     await screen.findByText('任务状态')
     fireEvent.click(await screen.findByRole('button', { name: '应用环境变更' }))
 

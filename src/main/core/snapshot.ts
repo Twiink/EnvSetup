@@ -35,6 +35,10 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => typeof value === 'string'))]
 }
 
+function getPathDelimiter(platform: AppPlatform): string {
+  return platform === 'win32' ? ';' : ':'
+}
+
 // ============================================================
 // 对象存储（内容寻址）
 // ============================================================
@@ -261,7 +265,9 @@ export async function createSnapshot(options: {
     variables: { ...process.env } as Record<string, string>,
     path: (process.env.PATH ?? '').split(delimiter),
     userVariables:
-      process.platform === 'win32' ? await loadWindowsUserEnvironment().catch(() => undefined) : undefined,
+      process.platform === 'win32'
+        ? await loadWindowsUserEnvironment().catch(() => undefined)
+        : undefined,
   }
 
   // 并行捕获 shell 配置文件
@@ -470,7 +476,8 @@ async function loadWindowsUserEnvironment(): Promise<Record<string, string>> {
   const parsed = JSON.parse(trimmed) as Record<string, unknown>
   return Object.fromEntries(
     Object.entries(parsed).filter(
-      (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+      (entry): entry is [string, string] =>
+        typeof entry[0] === 'string' && typeof entry[1] === 'string',
     ),
   )
 }
@@ -785,7 +792,7 @@ export async function restoreEnvironment(
 ): Promise<number> {
   const nextEnvironment = {
     ...environment.variables,
-    PATH: environment.path.join(delimiter),
+    PATH: environment.path.join(getPathDelimiter(platform)),
   }
 
   let restoredCount = 0
@@ -851,15 +858,17 @@ export async function reconcileSnapshotState(options: {
   allowElevation?: boolean
 }): Promise<ReconcileSnapshotStateResult> {
   const snapshot = await loadSnapshot(options.baseDir, options.snapshotId)
-  const snapshotDirectories = new Set(Object.keys(snapshot.directories ?? {}).map((entry) => resolve(entry)))
+  const snapshotDirectories = new Set(
+    Object.keys(snapshot.directories ?? {}).map((entry) => resolve(entry)),
+  )
   const snapshotFiles = new Set(Object.keys(snapshot.files).map((entry) => resolve(entry)))
   const snapshotSymlinks = new Set(
     Object.keys(snapshot.symlinks ?? {}).map((entry) => resolve(entry)),
   )
   const snapshotPaths = [...snapshotDirectories, ...snapshotFiles, ...snapshotSymlinks]
   const roots = uniqueStrings(
-    (options.paths && options.paths.length > 0 ? options.paths : snapshot.trackedPaths).map((entry) =>
-      resolve(entry),
+    (options.paths && options.paths.length > 0 ? options.paths : snapshot.trackedPaths).map(
+      (entry) => resolve(entry),
     ),
   )
   const pathSeparator = process.platform === 'win32' ? '\\' : '/'
@@ -870,9 +879,7 @@ export async function reconcileSnapshotState(options: {
   }
 
   function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
-    return (
-      candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${pathSeparator}`)
-    )
+    return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${pathSeparator}`)
   }
 
   function snapshotContainsPath(targetPath: string): boolean {

@@ -19,7 +19,11 @@ import { mkdtemp } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { cleanupDetectedEnvironment } from '../../src/main/core/environment'
-import { createSnapshot, markSnapshotDeletable, updateSnapshotMeta } from '../../src/main/core/snapshot'
+import {
+  createSnapshot,
+  markSnapshotDeletable,
+  updateSnapshotMeta,
+} from '../../src/main/core/snapshot'
 import { createTask, executeTask, loadTask } from '../../src/main/core/task'
 import type { DetectedEnvironment } from '../../src/main/core/contracts'
 
@@ -80,6 +84,13 @@ function normalizeCleanupPath(targetPath: string | undefined): string | undefine
     return targetPath.replace(/^\/private(?=\/var\/)/, '')
   }
 
+  if (process.platform === 'win32') {
+    const normalized = targetPath.replace(/\//g, '\\').toLowerCase()
+    const tempMarker = '\\appdata\\local\\temp\\'
+    const markerIndex = normalized.indexOf(tempMarker)
+    return markerIndex >= 0 ? normalized.slice(markerIndex + tempMarker.length) : normalized
+  }
+
   return targetPath
 }
 
@@ -87,7 +98,10 @@ function expectRemovedPath(actualPath: string | undefined, expectedPath: string)
   expect(normalizeCleanupPath(actualPath)).toBe(normalizeCleanupPath(expectedPath))
 }
 
-function makeDetection(tool: 'node' | 'java' | 'python' | 'git', installRootDir: string): DetectedEnvironment {
+function makeDetection(
+  tool: 'node' | 'java' | 'python' | 'git',
+  installRootDir: string,
+): DetectedEnvironment {
   return {
     id: `${tool}:managed_root:test:${installRootDir}`,
     tool,
@@ -107,120 +121,130 @@ describe('real install — Node.js direct', () => {
   const TIMEOUT = 300_000 // 5 min
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
-    it('fresh install succeeds and node --version works', async () => {
-      const installRootDir = join(tmpDir, 'node-direct')
-      const npmCacheDir = join(tmpDir, 'npm-cache')
-      const npmGlobalPrefix = join(tmpDir, 'npm-global')
+    it(
+      'fresh install succeeds and node --version works',
+      async () => {
+        const installRootDir = join(tmpDir, 'node-direct')
+        const npmCacheDir = join(tmpDir, 'npm-cache')
+        const npmGlobalPrefix = join(tmpDir, 'npm-global')
 
-      const task = createTask({
-        templateId: 'node-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          nodeManager: 'node',
-          nodeVersion: '20.20.1',
-          npmCacheDir,
-          npmGlobalPrefix,
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'node-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              nodeManager: 'node',
-              nodeVersion: '20.20.1',
-              npmCacheDir,
-              npmGlobalPrefix,
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'node-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            nodeManager: 'node',
+            nodeVersion: '20.20.1',
+            npmCacheDir,
+            npmGlobalPrefix,
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'node-env': nodeEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      await markSnapshotDeletable(snapshotsDir, snapshot.id)
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-
-      const persisted = await loadTask(task.id, tasksDir)
-      expect(persisted.status).toBe('succeeded')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install succeeds', async () => {
-      const installRootDir = join(tmpDir, 'node-direct-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'stale.txt'), 'old')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('node', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const npmCacheDir = join(tmpDir, 'npm-cache2')
-      const npmGlobalPrefix = join(tmpDir, 'npm-global2')
-
-      const task = createTask({
-        templateId: 'node-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          nodeManager: 'node',
-          nodeVersion: '20.20.1',
-          npmCacheDir,
-          npmGlobalPrefix,
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'node-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              nodeManager: 'node',
-              nodeVersion: '20.20.1',
-              npmCacheDir,
-              npmGlobalPrefix,
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'node-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                nodeManager: 'node',
+                nodeVersion: '20.20.1',
+                npmCacheDir,
+                npmGlobalPrefix,
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'node-env': nodeEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        await markSnapshotDeletable(snapshotsDir, snapshot.id)
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+
+        const persisted = await loadTask(task.id, tasksDir)
+        expect(persisted.status).toBe('succeeded')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'node-direct-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'stale.txt'), 'old')
+
+        const cleanupResult = await cleanupDetectedEnvironment(
+          makeDetection('node', installRootDir),
+        )
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const npmCacheDir = join(tmpDir, 'npm-cache2')
+        const npmGlobalPrefix = join(tmpDir, 'npm-global2')
+
+        const task = createTask({
+          templateId: 'node-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            nodeManager: 'node',
+            nodeVersion: '20.20.1',
+            npmCacheDir,
+            npmGlobalPrefix,
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'node-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                nodeManager: 'node',
+                nodeVersion: '20.20.1',
+                npmCacheDir,
+                npmGlobalPrefix,
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'node-env': nodeEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'node-env': nodeEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -232,115 +256,125 @@ describe('real install — Node.js nvm', () => {
   const TIMEOUT = 300_000
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
-    it('fresh install succeeds via nvm', async () => {
-      const installRootDir = join(tmpDir, 'node-nvm')
-      const npmCacheDir = join(tmpDir, 'npm-cache-nvm')
-      const npmGlobalPrefix = join(tmpDir, 'npm-global-nvm')
+    it(
+      'fresh install succeeds via nvm',
+      async () => {
+        const installRootDir = join(tmpDir, 'node-nvm')
+        const npmCacheDir = join(tmpDir, 'npm-cache-nvm')
+        const npmGlobalPrefix = join(tmpDir, 'npm-global-nvm')
 
-      const task = createTask({
-        templateId: 'node-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          nodeManager: 'nvm',
-          nodeVersion: '20.20.1',
-          npmCacheDir,
-          npmGlobalPrefix,
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'node-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              nodeManager: 'nvm',
-              nodeVersion: '20.20.1',
-              npmCacheDir,
-              npmGlobalPrefix,
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'node-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            nodeManager: 'nvm',
+            nodeVersion: '20.20.1',
+            npmCacheDir,
+            npmGlobalPrefix,
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'node-env': nodeEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install via nvm succeeds', async () => {
-      const installRootDir = join(tmpDir, 'node-nvm-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old-nvm.txt'), 'stale')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('node', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const npmCacheDir = join(tmpDir, 'npm-cache-nvm2')
-      const npmGlobalPrefix = join(tmpDir, 'npm-global-nvm2')
-
-      const task = createTask({
-        templateId: 'node-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          nodeManager: 'nvm',
-          nodeVersion: '20.20.1',
-          npmCacheDir,
-          npmGlobalPrefix,
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'node-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              nodeManager: 'nvm',
-              nodeVersion: '20.20.1',
-              npmCacheDir,
-              npmGlobalPrefix,
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'node-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                nodeManager: 'nvm',
+                nodeVersion: '20.20.1',
+                npmCacheDir,
+                npmGlobalPrefix,
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'node-env': nodeEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install via nvm succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'node-nvm-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old-nvm.txt'), 'stale')
+
+        const cleanupResult = await cleanupDetectedEnvironment(
+          makeDetection('node', installRootDir),
+        )
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const npmCacheDir = join(tmpDir, 'npm-cache-nvm2')
+        const npmGlobalPrefix = join(tmpDir, 'npm-global-nvm2')
+
+        const task = createTask({
+          templateId: 'node-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            nodeManager: 'nvm',
+            nodeVersion: '20.20.1',
+            npmCacheDir,
+            npmGlobalPrefix,
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'node-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                nodeManager: 'nvm',
+                nodeVersion: '20.20.1',
+                npmCacheDir,
+                npmGlobalPrefix,
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'node-env': nodeEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'node-env': nodeEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -352,102 +386,112 @@ describe('real install — Java JDK', () => {
   const TIMEOUT = 300_000
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
-    it('fresh install succeeds and java -version works', async () => {
-      const installRootDir = join(tmpDir, 'java-jdk')
+    it(
+      'fresh install succeeds and java -version works',
+      async () => {
+        const installRootDir = join(tmpDir, 'java-jdk')
 
-      const task = createTask({
-        templateId: 'java-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          javaManager: 'jdk',
-          javaVersion: '21',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'java-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              javaManager: 'jdk',
-              javaVersion: '21',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'java-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            javaManager: 'jdk',
+            javaVersion: '21',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'java-env': javaEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install succeeds', async () => {
-      const installRootDir = join(tmpDir, 'java-jdk-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old-jdk.txt'), 'stale')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('java', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const task = createTask({
-        templateId: 'java-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          javaManager: 'jdk',
-          javaVersion: '21',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'java-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              javaManager: 'jdk',
-              javaVersion: '21',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'java-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                javaManager: 'jdk',
+                javaVersion: '21',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'java-env': javaEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'java-jdk-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old-jdk.txt'), 'stale')
+
+        const cleanupResult = await cleanupDetectedEnvironment(
+          makeDetection('java', installRootDir),
+        )
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const task = createTask({
+          templateId: 'java-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            javaManager: 'jdk',
+            javaVersion: '21',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'java-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                javaManager: 'jdk',
+                javaVersion: '21',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'java-env': javaEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'java-env': javaEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -459,102 +503,112 @@ describe('real install — Java SDKMAN', () => {
   const TIMEOUT = 600_000 // 10 min — SDKMAN + Java download
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
-    it('fresh install succeeds via SDKMAN', async () => {
-      const installRootDir = join(tmpDir, 'java-sdkman')
+    it(
+      'fresh install succeeds via SDKMAN',
+      async () => {
+        const installRootDir = join(tmpDir, 'java-sdkman')
 
-      const task = createTask({
-        templateId: 'java-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          javaManager: 'sdkman',
-          javaVersion: '21',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'java-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              javaManager: 'sdkman',
-              javaVersion: '21',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'java-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            javaManager: 'sdkman',
+            javaVersion: '21',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'java-env': javaEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install via SDKMAN succeeds', async () => {
-      const installRootDir = join(tmpDir, 'java-sdkman-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old-sdkman.txt'), 'stale')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('java', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const task = createTask({
-        templateId: 'java-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          javaManager: 'sdkman',
-          javaVersion: '21',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'java-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              javaManager: 'sdkman',
-              javaVersion: '21',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'java-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                javaManager: 'sdkman',
+                javaVersion: '21',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'java-env': javaEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install via SDKMAN succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'java-sdkman-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old-sdkman.txt'), 'stale')
+
+        const cleanupResult = await cleanupDetectedEnvironment(
+          makeDetection('java', installRootDir),
+        )
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const task = createTask({
+          templateId: 'java-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            javaManager: 'sdkman',
+            javaVersion: '21',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'java-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                javaManager: 'sdkman',
+                javaVersion: '21',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'java-env': javaEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'java-env': javaEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -568,102 +622,112 @@ describe('real install — Python conda', () => {
   const TIMEOUT = 600_000 // 10 min — Miniconda download + setup
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
-    it('fresh install succeeds via conda', async () => {
-      const installRootDir = join(tmpDir, 'python-conda')
+    it(
+      'fresh install succeeds via conda',
+      async () => {
+        const installRootDir = join(tmpDir, 'python-conda')
 
-      const task = createTask({
-        templateId: 'python-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          pythonManager: 'conda',
-          pythonVersion: '3.12.10',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'python-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              pythonManager: 'conda',
-              pythonVersion: '3.12.10',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'python-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            pythonManager: 'conda',
+            pythonVersion: '3.12.10',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'python-env': pythonEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install succeeds', async () => {
-      const installRootDir = join(tmpDir, 'python-conda-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old-conda'), 'stale')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('python', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const task = createTask({
-        templateId: 'python-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          pythonManager: 'conda',
-          pythonVersion: '3.12.10',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'python-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              pythonManager: 'conda',
-              pythonVersion: '3.12.10',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'python-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                pythonManager: 'conda',
+                pythonVersion: '3.12.10',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'python-env': pythonEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'python-conda-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old-conda'), 'stale')
+
+        const cleanupResult = await cleanupDetectedEnvironment(
+          makeDetection('python', installRootDir),
+        )
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const task = createTask({
+          templateId: 'python-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            pythonManager: 'conda',
+            pythonVersion: '3.12.10',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'python-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                pythonManager: 'conda',
+                pythonVersion: '3.12.10',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'python-env': pythonEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'python-env': pythonEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -678,102 +742,112 @@ describe('real install — Python direct', () => {
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
     // macOS source compile is extremely slow; skip in standard CI, enable for full test runs
-    it('fresh install succeeds via standalone Python', async () => {
-      const installRootDir = join(tmpDir, 'python-direct')
+    it(
+      'fresh install succeeds via standalone Python',
+      async () => {
+        const installRootDir = join(tmpDir, 'python-direct')
 
-      const task = createTask({
-        templateId: 'python-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          pythonManager: 'python',
-          pythonVersion: '3.12.10',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'python-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              pythonManager: 'python',
-              pythonVersion: '3.12.10',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'python-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            pythonManager: 'python',
+            pythonVersion: '3.12.10',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'python-env': pythonEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install via standalone Python succeeds', async () => {
-      const installRootDir = join(tmpDir, 'python-direct-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old-python.txt'), 'stale')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('python', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const task = createTask({
-        templateId: 'python-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          pythonManager: 'python',
-          pythonVersion: '3.12.10',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'python-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              pythonManager: 'python',
-              pythonVersion: '3.12.10',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'python-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                pythonManager: 'python',
+                pythonVersion: '3.12.10',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'python-env': pythonEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install via standalone Python succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'python-direct-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old-python.txt'), 'stale')
+
+        const cleanupResult = await cleanupDetectedEnvironment(
+          makeDetection('python', installRootDir),
+        )
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const task = createTask({
+          templateId: 'python-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            pythonManager: 'python',
+            pythonVersion: '3.12.10',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'python-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                pythonManager: 'python',
+                pythonVersion: '3.12.10',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'python-env': pythonEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'python-env': pythonEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -785,98 +859,106 @@ describe('real install — Git direct', () => {
   const TIMEOUT = 300_000
 
   describe.skipIf(!isRealRun)('gated by ENVSETUP_REAL_RUN', () => {
-    it('fresh install succeeds and git --version works', async () => {
-      const installRootDir = join(tmpDir, 'git-direct')
+    it(
+      'fresh install succeeds and git --version works',
+      async () => {
+        const installRootDir = join(tmpDir, 'git-direct')
 
-      const task = createTask({
-        templateId: 'git-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          gitManager: 'git',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'git-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              gitManager: 'git',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'git-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            gitManager: 'git',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'git-env': gitEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install succeeds', async () => {
-      const installRootDir = join(tmpDir, 'git-direct-cleanup')
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old-git'), 'stale')
-
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      const task = createTask({
-        templateId: 'git-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          gitManager: 'git',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'git-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              gitManager: 'git',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'git-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                gitManager: 'git',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'git-env': gitEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'git-direct-cleanup')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old-git'), 'stale')
+
+        const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        const task = createTask({
+          templateId: 'git-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            gitManager: 'git',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'git-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                gitManager: 'git',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'git-env': gitEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'git-env': gitEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -888,102 +970,110 @@ describe('real install — Git Homebrew', () => {
   const TIMEOUT = 600_000 // brew install can be slow
 
   describe.skipIf(!isRealRun || !isMac)('gated by ENVSETUP_REAL_RUN + macOS', () => {
-    it('fresh install succeeds via Homebrew', async () => {
-      const installRootDir = join(tmpDir, 'git-homebrew')
+    it(
+      'fresh install succeeds via Homebrew',
+      async () => {
+        const installRootDir = join(tmpDir, 'git-homebrew')
 
-      const task = createTask({
-        templateId: 'git-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          gitManager: 'homebrew',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'git-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              gitManager: 'homebrew',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'git-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            gitManager: 'homebrew',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'git-env': gitEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install via Homebrew succeeds', async () => {
-      const installRootDir = join(tmpDir, 'git-homebrew-cleanup')
-
-      // Simulate a pre-existing environment
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old.txt'), 'stale')
-
-      // Cleanup
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      // Fresh install after cleanup
-      const task = createTask({
-        templateId: 'git-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          gitManager: 'homebrew',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'git-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              gitManager: 'homebrew',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'git-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                gitManager: 'homebrew',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'git-env': gitEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install via Homebrew succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'git-homebrew-cleanup')
+
+        // Simulate a pre-existing environment
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old.txt'), 'stale')
+
+        // Cleanup
+        const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        // Fresh install after cleanup
+        const task = createTask({
+          templateId: 'git-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            gitManager: 'homebrew',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'git-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                gitManager: 'homebrew',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'git-env': gitEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'git-env': gitEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })
 
@@ -995,101 +1085,109 @@ describe('real install — Git Scoop', () => {
   const TIMEOUT = 300_000
 
   describe.skipIf(!isRealRun || !isWindows)('gated by ENVSETUP_REAL_RUN + Windows', () => {
-    it('fresh install succeeds via Scoop', async () => {
-      const installRootDir = join(tmpDir, 'git-scoop')
+    it(
+      'fresh install succeeds via Scoop',
+      async () => {
+        const installRootDir = join(tmpDir, 'git-scoop')
 
-      const task = createTask({
-        templateId: 'git-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          gitManager: 'scoop',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'git-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              gitManager: 'scoop',
-              downloadCacheDir,
-            },
+        const task = createTask({
+          templateId: 'git-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            gitManager: 'scoop',
+            downloadCacheDir,
           },
-        ],
-      })
-
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
-
-      const result = await executeTask({
-        task,
-        registry: { 'git-env': gitEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
-
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
-
-    it('cleanup existing env then install via Scoop succeeds', async () => {
-      const installRootDir = join(tmpDir, 'git-scoop-cleanup')
-
-      // Simulate a pre-existing environment
-      await mkdir(installRootDir, { recursive: true })
-      await writeFile(join(installRootDir, 'old.txt'), 'stale')
-
-      // Cleanup
-      const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
-      expectRemovedPath(cleanupResult.removedPath, installRootDir)
-
-      // Fresh install after cleanup
-      const task = createTask({
-        templateId: 'git-template',
-        templateVersion: '1.0.0',
-        params: {
-          installRootDir,
-          gitManager: 'scoop',
-          downloadCacheDir,
-        },
-        plugins: [
-          {
-            pluginId: 'git-env',
-            version: '1.0.0',
-            params: {
-              installRootDir,
-              gitManager: 'scoop',
-              downloadCacheDir,
+          plugins: [
+            {
+              pluginId: 'git-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                gitManager: 'scoop',
+                downloadCacheDir,
+              },
             },
+          ],
+        })
+
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
+
+        const result = await executeTask({
+          task,
+          registry: { 'git-env': gitEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
+
+    it(
+      'cleanup existing env then install via Scoop succeeds',
+      async () => {
+        const installRootDir = join(tmpDir, 'git-scoop-cleanup')
+
+        // Simulate a pre-existing environment
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old.txt'), 'stale')
+
+        // Cleanup
+        const cleanupResult = await cleanupDetectedEnvironment(makeDetection('git', installRootDir))
+        expectRemovedPath(cleanupResult.removedPath, installRootDir)
+
+        // Fresh install after cleanup
+        const task = createTask({
+          templateId: 'git-template',
+          templateVersion: '1.0.0',
+          params: {
+            installRootDir,
+            gitManager: 'scoop',
+            downloadCacheDir,
           },
-        ],
-      })
+          plugins: [
+            {
+              pluginId: 'git-env',
+              version: '1.0.0',
+              params: {
+                installRootDir,
+                gitManager: 'scoop',
+                downloadCacheDir,
+              },
+            },
+          ],
+        })
 
-      const snapshot = await createSnapshot({
-        baseDir: snapshotsDir,
-        taskId: task.id,
-        type: 'auto',
-        trackedPaths: [],
-      })
-      await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: task.id,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-      const result = await executeTask({
-        task,
-        registry: { 'git-env': gitEnvPlugin },
-        platform,
-        tasksDir,
-        dryRun: false,
-      })
+        const result = await executeTask({
+          task,
+          registry: { 'git-env': gitEnvPlugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
 
-      expect(result.status).toBe('succeeded')
-      expect(result.plugins[0].status).toBe('verified_success')
-    }, TIMEOUT)
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+      },
+      TIMEOUT,
+    )
   })
 })

@@ -32,6 +32,7 @@ const showOpenDialog = vi.fn()
 const getFocusedWindow = vi.fn()
 const send = vi.fn()
 const isPackaged = false
+const runtimePlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as const
 
 vi.mock('electron', () => ({
   app: { isPackaged },
@@ -532,7 +533,7 @@ describe('registerIpcHandlers', () => {
     const result = await handlers.get('environment:apply-changes')?.({}, payload)
     expect(envMod.applyEnvChanges).toHaveBeenCalledWith({
       changes: payload.changes,
-      platform: 'darwin',
+      platform: runtimePlatform,
     })
     expect(result.applied).toHaveLength(1)
   })

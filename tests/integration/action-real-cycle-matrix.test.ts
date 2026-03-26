@@ -25,21 +25,16 @@ import { applyEnvChanges } from '../../src/main/core/envPersistence'
 import { executeRollback } from '../../src/main/core/rollback'
 import { createSnapshot, updateSnapshotMeta } from '../../src/main/core/snapshot'
 import { createTask, executeTask } from '../../src/main/core/task'
-import {
-  inferTemplateFieldPrefix,
-  loadTemplatesFromDirectory,
-} from '../../src/main/core/template'
+import { inferTemplateFieldPrefix, loadTemplatesFromDirectory } from '../../src/main/core/template'
 import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
 import javaEnvPlugin from '../../src/main/plugins/javaEnvPlugin'
 import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
 import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
-import {
-  resolvePythonInstallPaths,
-  resolveJavaInstallPaths,
-} from '../../src/main/core/platform'
+import { resolvePythonInstallPaths, resolveJavaInstallPaths } from '../../src/main/core/platform'
 
 const execFileAsync = promisify(execFile)
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
+const isCi = process.env.CI === 'true'
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 const platform: AppPlatform = process.platform as AppPlatform
@@ -66,7 +61,7 @@ type RealCycleCase = {
   verifyRolledBackState?: () => Promise<void>
 }
 
-const realCycleCases: RealCycleCase[] = [
+const allRealCycleCases: RealCycleCase[] = [
   {
     name: 'Node.js direct',
     tool: 'node',
@@ -219,6 +214,24 @@ const realCycleCases: RealCycleCase[] = [
     : []),
 ]
 
+function shouldRunRealCycleCaseInCi(testCase: RealCycleCase): boolean {
+  if (!isCi) {
+    return true
+  }
+
+  if (isMac) {
+    return testCase.name === 'Node.js direct' || testCase.name === 'Node.js nvm'
+  }
+
+  if (isWindows) {
+    return testCase.name === 'Python direct'
+  }
+
+  return false
+}
+
+const realCycleCases = allRealCycleCases.filter(shouldRunRealCycleCaseInCi)
+
 beforeAll(async () => {
   suiteDir = await mkdtemp(join(tmpdir(), 'envsetup-real-cycle-suite-'))
   sharedDownloadCacheDir = join(suiteDir, 'download-cache')
@@ -357,7 +370,7 @@ async function assertRollbackRestoredInstalledState(
   params: Record<string, string>,
   installResult: PluginInstallResult,
 ) {
-  const rollbackResult = await executeRollback(snapshotsDir, snapshotId, [], [installRootDir], {
+  const rollbackResult = await executeRollback(snapshotsDir, snapshotId, [], undefined, {
     skipRollbackCommands: true,
   })
 
@@ -412,7 +425,9 @@ function toTemplateValues(
   params: Record<string, string>,
 ): Record<string, Primitive> {
   const prefix = `${inferTemplateFieldPrefix(testCase.pluginId)}.`
-  return Object.fromEntries(Object.entries(params).map(([key, value]) => [`${prefix}${key}`, value]))
+  return Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [`${prefix}${key}`, value]),
+  )
 }
 
 function getTemplate(testCase: RealCycleCase): ResolvedTemplate {
@@ -496,7 +511,10 @@ async function hydrateDetectionEnvironment(
   }
 }
 
-function pathBelongsToInstallRoot(candidatePath: string | undefined, installRootDir: string): boolean {
+function pathBelongsToInstallRoot(
+  candidatePath: string | undefined,
+  installRootDir: string,
+): boolean {
   if (!candidatePath) {
     return false
   }

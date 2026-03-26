@@ -70,6 +70,13 @@ function normalizeCleanupPath(targetPath: string | undefined): string | undefine
     return targetPath.replace(/^\/private(?=\/var\/)/, '')
   }
 
+  if (process.platform === 'win32') {
+    const normalized = targetPath.replace(/\//g, '\\').toLowerCase()
+    const tempMarker = '\\appdata\\local\\temp\\'
+    const markerIndex = normalized.indexOf(tempMarker)
+    return markerIndex >= 0 ? normalized.slice(markerIndex + tempMarker.length) : normalized
+  }
+
   return targetPath
 }
 
