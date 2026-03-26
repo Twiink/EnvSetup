@@ -17,7 +17,7 @@ const tempDirs: string[] = []
 
 async function createZipArchive(sourceDir: string, zipPath: string): Promise<void> {
   if (process.platform === 'win32') {
-    const command = `Compress-Archive -LiteralPath '${sourceDir.replace(/'/g, "''")}\\*' -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force`
+    const command = `Compress-Archive -Path '${sourceDir.replace(/'/g, "''")}\\*' -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force`
     await execFileAsync('powershell', ['-NoProfile', '-Command', command])
     return
   }

@@ -175,6 +175,8 @@ function buildDarwinStandaloneCommands(input: JavaPluginParams): string[] {
     `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`,
     `mkdir -p ${quoteShell(installPaths.standaloneJdkDir)}`,
     `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.standaloneJdkDir)} --strip-components=1`,
+    // macOS Temurin archives contain Contents/Home/; flatten if present
+    `if [ -d ${quoteShell(installPaths.standaloneJdkDir + '/Contents/Home')} ]; then mv ${quoteShell(installPaths.standaloneJdkDir + '/Contents/Home')}/* ${quoteShell(installPaths.standaloneJdkDir)}/ && rm -rf ${quoteShell(installPaths.standaloneJdkDir + '/Contents')}; fi`,
     `rm -f ${quoteShell(archivePath)}`,
     `export JAVA_HOME=${quoteShell(installPaths.standaloneJdkDir)} && export PATH="${installPaths.standaloneJdkBinDir}:$PATH" && java -version`,
   ]

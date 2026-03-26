@@ -209,9 +209,7 @@ function buildDarwinPkgCommands(input: PythonPluginParams): string[] {
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
     `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
-    `FRAMEWORK_DIR=$(find ${quoteShell(expandDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); [ -n "$FRAMEWORK_DIR" ]`,
-    `mkdir -p ${quoteShell(installPaths.standalonePythonDir)}`,
-    `cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
+    `FRAMEWORK_DIR=$(find ${quoteShell(expandDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); [ -n "$FRAMEWORK_DIR" ] && mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
     `rm -rf ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
   ]

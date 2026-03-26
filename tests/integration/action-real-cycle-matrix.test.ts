@@ -320,7 +320,19 @@ async function assertRealInstallSucceeded(
   verifyChecks: string[],
   status: string,
   pluginStatus: string,
+  pluginSnapshot?: { error?: string; errorCode?: string; logs: string[] },
 ) {
+  if (status !== 'succeeded' || pluginStatus !== 'verified_success') {
+    const detail = [
+      `[${testCase.name}] task=${status} plugin=${pluginStatus}`,
+      pluginSnapshot?.errorCode && `code: ${pluginSnapshot.errorCode}`,
+      pluginSnapshot?.error && `error: ${pluginSnapshot.error}`,
+      ...(pluginSnapshot?.logs?.slice(-20) ?? []),
+    ]
+      .filter(Boolean)
+      .join('\n')
+    console.error(detail)
+  }
   expect(status).toBe('succeeded')
   expect(pluginStatus).toBe('verified_success')
   expect(pluginResult?.executionMode).toBe('real_run')
@@ -598,6 +610,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           plugin.verifyResult?.checks ?? [],
           result.status,
           plugin.status,
+          plugin,
         )
 
         await assertRealRollbackSucceeded(
@@ -628,6 +641,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           seededPlugin.verifyResult?.checks ?? [],
           seededInstall.result.status,
           seededPlugin.status,
+          seededPlugin,
         )
 
         await persistUserEnvChanges(seededPlugin.lastResult?.envChanges ?? [])
@@ -676,6 +690,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           plugin.verifyResult?.checks ?? [],
           result.status,
           plugin.status,
+          plugin,
         )
 
         await persistUserEnvChanges(plugin.lastResult?.envChanges ?? [])
