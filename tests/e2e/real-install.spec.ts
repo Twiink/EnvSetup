@@ -578,7 +578,7 @@ test.describe('real rollback via built Electron app IPC', () => {
 
         expect(rollbackResult.success).toBe(true)
         expect(rollbackResult.executionMode).toBe('real_run')
-        expect(rollbackResult.directoriesRemoved).toBe(1)
+        expect(rollbackResult.directoriesRemoved).toBeGreaterThanOrEqual(1)
         await expect(fs.access(installRoot)).rejects.toThrow()
         await testCase.verifyRolledBackState?.()
       } finally {

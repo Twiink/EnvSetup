@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
-import { access, cp, mkdir, mkdtemp, readFile, readdir, realpath, stat } from 'node:fs/promises'
+import { access, cp, mkdir, mkdtemp, readFile, readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, extname, join } from 'node:path'
+import { basename, extname, join, resolve as resolvePath } from 'node:path'
 import { promisify } from 'node:util'
 
 import type { AppPlatform, ImportedPlugin, PluginManifest } from './contracts'
@@ -76,8 +76,8 @@ async function extractZipArchive(zipPath: string, stagingDir: string): Promise<s
   const tempDir = await mkdtemp(join(stagingDir || tmpdir(), `${baseName}-`))
 
   if (process.platform === 'win32') {
-    const archivePath = await realpath(zipPath)
-    const extractionDir = await realpath(tempDir)
+    const archivePath = resolvePath(zipPath)
+    const extractionDir = resolvePath(tempDir)
     const command = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${extractionDir.replace(/'/g, "''")}' -Force`
     await execFileAsync('powershell', ['-NoProfile', '-Command', command])
     return resolvePluginRoot(extractionDir)

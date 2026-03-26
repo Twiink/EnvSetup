@@ -291,9 +291,9 @@ function buildVerifyCommands(input: NodePluginParams): string[] {
 
   if (input.platform === 'darwin') {
     return [
-      `${quoteShell(`${installPaths.standaloneNodeBinDir}/node`)} --version`,
-      `${quoteShell(`${installPaths.standaloneNodeBinDir}/npm`)} config get cache`,
-      `${quoteShell(`${installPaths.standaloneNodeBinDir}/npm`)} config get prefix`,
+      `export PATH=${quoteShellDouble(`${installPaths.standaloneNodeBinDir}:$PATH`)} && node --version`,
+      `export PATH=${quoteShellDouble(`${installPaths.standaloneNodeBinDir}:$PATH`)} && npm config get cache`,
+      `export PATH=${quoteShellDouble(`${installPaths.standaloneNodeBinDir}:$PATH`)} && npm config get prefix`,
     ]
   }
 

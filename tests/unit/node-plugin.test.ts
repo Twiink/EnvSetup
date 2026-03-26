@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('node:child_process', () => ({
-  execFile: vi.fn((_file, _args, callback) => {
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn((_file, _args, callback) => {
     callback(null, { stdout: 'ok', stderr: '' })
   }),
+}))
+
+vi.mock('node:child_process', () => ({
+  execFile: execFileMock,
 }))
 
 vi.mock('../../src/main/core/download', () => ({
@@ -149,5 +153,42 @@ describe('node env plugin', () => {
 
     expect(result.commands.join('\n')).toContain('System.Security.Cryptography.SHA256')
     expect(result.commands.join('\n')).not.toContain('Get-FileHash')
+  })
+
+  it('prepends standalone node bin to PATH during darwin real-run verify', async () => {
+    execFileMock.mockClear()
+
+    const installResult = await nodePlugin.install({
+      nodeManager: 'node',
+      nodeVersion: '20.11.1',
+      installRootDir: '/tmp/toolchain',
+      npmCacheDir: '/tmp/npm-cache',
+      npmGlobalPrefix: '/tmp/npm-global',
+      dryRun: true,
+      platform: 'darwin',
+    })
+
+    await nodePlugin.verify({
+      nodeManager: 'node',
+      nodeVersion: '20.11.1',
+      installRootDir: '/tmp/toolchain',
+      npmCacheDir: '/tmp/npm-cache',
+      npmGlobalPrefix: '/tmp/npm-global',
+      dryRun: false,
+      platform: 'darwin',
+      installResult,
+    })
+
+    const shellCommands = execFileMock.mock.calls
+      .filter(([file, args]) => file === 'sh' && Array.isArray(args) && args[0] === '-c')
+      .map(([, args]) => args[1])
+
+    expect(shellCommands).toEqual(
+      expect.arrayContaining([
+        'export PATH="/tmp/toolchain/node-v20.11.1/bin:$PATH" && node --version',
+        'export PATH="/tmp/toolchain/node-v20.11.1/bin:$PATH" && npm config get cache',
+        'export PATH="/tmp/toolchain/node-v20.11.1/bin:$PATH" && npm config get prefix',
+      ]),
+    )
   })
 })
