@@ -162,6 +162,12 @@ npm run format           # Prettier 格式化
 npm run format:check     # 格式检查
 ```
 
+## 提交约束
+
+- 提交信息使用中文，并在提交前检查完整 commit message
+- 禁止保留 `Co-Authored-By: Claude ...`、`Co-Authored-By: Anthropic ...` 或其他 AI 自动追加的协作者尾注
+- 详细规则见 `CONTRIBUTING.md`
+
 ## 使用流程
 
 1. 启动应用，选择模板（如 `前端开发环境`）
