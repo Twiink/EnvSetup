@@ -544,7 +544,7 @@ async function removePathWithElevation(
   allowElevation?: boolean,
 ): Promise<void> {
   try {
-    await rm(targetPath, { recursive: true, force: true })
+    await rm(targetPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
   } catch (error) {
     if (!allowElevation || !isPermissionError(error)) {
       throw error
@@ -925,6 +925,16 @@ export async function reconcileSnapshotState(options: {
       targetStats = await lstat(targetPath)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return
+      }
+      // On Windows, a recently-executed .exe may deny lstat with EPERM.
+      // Attempt removal directly; if the file is truly gone, that's fine.
+      if (isPermissionError(error) && process.platform === 'win32') {
+        try {
+          await removePathWithElevation(targetPath, currentPlatform, options.allowElevation)
+        } catch {
+          // Ignore — the file may already be gone or truly unremovable.
+        }
         return
       }
       result.errors.push({
