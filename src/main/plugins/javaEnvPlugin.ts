@@ -236,7 +236,7 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
   ].join(' && ')
   const gitBashCommand = [
     `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
-    `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; & $gitInstaller ${gitInstallerArgs}; $gitInstallerExitCode = $LASTEXITCODE; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
+    `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; $proc = Start-Process -FilePath $gitInstaller -ArgumentList ${gitInstallerArgs} -Wait -PassThru; $gitInstallerExitCode = $proc.ExitCode; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
     `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
     `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
   ].join('; ')
@@ -325,7 +325,7 @@ async function runCommands(
               '-Command',
               command,
             ])
-          : await execFileAsync('/bin/bash', ['-lc', command])
+          : await execFileAsync('/bin/sh', ['-c', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({

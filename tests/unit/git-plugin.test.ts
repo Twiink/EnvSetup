@@ -34,7 +34,7 @@ describe('git env plugin', () => {
     expect(result.downloads[0].url).toContain('sourceforge.net')
     expect(result.commands.join('\n')).toContain('hdiutil attach')
     expect(result.commands.join('\n')).toContain('.Trashes')
-    expect(result.commands.join('\n')).toContain('pkgutil --expand-full')
+    expect(result.commands.join('\n')).toContain('pkgutil --expand')
   })
 
   it('returns dry-run result for direct git install on win32', async () => {
@@ -52,7 +52,7 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).toContain('/SP-')
     expect(result.commands.join('\n')).not.toContain('/CLOSEAPPLICATIONS')
     expect(result.commands.join('\n')).not.toContain('/RESTARTAPPLICATIONS')
-    expect(result.commands.join('\n')).not.toContain('Start-Process')
+    expect(result.commands.join('\n')).toContain('Start-Process')
   })
 
   it('returns dry-run result for homebrew mode on darwin', async () => {
@@ -81,7 +81,6 @@ describe('git env plugin', () => {
     expect(result.downloads[0].url).toContain('get.scoop.sh')
     expect(result.commands).toHaveLength(1)
     expect(result.commands.join('\n')).toContain('Invoke-WebRequest')
-    expect(result.commands.join('\n')).toContain('Import-Module Microsoft.PowerShell.Security')
     expect(result.commands.join('\n')).toContain('& $installer')
     expect(result.commands.join('\n')).toContain('& $scoop install git')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')

@@ -185,6 +185,8 @@ function buildDarwinDirectCommands(input: GitPluginParams): string[] {
     `rm -rf ${quoteShell(paths.gitDir)}`,
     `PKG_PATH=$(find ${quoteShell(mountPoint)} -path '*/.Trashes' -prune -o -name '*.pkg' -print | head -n 1); [ -n "$PKG_PATH" ] && pkgutil --expand-full "$PKG_PATH" ${quoteShell(paths.gitDir)}`,
     `hdiutil detach ${quoteShell(mountPoint)} || true`,
+    `rm -f ${quoteShell(dmgPath)}`,
+    `rm -rf ${quoteShell(mountPoint)}`,
   ]
 }
 
@@ -205,8 +207,8 @@ function buildWindowsDirectCommands(input: GitPluginParams): string[] {
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile ${quotePowerShell(installerPath)}`,
-    `& ${quotePowerShell(installerPath)} ${installerArgs}; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }`,
-    `if (Test-Path ${quotePowerShell(installerPath)}) { Start-Sleep -Seconds 2; Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
+    `$proc = Start-Process -FilePath ${quotePowerShell(installerPath)} -ArgumentList ${installerArgs} -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Git for Windows installer failed with exit code $($proc.ExitCode)." }`,
+    `if (Test-Path ${quotePowerShell(installerPath)}) { Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
   ]
 }
 
