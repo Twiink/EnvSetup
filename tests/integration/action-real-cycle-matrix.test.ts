@@ -542,7 +542,9 @@ function isHomebrewGitPath(candidatePath: string | undefined): boolean {
     normalizedPath === '/opt/homebrew/bin/git' ||
     normalizedPath === '/usr/local/bin/git' ||
     normalizedPath.includes('/Cellar/git/') ||
-    normalizedPath.includes('/Homebrew/Cellar/git/')
+    normalizedPath.includes('/Homebrew/Cellar/git/') ||
+    normalizedPath.includes('/homebrew/opt/git/') ||
+    normalizedPath.includes('/usr/local/opt/git/')
   )
 }
 
@@ -585,6 +587,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
   describe.each(realCycleCases)('$name', (testCase) => {
     const timeout =
       testCase.tool === 'python' ||
+      testCase.tool === 'git' ||
       testCase.name.includes('SDKMAN') ||
       testCase.name.includes('Homebrew')
         ? 900_000

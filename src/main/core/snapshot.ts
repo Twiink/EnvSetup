@@ -216,10 +216,7 @@ export async function createSnapshot(options: {
       await Promise.all(
         entries.map(async (entry) => {
           const entryPath = join(targetPath, entry.name)
-          if (entry.isSymbolicLink()) {
-            return
-          }
-          if (entry.isDirectory() || entry.isFile()) {
+          if (entry.isSymbolicLink() || entry.isDirectory() || entry.isFile()) {
             await collectTrackedPath(entryPath)
             return
           }

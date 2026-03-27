@@ -239,7 +239,9 @@ function isHomebrewGitExecutable(targetPath: string): boolean {
     normalizedPath === '/opt/homebrew/bin/git' ||
     normalizedPath === '/usr/local/bin/git' ||
     normalizedPath.includes('/Cellar/git/') ||
-    normalizedPath.includes('/Homebrew/Cellar/git/')
+    normalizedPath.includes('/Homebrew/Cellar/git/') ||
+    normalizedPath.includes('/homebrew/opt/git/') ||
+    normalizedPath.includes('/usr/local/opt/git/')
   )
 }
 

@@ -184,7 +184,7 @@ export function resolveGitInstallPaths(input: GitPluginParams): GitInstallPaths 
     gitDir,
     gitBinDir:
       input.platform === 'win32' ? pathApi.join(gitDir, 'cmd') : pathApi.join(gitDir, 'bin'),
-    homebrewDir: '/opt/homebrew/bin',
+    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
     scoopDir: pathApi.join(input.installRootDir, 'scoop', 'shims'),
   }
 }
