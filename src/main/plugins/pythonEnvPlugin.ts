@@ -248,11 +248,11 @@ function buildDarwinCondaCommands(input: PythonPluginParams): string[] {
 
   if (condaEnvName !== 'base') {
     commands.push(
-      `eval "$(${installPaths.condaDir}/bin/conda shell.bash hook 2> /dev/null)" && conda create -y -n ${quoteShell(condaEnvName)} python=${input.pythonVersion}`,
+      `eval "$(${installPaths.condaDir}/bin/conda shell.bash hook 2> /dev/null)" && conda create -y -c conda-forge -n ${quoteShell(condaEnvName)} python=${input.pythonVersion}`,
     )
   } else {
     commands.push(
-      `eval "$(${installPaths.condaDir}/bin/conda shell.bash hook 2> /dev/null)" && conda install -y python=${input.pythonVersion}`,
+      `eval "$(${installPaths.condaDir}/bin/conda shell.bash hook 2> /dev/null)" && conda install -y -c conda-forge python=${input.pythonVersion}`,
     )
   }
 
@@ -301,10 +301,10 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
 
   if (condaEnvName !== 'base') {
     commands.push(
-      `& $condaExe create -y -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
+      `& $condaExe create -y -c conda-forge -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
     )
   } else {
-    commands.push(`& $condaExe install -y python=${input.pythonVersion}`)
+    commands.push(`& $condaExe install -y -c conda-forge python=${input.pythonVersion}`)
   }
 
   commands.push(`& $condaExe run python --version`)

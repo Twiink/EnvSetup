@@ -81,8 +81,7 @@ async function extractZipArchive(zipPath: string, stagingDir: string): Promise<s
       "$ErrorActionPreference = 'Stop'",
       '$archivePath = (Get-Item -LiteralPath $archivePathArg).FullName',
       '$destinationPath = (Get-Item -LiteralPath $destinationPathArg).FullName',
-      'Add-Type -AssemblyName System.IO.Compression.FileSystem',
-      '[System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $destinationPath, $true)',
+      'Expand-Archive -LiteralPath $archivePath -DestinationPath $destinationPath -Force',
       '}',
     ].join('; ')
     await execFileAsync('powershell', ['-NoProfile', '-Command', command, zipPath, tempDir])

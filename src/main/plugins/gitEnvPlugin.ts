@@ -202,6 +202,7 @@ function buildWindowsDirectCommands(input: GitPluginParams): string[] {
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile ${quotePowerShell(installerPath)}`,
     `Start-Process -FilePath ${quotePowerShell(installerPath)} -ArgumentList '/VERYSILENT','/NORESTART','/DIR=${paths.gitDir}' -Wait -NoNewWindow`,
+    `Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue`,
   ]
 }
 

@@ -216,7 +216,7 @@ describe('python env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('$condaExe = [System.IO.Path]::GetFullPath')
-    expect(result.commands.join('\n')).toContain('& $condaExe install -y python=3.12.10')
+    expect(result.commands.join('\n')).toContain('& $condaExe install -y -c conda-forge python=3.12.10')
   })
 
   it('pkg manager throws on win32', async () => {

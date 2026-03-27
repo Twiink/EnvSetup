@@ -189,7 +189,7 @@ function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
-    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && sdk install java ${featureVersion}.0-tem && java -version`,
+    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && sdk install java ${featureVersion}-tem && java -version`,
   ]
 }
 
@@ -220,7 +220,7 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
     'rm -rf "$SDKMAN_DIR"',
     `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     '. "$SDKMAN_DIR/bin/sdkman-init.sh"',
-    `sdk install java ${featureVersion}.0-tem`,
+    `sdk install java ${featureVersion}-tem`,
     'java -version',
   ].join(' && ')
 
