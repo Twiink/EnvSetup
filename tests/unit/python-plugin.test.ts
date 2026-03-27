@@ -202,6 +202,7 @@ describe('python env plugin', () => {
     expect(result.downloads[0].kind).toBe('installer')
     expect(result.downloads[0].url).toContain('macos11.pkg')
     expect(result.commands.join('\n')).toContain('pkgutil')
+    expect(result.commands.join('\n')).toContain('-name Payload')
     expect(result.commands.join('\n')).toContain('FRAMEWORK_DIR=$(find')
     expect(result.envChanges.length).toBeGreaterThan(0)
   })
@@ -215,8 +216,8 @@ describe('python env plugin', () => {
       platform: 'win32',
     })
 
-    expect(result.commands.join('\n')).toContain('$condaExe = [System.IO.Path]::GetFullPath')
-    expect(result.commands.join('\n')).toContain('& $condaExe install -y -c conda-forge python=3.12.10')
+    expect(result.commands.join('\n')).toContain('& ([System.IO.Path]::GetFullPath(')
+    expect(result.commands.join('\n')).toContain('install -y -c conda-forge python=3.12.10')
   })
 
   it('pkg manager throws on win32', async () => {

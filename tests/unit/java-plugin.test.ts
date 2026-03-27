@@ -56,6 +56,7 @@ describe('java env plugin', () => {
     expect(result.downloads[0].tool).toBe('sdkman')
     expect(result.downloads[0].url).toContain('get.sdkman.io')
     expect(result.envChanges.some((e) => e.key === 'SDKMAN_DIR')).toBe(true)
+    expect(result.commands.join('\n')).toContain('bash -lc')
     expect(result.commands.join('\n')).toContain('sdkman-init.sh')
   })
 

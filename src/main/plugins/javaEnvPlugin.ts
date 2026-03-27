@@ -185,11 +185,18 @@ function buildDarwinStandaloneCommands(input: JavaPluginParams): string[] {
 function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const featureVersion = extractFeatureVersion(input.javaVersion)
+  const bashScript = [
+    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
+    `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
+    `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
+    `sdk install java ${featureVersion}-tem`,
+    'java -version',
+  ].join(' && ')
 
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
-    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && sdk install java ${featureVersion}-tem && java -version`,
+    `bash -lc ${quoteShell(bashScript)}`,
   ]
 }
 
@@ -223,12 +230,17 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
     `sdk install java ${featureVersion}-tem`,
     'java -version',
   ].join(' && ')
+  const gitBashCommand = [
+    `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
+    `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT','/NORESTART','/DIR=${gitBashDir}' -Wait -NoNewWindow; Remove-Item -LiteralPath $gitInstaller -Force; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
+    `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
+    `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
+  ].join('; ')
 
   // SDKMAN on Windows requires Git Bash
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT','/NORESTART','/DIR=${gitBashDir}' -Wait -NoNewWindow; Remove-Item -LiteralPath $gitInstaller -Force; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }; if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
-    `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
+    gitBashCommand,
   ]
 }
 
@@ -248,9 +260,20 @@ function buildVerifyCommands(input: JavaPluginParams): string[] {
   const installPaths = resolveJavaInstallPaths(input)
 
   if (input.platform === 'darwin' && input.javaManager === 'sdkman') {
+    const versionCheckScript = [
+      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
+      `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
+      'java -version',
+    ].join(' && ')
+    const whichCheckScript = [
+      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
+      `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
+      'which java',
+    ].join(' && ')
+
     return [
-      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && java -version`,
-      `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)} && . ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)} && which java`,
+      `bash -lc ${quoteShell(versionCheckScript)}`,
+      `bash -lc ${quoteShell(whichCheckScript)}`,
     ]
   }
 

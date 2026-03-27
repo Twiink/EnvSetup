@@ -203,14 +203,16 @@ function buildDarwinPkgCommands(input: PythonPluginParams): string[] {
   const pkgUrl = buildPythonPkgUrl(input)
   const installerPath = `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
   const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
+  const payloadDir = `${installPaths.installRootDir}/python-pkg-payload`
   const majorMinor = extractPythonMajorMinor(input.pythonVersion)
 
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
     `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
-    `FRAMEWORK_DIR=$(find ${quoteShell(expandDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); [ -n "$FRAMEWORK_DIR" ] && mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
-    `rm -rf ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
+    `PAYLOAD_DIR=${quoteShell(payloadDir)}; rm -rf "$PAYLOAD_DIR"; mkdir -p "$PAYLOAD_DIR"; for PAYLOAD_FILE in $(find ${quoteShell(expandDir)} -name Payload -type f); do if gzip -t "$PAYLOAD_FILE" >/dev/null 2>&1; then (cd "$PAYLOAD_DIR" && gzip -dc "$PAYLOAD_FILE" | cpio -idm >/dev/null 2>&1); else (cd "$PAYLOAD_DIR" && cat "$PAYLOAD_FILE" | cpio -idm >/dev/null 2>&1); fi; done`,
+    `FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); if [ -z "$FRAMEWORK_DIR" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
+    `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
   ]
 }
@@ -290,24 +292,24 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
   const installerPath = `${installPaths.installRootDir}\\Miniconda3-installer.exe`
   const condaEnvName = input.condaEnvName ?? 'base'
   const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
+  const condaExeRef = `([System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)}))`
 
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(installerUrl)} -OutFile ${quotePowerShell(installerPath)}`,
     `Start-Process -FilePath ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) -ArgumentList '/S','/D=${installPaths.condaDir}' -Wait -NoNewWindow`,
     `Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`,
-    `$condaExe = [System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)})`,
   ]
 
   if (condaEnvName !== 'base') {
     commands.push(
-      `& $condaExe create -y -c conda-forge -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
+      `& ${condaExeRef} create -y -c conda-forge -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
     )
   } else {
-    commands.push(`& $condaExe install -y -c conda-forge python=${input.pythonVersion}`)
+    commands.push(`& ${condaExeRef} install -y -c conda-forge python=${input.pythonVersion}`)
   }
 
-  commands.push(`& $condaExe run python --version`)
+  commands.push(`& ${condaExeRef} run python --version`)
 
   return commands
 }
@@ -343,9 +345,7 @@ function buildVerifyCommands(input: PythonPluginParams): string[] {
 
   if (input.pythonManager === 'conda') {
     const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
-    return [
-      `$condaExe = [System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)}); & $condaExe run python --version`,
-    ]
+    return [`& ([System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)})) run python --version`]
   }
 
   return [`& ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} --version`]

@@ -209,7 +209,7 @@ function buildWindowsDirectCommands(input: GitPluginParams): string[] {
 function buildWindowsScoopCommands(): string[] {
   const resolveScoopCommand = buildResolveScoopCommand()
   return [
-    `${resolveScoopCommand}; if (-not $scoop) { Invoke-RestMethod -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} | Invoke-Expression; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
+    `${resolveScoopCommand}; if (-not $scoop) { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop; Invoke-RestMethod -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} | Invoke-Expression; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
   ]
 }
 

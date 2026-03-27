@@ -229,6 +229,15 @@ function buildWindowsStandaloneCommands(input: NodePluginParams): string[] {
   const archivePath = `${installPaths.installRootDir}\\${archiveName}`
   const checksumPath = `${installPaths.installRootDir}\\SHASUMS256.txt`
   const extractedNodeDir = `${installPaths.installRootDir}\\${archiveName.replace(/\.zip$/, '')}`
+  const checksumValidationCommand = [
+    `$expectedHash = ((Select-String -Path ${quotePowerShell(checksumPath)} -Pattern ${quotePowerShell(` ${archiveName}$`)}).Line -split '\\s+')[0]`,
+    `if (-not $expectedHash) { throw 'Failed to locate Node.js checksum entry.' }`,
+    `$_archive = [System.IO.Path]::GetFullPath(${quotePowerShell(archivePath)})`,
+    '$_sha256 = [System.Security.Cryptography.SHA256]::Create()',
+    '$_stream = [System.IO.File]::OpenRead($_archive)',
+    "try { $_actualHash = ([System.BitConverter]::ToString($_sha256.ComputeHash($_stream))).Replace('-', '').ToLower() } finally { $_stream.Dispose(); $_sha256.Dispose() }",
+    `if ($_actualHash -ne $expectedHash.ToLower()) { throw 'Node.js checksum verification failed.' }`,
+  ].join('; ')
 
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
@@ -236,8 +245,7 @@ function buildWindowsStandaloneCommands(input: NodePluginParams): string[] {
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmGlobalPrefix)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
     `Invoke-WebRequest -Uri ${quotePowerShell(checksumUrl)} -OutFile ${quotePowerShell(checksumPath)}`,
-    `$expectedHash = ((Select-String -Path ${quotePowerShell(checksumPath)} -Pattern ${quotePowerShell(` ${archiveName}$`)}).Line -split '\\s+')[0]`,
-    `$_archive = [System.IO.Path]::GetFullPath(${quotePowerShell(archivePath)}); $_sha256 = [System.Security.Cryptography.SHA256]::Create(); $_stream = [System.IO.File]::OpenRead($_archive); try { $_actualHash = ([System.BitConverter]::ToString($_sha256.ComputeHash($_stream))).Replace('-', '').ToLower() } finally { $_stream.Dispose(); $_sha256.Dispose() }; if ($_actualHash -ne $expectedHash.ToLower()) { throw 'Node.js checksum verification failed.' }`,
+    checksumValidationCommand,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
     `if (Test-Path ${quotePowerShell(installPaths.standaloneNodeDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneNodeDir)} -Recurse -Force }`,
     `Move-Item -LiteralPath ${quotePowerShell(extractedNodeDir)} -Destination ${quotePowerShell(installPaths.standaloneNodeDir)} -Force`,

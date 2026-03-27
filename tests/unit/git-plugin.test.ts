@@ -76,6 +76,7 @@ describe('git env plugin', () => {
     expect(result.downloads[0].url).toContain('get.scoop.sh')
     expect(result.commands).toHaveLength(1)
     expect(result.commands.join('\n')).toContain('Invoke-RestMethod')
+    expect(result.commands.join('\n')).toContain('Import-Module Microsoft.PowerShell.Security')
     expect(result.commands.join('\n')).toContain('& $scoop install git')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
   })

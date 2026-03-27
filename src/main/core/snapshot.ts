@@ -180,6 +180,18 @@ export async function createSnapshot(options: {
   const directories: NonNullable<Snapshot['directories']> = {}
   const symlinks: NonNullable<Snapshot['symlinks']> = {}
   const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
+  const pendingPaths: string[] = []
+  const queuedPaths = new Set<string>()
+  const maxWorkers = 8
+
+  function enqueuePath(targetPath: string): void {
+    const normalizedPath = resolve(targetPath)
+    if (queuedPaths.has(normalizedPath)) {
+      return
+    }
+    queuedPaths.add(normalizedPath)
+    pendingPaths.push(targetPath)
+  }
 
   async function collectTrackedPath(targetPath: string): Promise<void> {
     let targetStat
@@ -213,24 +225,22 @@ export async function createSnapshot(options: {
       directories[targetPath] = { mode: targetStat.mode }
       const entries = await readdir(targetPath, { withFileTypes: true })
 
-      await Promise.all(
-        entries.map(async (entry) => {
-          const entryPath = join(targetPath, entry.name)
-          if (entry.isSymbolicLink() || entry.isDirectory() || entry.isFile()) {
-            await collectTrackedPath(entryPath)
-            return
-          }
+      for (const entry of entries) {
+        const entryPath = join(targetPath, entry.name)
+        if (entry.isSymbolicLink() || entry.isDirectory() || entry.isFile()) {
+          enqueuePath(entryPath)
+          continue
+        }
 
-          try {
-            const nestedStat = await lstat(entryPath)
-            if (nestedStat.isDirectory() || nestedStat.isFile()) {
-              await collectTrackedPath(entryPath)
-            }
-          } catch {
-            // 跳过瞬时消失或不可读的条目
+        try {
+          const nestedStat = await lstat(entryPath)
+          if (nestedStat.isDirectory() || nestedStat.isFile()) {
+            enqueuePath(entryPath)
           }
-        }),
-      )
+        } catch {
+          // 跳过瞬时消失或不可读的条目
+        }
+      }
       return
     }
 
@@ -255,7 +265,22 @@ export async function createSnapshot(options: {
     }
   }
 
-  await Promise.all(options.trackedPaths.map((trackedPath) => collectTrackedPath(trackedPath)))
+  for (const trackedPath of options.trackedPaths) {
+    enqueuePath(trackedPath)
+  }
+
+  const workerCount = Math.min(maxWorkers, Math.max(1, pendingPaths.length))
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (pendingPaths.length > 0) {
+        const nextPath = pendingPaths.pop()
+        if (!nextPath) {
+          return
+        }
+        await collectTrackedPath(nextPath)
+      }
+    }),
+  )
   const fileHashes = Object.values(files).map((entry) => entry.hash)
 
   const environment = {

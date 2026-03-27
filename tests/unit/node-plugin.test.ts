@@ -153,6 +153,7 @@ describe('node env plugin', () => {
 
     expect(result.commands.join('\n')).toContain('System.Security.Cryptography.SHA256')
     expect(result.commands.join('\n')).not.toContain('Get-FileHash')
+    expect(result.commands.join('\n')).toContain('Failed to locate Node.js checksum entry.')
   })
 
   it('prepends standalone node bin to PATH during darwin real-run verify', async () => {
