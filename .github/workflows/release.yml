@@ -14,8 +14,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     env:
-      ENVSETUP_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/downloads/${{ runner.os }}-${{ matrix.tool }}
-      ENVSETUP_EXTRACTED_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/extracted/${{ runner.os }}-${{ matrix.tool }}
+      ENVSETUP_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/downloads/${{ matrix.os }}-${{ matrix.tool }}
+      ENVSETUP_EXTRACTED_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/extracted/${{ matrix.os }}-${{ matrix.tool }}
     steps:
       - uses: actions/checkout@v6
 
@@ -30,10 +30,10 @@ jobs:
           path: |
             ${{ env.ENVSETUP_DOWNLOAD_CACHE_DIR }}
             ${{ env.ENVSETUP_EXTRACTED_CACHE_DIR }}
-          key: envsetup-artifacts-${{ runner.os }}-${{ matrix.tool }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'tests/integration/action-real-cycle-matrix.test.ts', '.github/workflows/release.yml') }}
+          key: envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'tests/integration/action-real-cycle-matrix.test.ts', '.github/workflows/release.yml') }}
           restore-keys: |
-            envsetup-artifacts-${{ runner.os }}-${{ matrix.tool }}-
-            envsetup-artifacts-${{ runner.os }}-
+            envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-
+            envsetup-artifacts-${{ matrix.os }}-
 
       - run: npm ci
 
@@ -53,9 +53,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers/${{ runner.os }}
-      ENVSETUP_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/downloads/${{ runner.os }}-packaged
-      ENVSETUP_EXTRACTED_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/extracted/${{ runner.os }}-packaged
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers/${{ matrix.os }}
+      ENVSETUP_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/downloads/${{ matrix.os }}-packaged
+      ENVSETUP_EXTRACTED_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/extracted/${{ matrix.os }}-packaged
 
     steps:
       - uses: actions/checkout@v6
@@ -69,9 +69,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-browsers-${{ matrix.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            playwright-browsers-${{ runner.os }}-
+            playwright-browsers-${{ matrix.os }}-
 
       - name: Restore EnvSetup artifact caches
         uses: actions/cache@v4
@@ -79,10 +79,10 @@ jobs:
           path: |
             ${{ env.ENVSETUP_DOWNLOAD_CACHE_DIR }}
             ${{ env.ENVSETUP_EXTRACTED_CACHE_DIR }}
-          key: envsetup-packaged-artifacts-${{ runner.os }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'tests/e2e/real-install.spec.ts', '.github/workflows/release.yml') }}
+          key: envsetup-packaged-artifacts-${{ matrix.os }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'tests/e2e/real-install.spec.ts', '.github/workflows/release.yml') }}
           restore-keys: |
-            envsetup-packaged-artifacts-${{ runner.os }}-
-            envsetup-artifacts-${{ runner.os }}-
+            envsetup-packaged-artifacts-${{ matrix.os }}-
+            envsetup-artifacts-${{ matrix.os }}-
 
       - run: npm ci
 
