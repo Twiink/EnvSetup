@@ -48,6 +48,10 @@ describe('git env plugin', () => {
 
     expect(result.downloads[0].url).toContain('github.com/git-for-windows/git')
     expect(result.commands.join('\n')).toContain('/VERYSILENT')
+    expect(result.commands.join('\n')).toContain('/NOCANCEL')
+    expect(result.commands.join('\n')).toContain('/SP-')
+    expect(result.commands.join('\n')).toContain('/CLOSEAPPLICATIONS')
+    expect(result.commands.join('\n')).not.toContain('Start-Process')
   })
 
   it('returns dry-run result for homebrew mode on darwin', async () => {
@@ -75,8 +79,9 @@ describe('git env plugin', () => {
 
     expect(result.downloads[0].url).toContain('get.scoop.sh')
     expect(result.commands).toHaveLength(1)
-    expect(result.commands.join('\n')).toContain('Invoke-RestMethod')
-    expect(result.commands.join('\n')).toContain('Import-Module Microsoft.PowerShell.Security')
+    expect(result.commands.join('\n')).toContain('Invoke-WebRequest')
+    expect(result.commands.join('\n')).toContain('-File $installer')
+    expect(result.commands.join('\n')).not.toContain('Import-Module Microsoft.PowerShell.Security')
     expect(result.commands.join('\n')).toContain('& $scoop install git')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
   })
