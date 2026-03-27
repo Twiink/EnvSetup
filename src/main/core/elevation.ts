@@ -52,8 +52,10 @@ export function isPermissionError(error: unknown): boolean {
 export async function executePlatformCommand(
   command: string,
   platform: AppPlatform,
-  options: { elevated?: boolean } = {},
+  options: { elevated?: boolean; timeoutMs?: number } = {},
 ): Promise<{ stdout: string; stderr: string }> {
+  const execOptions = options.timeoutMs ? { timeout: options.timeoutMs } : {}
+
   if (platform === 'win32') {
     if (options.elevated) {
       const encodedCommand = Buffer.from(command, 'utf16le').toString('base64')
@@ -68,32 +70,29 @@ export async function executePlatformCommand(
         'exit $process.ExitCode',
       ].join(' ')
 
-      return execFileAsync('powershell', [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        launcher,
-      ])
+      return execFileAsync(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', launcher],
+        execOptions,
+      )
     }
 
-    return execFileAsync('powershell', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-Command',
-      command,
-    ])
+    return execFileAsync(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+      execOptions,
+    )
   }
 
   if (options.elevated) {
-    return execFileAsync('osascript', [
-      '-e',
-      `do shell script ${quoteAppleScript(command)} with administrator privileges`,
-    ])
+    return execFileAsync(
+      'osascript',
+      ['-e', `do shell script ${quoteAppleScript(command)} with administrator privileges`],
+      execOptions,
+    )
   }
 
-  return execFileAsync('sh', ['-c', command])
+  return execFileAsync('sh', ['-c', command], execOptions)
 }
 
 export async function executePlatformCommandWithElevationFallback(

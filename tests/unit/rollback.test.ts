@@ -7,7 +7,7 @@ import { suggestRollbackSnapshots, executeRollback } from '../../src/main/core/r
 // ---------------------------------------------------------------------------
 
 const { execFileMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn((_file, _args, callback) => {
+  execFileMock: vi.fn((_file, _args, _options, callback) => {
     callback(null, { stdout: '', stderr: '' })
   }),
 }))
@@ -71,6 +71,7 @@ function expectRollbackCommandInvocation(callIndex: number) {
       callIndex,
       'powershell',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'brew uninstall git'],
+      expect.any(Object),
       expect.any(Function),
     )
     return
@@ -80,6 +81,7 @@ function expectRollbackCommandInvocation(callIndex: number) {
     callIndex,
     'sh',
     ['-c', 'brew uninstall git'],
+    expect.any(Object),
     expect.any(Function),
   )
 }
@@ -96,6 +98,7 @@ function expectElevatedRollbackCommandInvocation(callIndex: number) {
         '-Command',
         expect.stringContaining("Start-Process -FilePath 'powershell.exe' -Verb RunAs"),
       ],
+      expect.any(Object),
       expect.any(Function),
     )
     return
@@ -105,6 +108,7 @@ function expectElevatedRollbackCommandInvocation(callIndex: number) {
     callIndex,
     'osascript',
     [expect.any(String), expect.stringContaining('with administrator privileges')],
+    expect.any(Object),
     expect.any(Function),
   )
 }
@@ -290,7 +294,7 @@ describe('suggestRollbackSnapshots', () => {
 describe('executeRollback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    execFileMock.mockImplementation((_file, _args, callback) => {
+    execFileMock.mockImplementation((_file, _args, _options, callback) => {
       callback(null, { stdout: '', stderr: '' })
     })
     // Default: loadSnapshot returns a snapshot with empty shellConfigs
@@ -452,10 +456,10 @@ describe('executeRollback', () => {
     })
 
     execFileMock
-      .mockImplementationOnce((_file, _args, callback) => {
+      .mockImplementationOnce((_file, _args, _options, callback) => {
         callback(new Error('Permission denied'))
       })
-      .mockImplementationOnce((_file, _args, callback) => {
+      .mockImplementationOnce((_file, _args, _options, callback) => {
         callback(null, { stdout: '', stderr: '' })
       })
 

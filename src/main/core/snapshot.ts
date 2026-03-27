@@ -511,7 +511,7 @@ async function readFileWithElevation(targetPath: string, platform: AppPlatform):
   const { stdout } = await executePlatformCommand(
     buildReadFileBase64Command(targetPath, platform),
     platform,
-    { elevated: true },
+    { elevated: true, timeoutMs: 60_000 },
   )
 
   return Buffer.from(stdout.trim(), 'base64')
@@ -531,7 +531,7 @@ async function restoreFileWithElevation(
     await executePlatformCommand(
       buildCopyFileCommand(stagingPath, targetPath, platform, mode),
       platform,
-      { elevated: true },
+      { elevated: true, timeoutMs: 60_000 },
     )
   } finally {
     await rm(stagingDir, { recursive: true, force: true })
@@ -552,6 +552,7 @@ async function removePathWithElevation(
 
     await executePlatformCommand(buildRemovePathCommand(targetPath, platform), platform, {
       elevated: true,
+      timeoutMs: 60_000,
     })
   }
 }
@@ -593,13 +594,22 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
   const pathSeparator = process.platform === 'win32' ? '\\' : '/'
   const currentPlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as AppPlatform
 
-  function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
-    const normalizedCandidate = resolve(candidatePath)
+  function collectDescendants(sortedPaths: string[], rootPath: string): string[] {
     const normalizedRoot = resolve(rootPath)
-    return (
-      normalizedCandidate === normalizedRoot ||
-      normalizedCandidate.startsWith(`${normalizedRoot}${pathSeparator}`)
-    )
+    const prefix = `${normalizedRoot}${pathSeparator}`
+    let lo = 0
+    let hi = sortedPaths.length
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (sortedPaths[mid] < prefix) lo = mid + 1
+      else hi = mid
+    }
+    const matches: string[] = []
+    while (lo < sortedPaths.length && sortedPaths[lo].startsWith(prefix)) {
+      matches.push(sortedPaths[lo])
+      lo++
+    }
+    return matches
   }
 
   // 确定要恢复的文件列表
@@ -618,6 +628,10 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
     directoriesToRestore = snapshotDirectoryPaths
     symlinksToRestore = snapshotSymlinkPaths
   } else {
+    const sortedDirPaths = [...snapshotDirectoryPaths].map((p) => resolve(p)).sort()
+    const sortedSymlinkPaths = [...snapshotSymlinkPaths].map((p) => resolve(p)).sort()
+    const sortedFilePaths = [...snapshotFilePaths].map((p) => resolve(p)).sort()
+
     const matchedTargets = new Set<string>()
     const fileSet = new Set<string>()
     const directorySet = new Set<string>()
@@ -639,25 +653,19 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
         matchedTargets.add(requestedPath)
       }
 
-      for (const directoryPath of snapshotDirectoryPaths) {
-        if (isPathWithinRoot(directoryPath, requestedPath)) {
-          directorySet.add(directoryPath)
-          matchedTargets.add(requestedPath)
-        }
+      for (const dirPath of collectDescendants(sortedDirPaths, requestedPath)) {
+        directorySet.add(dirPath)
+        matchedTargets.add(requestedPath)
       }
 
-      for (const symlinkPath of snapshotSymlinkPaths) {
-        if (isPathWithinRoot(symlinkPath, requestedPath)) {
-          symlinkSet.add(symlinkPath)
-          matchedTargets.add(requestedPath)
-        }
+      for (const slPath of collectDescendants(sortedSymlinkPaths, requestedPath)) {
+        symlinkSet.add(slPath)
+        matchedTargets.add(requestedPath)
       }
 
-      for (const filePath of snapshotFilePaths) {
-        if (isPathWithinRoot(filePath, requestedPath)) {
-          fileSet.add(filePath)
-          matchedTargets.add(requestedPath)
-        }
+      for (const fPath of collectDescendants(sortedFilePaths, requestedPath)) {
+        fileSet.add(fPath)
+        matchedTargets.add(requestedPath)
       }
     }
 
@@ -712,7 +720,7 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
           await executePlatformCommand(
             buildEnsureDirectoryCommand(directoryPath, currentPlatform, directoryEntry.mode),
             currentPlatform,
-            { elevated: true },
+            { elevated: true, timeoutMs: 60_000 },
           )
           continue
         } catch (elevatedError) {
@@ -751,44 +759,56 @@ export async function applySnapshot(options: ApplySnapshotOptions): Promise<Appl
     }
   }
 
-  for (const filePath of filesToRestore) {
-    const fileEntry = snapshot.files[filePath]
-    if (!fileEntry) {
-      result.filesSkipped++
-      continue
-    }
+  const pendingFiles = [...filesToRestore]
+  const maxRestoreWorkers = 8
+  const restoreWorkerCount = Math.min(maxRestoreWorkers, Math.max(1, pendingFiles.length))
 
-    try {
-      const content = await loadObject(objectsDir, fileEntry.hash)
-      await removeConflictingPath(filePath, (targetStats) => !targetStats.isFile())
-      await mkdir(dirname(filePath), { recursive: true })
-      await writeFile(filePath, content)
-      if (process.platform !== 'win32') {
-        await chmod(filePath, fileEntry.mode)
-      }
-      result.filesRestored++
-    } catch (error) {
-      if (options.allowElevation && isPermissionError(error)) {
-        try {
-          const content = await loadObject(objectsDir, fileEntry.hash)
-          await restoreFileWithElevation(filePath, content, fileEntry.mode, currentPlatform)
-          result.filesRestored++
-          continue
-        } catch (elevatedError) {
-          result.errors.push({
-            path: filePath,
-            error: elevatedError instanceof Error ? elevatedError.message : String(elevatedError),
-          })
+  await Promise.all(
+    Array.from({ length: restoreWorkerCount }, async () => {
+      while (pendingFiles.length > 0) {
+        const filePath = pendingFiles.pop()
+        if (!filePath) return
+
+        const fileEntry = snapshot.files[filePath]
+        if (!fileEntry) {
+          result.filesSkipped++
           continue
         }
-      }
 
-      result.errors.push({
-        path: filePath,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
+        try {
+          const content = await loadObject(objectsDir, fileEntry.hash)
+          await removeConflictingPath(filePath, (targetStats) => !targetStats.isFile())
+          await mkdir(dirname(filePath), { recursive: true })
+          await writeFile(filePath, content)
+          if (process.platform !== 'win32') {
+            await chmod(filePath, fileEntry.mode)
+          }
+          result.filesRestored++
+        } catch (error) {
+          if (options.allowElevation && isPermissionError(error)) {
+            try {
+              const content = await loadObject(objectsDir, fileEntry.hash)
+              await restoreFileWithElevation(filePath, content, fileEntry.mode, currentPlatform)
+              result.filesRestored++
+              continue
+            } catch (elevatedError) {
+              result.errors.push({
+                path: filePath,
+                error:
+                  elevatedError instanceof Error ? elevatedError.message : String(elevatedError),
+              })
+              continue
+            }
+          }
+
+          result.errors.push({
+            path: filePath,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+    }),
+  )
 
   if (options.restoreEnv) {
     try {
@@ -890,7 +910,7 @@ export async function reconcileSnapshotState(options: {
   const snapshotSymlinks = new Set(
     Object.keys(snapshot.symlinks ?? {}).map((entry) => resolve(entry)),
   )
-  const snapshotPaths = [...snapshotDirectories, ...snapshotFiles, ...snapshotSymlinks]
+  const sortedSnapshotPaths = [...snapshotDirectories, ...snapshotFiles, ...snapshotSymlinks].sort()
   const roots = uniqueStrings(
     (options.paths && options.paths.length > 0 ? options.paths : snapshot.trackedPaths).map(
       (entry) => resolve(entry),
@@ -916,7 +936,15 @@ export async function reconcileSnapshotState(options: {
   }
 
   function snapshotHasDescendant(targetPath: string): boolean {
-    return snapshotPaths.some((candidatePath) => isPathWithinRoot(candidatePath, targetPath))
+    const prefix = `${targetPath}${pathSeparator}`
+    let lo = 0
+    let hi = sortedSnapshotPaths.length
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (sortedSnapshotPaths[mid] < prefix) lo = mid + 1
+      else hi = mid
+    }
+    return lo < sortedSnapshotPaths.length && sortedSnapshotPaths[lo].startsWith(prefix)
   }
 
   async function prunePath(targetPath: string): Promise<void> {

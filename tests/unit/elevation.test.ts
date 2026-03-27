@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn((_file, _args, callback) => {
+  execFileMock: vi.fn((_file, _args, _options, callback) => {
     callback(null, { stdout: 'ok', stderr: '' })
   }),
 }))
@@ -23,7 +23,7 @@ import {
 describe('elevation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    execFileMock.mockImplementation((_file, _args, callback) => {
+    execFileMock.mockImplementation((_file, _args, _options, callback) => {
       callback(null, { stdout: 'ok', stderr: '' })
     })
   })
@@ -40,16 +40,17 @@ describe('elevation', () => {
     expect(execFileMock).toHaveBeenCalledWith(
       'osascript',
       [expect.any(String), expect.stringContaining('with administrator privileges')],
+      expect.any(Object),
       expect.any(Function),
     )
   })
 
   it('retries with elevation after permission errors', async () => {
     execFileMock
-      .mockImplementationOnce((_file, _args, callback) => {
+      .mockImplementationOnce((_file, _args, _options, callback) => {
         callback(new Error('Permission denied'))
       })
-      .mockImplementationOnce((_file, _args, callback) => {
+      .mockImplementationOnce((_file, _args, _options, callback) => {
         callback(null, { stdout: 'ok', stderr: '' })
       })
 
@@ -59,12 +60,14 @@ describe('elevation', () => {
       1,
       'sh',
       ['-c', 'rm -rf /tmp/tool'],
+      expect.any(Object),
       expect.any(Function),
     )
     expect(execFileMock).toHaveBeenNthCalledWith(
       2,
       'osascript',
       [expect.any(String), expect.stringContaining('with administrator privileges')],
+      expect.any(Object),
       expect.any(Function),
     )
     expect(result.elevated).toBe(true)
