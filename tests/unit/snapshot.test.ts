@@ -245,7 +245,19 @@ describe('Snapshot - Metadata Management', () => {
   })
 
   afterEach(async () => {
-    await rm(testDir, { recursive: true, force: true })
+    // Windows 上文件删除可能需要重试
+    let retries = 3
+    while (retries > 0) {
+      try {
+        await rm(testDir, { recursive: true, force: true })
+        break
+      } catch (error) {
+        retries--
+        if (retries === 0) throw error
+        // 等待一小段时间后重试
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    }
   })
 
   it('should return empty meta when no file exists', async () => {
@@ -284,7 +296,7 @@ describe('Snapshot - Metadata Management', () => {
     expect(meta.snapshots[0].canDelete).toBe(true)
   })
 
-  it('should enforce max snapshots limit by deleting oldest deletable', async () => {
+  it('should enforce max snapshots limit by deleting oldest deletable', { timeout: 10000 }, async () => {
     // 创建 5 个可删除快照
     const snapshots = []
     for (let i = 0; i < 5; i++) {

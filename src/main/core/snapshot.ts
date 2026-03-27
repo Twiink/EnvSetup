@@ -435,9 +435,9 @@ export async function deleteSnapshot(baseDir: string, snapshotId: string): Promi
     if (!(hash in updatedRefs)) {
       const objectPath = join(objectsDir, hash.slice(0, 2), hash.slice(2))
       try {
-        await rm(objectPath)
+        await rm(objectPath, { maxRetries: 3, retryDelay: 100 })
       } catch {
-        // 文件已不存在，忽略
+        // 文件已不存在或删除失败，忽略
       }
       // 尝试删除空子目录
       try {
@@ -449,7 +449,10 @@ export async function deleteSnapshot(baseDir: string, snapshotId: string): Promi
   }
 
   // 删除快照索引文件
-  await rm(join(baseDir, 'snapshots', `snapshot-${snapshotId}.json`))
+  await rm(join(baseDir, 'snapshots', `snapshot-${snapshotId}.json`), {
+    maxRetries: 3,
+    retryDelay: 100,
+  })
 }
 
 async function loadWindowsUserEnvironment(): Promise<Record<string, string>> {
