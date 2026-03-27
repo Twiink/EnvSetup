@@ -20,6 +20,7 @@ const ADOPTIUM_BINARY_BASE_URL = 'https://api.adoptium.net/v3/binary/latest'
 const SDKMAN_INSTALL_URL = 'https://get.sdkman.io?ci=true&rcupdate=false'
 const GIT_FOR_WINDOWS_VERSION = '2.47.1'
 const GIT_FOR_WINDOWS_EXE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
+const GIT_FOR_WINDOWS_SILENT_ARGS = ['/VERYSILENT', '/NORESTART', '/NOCANCEL', '/SP-']
 
 function translate(locale: AppLocale, text: { 'zh-CN': string; en: string }): string {
   return text[locale]
@@ -185,7 +186,7 @@ function buildDarwinStandaloneCommands(input: JavaPluginParams): string[] {
 function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const featureVersion = extractFeatureVersion(input.javaVersion)
-  const bashScript = [
+  const shellScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
     `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
@@ -196,7 +197,7 @@ function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
-    `bash -lc ${quoteShell(bashScript)}`,
+    shellScript,
   ]
 }
 
@@ -222,6 +223,9 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
   const featureVersion = extractFeatureVersion(input.javaVersion)
   const gitBashDir = `${installPaths.installRootDir}\\git-bash`
   const fallbackBashPath = `${gitBashDir}\\bin\\bash.exe`
+  const gitInstallerArgs = [...GIT_FOR_WINDOWS_SILENT_ARGS, `/DIR=${gitBashDir}`]
+    .map((arg) => quotePowerShell(arg))
+    .join(' ')
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir.replace(/\\/g, '/'))}`,
     'rm -rf "$SDKMAN_DIR"',
@@ -232,7 +236,7 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
   ].join(' && ')
   const gitBashCommand = [
     `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
-    `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT','/NORESTART','/DIR=${gitBashDir}' -Wait -NoNewWindow; Remove-Item -LiteralPath $gitInstaller -Force; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
+    `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; & $gitInstaller ${gitInstallerArgs}; $gitInstallerExitCode = $LASTEXITCODE; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
     `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
     `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
   ].join('; ')
@@ -271,10 +275,7 @@ function buildVerifyCommands(input: JavaPluginParams): string[] {
       'which java',
     ].join(' && ')
 
-    return [
-      `bash -lc ${quoteShell(versionCheckScript)}`,
-      `bash -lc ${quoteShell(whichCheckScript)}`,
-    ]
+    return [versionCheckScript, whichCheckScript]
   }
 
   if (input.platform === 'darwin') {
@@ -324,7 +325,7 @@ async function runCommands(
               '-Command',
               command,
             ])
-          : await execFileAsync('sh', ['-c', command])
+          : await execFileAsync('/bin/bash', ['-lc', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({

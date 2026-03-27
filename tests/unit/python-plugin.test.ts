@@ -202,7 +202,8 @@ describe('python env plugin', () => {
     expect(result.downloads[0].kind).toBe('installer')
     expect(result.downloads[0].url).toContain('macos11.pkg')
     expect(result.commands.join('\n')).toContain('pkgutil')
-    expect(result.commands.join('\n')).toContain('-name Payload')
+    expect(result.commands.join('\n')).toContain("python3 - <<'PY'")
+    expect(result.commands.join('\n')).toContain("payload_bytes[:4] == b'pbzx'")
     expect(result.commands.join('\n')).toContain('FRAMEWORK_DIR=$(find')
     expect(result.envChanges.length).toBeGreaterThan(0)
   })
@@ -216,7 +217,11 @@ describe('python env plugin', () => {
       platform: 'win32',
     })
 
-    expect(result.commands.join('\n')).toContain('& ([System.IO.Path]::GetFullPath(')
+    expect(result.commands.join('\n')).toContain('/InstallationType=JustMe')
+    expect(result.commands.join('\n')).toContain('/RegisterPython=0')
+    expect(result.commands.join('\n')).toContain('/AddToPath=0')
+    expect(result.commands.join('\n')).toContain('$condaCandidates = @(')
+    expect(result.commands.join('\n')).toContain('condabin\\conda.bat')
     expect(result.commands.join('\n')).toContain('install -y -c conda-forge python=3.12.10')
   })
 

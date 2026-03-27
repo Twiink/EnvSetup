@@ -583,19 +583,36 @@ function isRelevantCleanupDetection(
   return false
 }
 
+function resolveRealCycleTimeout(testCase: RealCycleCase, scenario: 'fresh' | 'cleanup'): number {
+  if (testCase.tool === 'git') {
+    return isWindows || scenario === 'cleanup' ? 1_800_000 : 900_000
+  }
+
+  if (testCase.tool === 'java') {
+    return scenario === 'cleanup' ? 1_200_000 : 900_000
+  }
+
+  if (
+    testCase.tool === 'python' ||
+    testCase.name.includes('SDKMAN') ||
+    testCase.name.includes('Homebrew')
+  ) {
+    return 900_000
+  }
+
+  return 600_000
+}
+
+function logRealCyclePhase(testCase: RealCycleCase, scenario: 'fresh' | 'cleanup', phase: string) {
+  console.info(`[${testCase.name}] ${scenario}: ${phase}`)
+}
+
 describe.skipIf(!isRealRun)('action real cycle matrix', () => {
   describe.each(realCycleCases)('$name', (testCase) => {
-    const timeout =
-      testCase.tool === 'python' ||
-      testCase.tool === 'git' ||
-      testCase.name.includes('SDKMAN') ||
-      testCase.name.includes('Homebrew')
-        ? 900_000
-        : 600_000
-
     it(
       'installs successfully with no existing environment and rolls back for real',
       async () => {
+        logRealCyclePhase(testCase, 'fresh', 'starting install')
         const installRootDir = join(
           tmpDir,
           `${testCase.tool}-${testCase.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-fresh`,
@@ -606,6 +623,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         const { snapshot, result } = await runRealInstall(testCase, installRootDir)
         const plugin = result.plugins[0]
 
+        logRealCyclePhase(testCase, 'fresh', 'verifying install')
         await assertRealInstallSucceeded(
           testCase,
           installRootDir,
@@ -616,6 +634,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           plugin,
         )
 
+        logRealCyclePhase(testCase, 'fresh', 'rolling back')
         await assertRealRollbackSucceeded(
           testCase,
           snapshot.id,
@@ -623,12 +642,13 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           plugin.lastResult?.rollbackCommands,
         )
       },
-      timeout,
+      resolveRealCycleTimeout(testCase, 'fresh'),
     )
 
     it(
       'cleans an existing environment, installs successfully, then rolls back for real',
       async () => {
+        logRealCyclePhase(testCase, 'cleanup', 'starting seeded install')
         const installRootDir = join(
           tmpDir,
           `${testCase.tool}-${testCase.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-cleanup`,
@@ -637,6 +657,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         const seededInstall = await runRealInstall(testCase, installRootDir)
         const seededPlugin = seededInstall.result.plugins[0]
 
+        logRealCyclePhase(testCase, 'cleanup', 'verifying seeded install')
         await assertRealInstallSucceeded(
           testCase,
           installRootDir,
@@ -650,6 +671,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         await persistUserEnvChanges(seededPlugin.lastResult?.envChanges ?? [])
         await hydrateDetectionEnvironment(testCase, seededInstall.params)
 
+        logRealCyclePhase(testCase, 'cleanup', 'detecting installed environment')
         const detections = await detectTemplateEnvironments(
           getTemplate(testCase),
           toTemplateValues(testCase, seededInstall.params),
@@ -665,6 +687,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         const cleanupTrackedPaths = await collectCleanupTrackedPaths(cleanupTargets)
         expect(cleanupTrackedPaths.length).toBeGreaterThan(0)
 
+        logRealCyclePhase(testCase, 'cleanup', 'snapshotting pre-cleanup state')
         const cleanupSnapshot = await createSnapshot({
           baseDir: snapshotsDir,
           taskId: `${seededInstall.result.id}-cleanup`,
@@ -674,6 +697,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         })
         await updateSnapshotMeta(snapshotsDir, cleanupSnapshot)
 
+        logRealCyclePhase(testCase, 'cleanup', 'cleaning detected environment')
         const cleanupResult = await cleanupDetectedEnvironments(cleanupTargets)
         expect(cleanupResult.errors).toEqual([])
 
@@ -683,9 +707,11 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           expect(await pathExists(installRootDir)).toBe(false)
         }
 
+        logRealCyclePhase(testCase, 'cleanup', 'reinstalling after cleanup')
         const { result, params } = await runRealInstall(testCase, installRootDir)
         const plugin = result.plugins[0]
 
+        logRealCyclePhase(testCase, 'cleanup', 'verifying reinstall')
         await assertRealInstallSucceeded(
           testCase,
           installRootDir,
@@ -699,6 +725,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         await persistUserEnvChanges(plugin.lastResult?.envChanges ?? [])
         await hydrateDetectionEnvironment(testCase, params)
 
+        logRealCyclePhase(testCase, 'cleanup', 'restoring cleanup snapshot')
         await assertRollbackRestoredInstalledState(
           testCase,
           cleanupSnapshot.id,
@@ -707,7 +734,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           seededPlugin.lastResult!,
         )
       },
-      timeout,
+      resolveRealCycleTimeout(testCase, 'cleanup'),
     )
   })
 })

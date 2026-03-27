@@ -205,12 +205,85 @@ function buildDarwinPkgCommands(input: PythonPluginParams): string[] {
   const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
   const payloadDir = `${installPaths.installRootDir}/python-pkg-payload`
   const majorMinor = extractPythonMajorMinor(input.pythonVersion)
+  const payloadExtractCommand = [
+    `PAYLOAD_DIR=${quoteShell(payloadDir)}`,
+    `EXPAND_DIR=${quoteShell(expandDir)}`,
+    'rm -rf "$PAYLOAD_DIR"',
+    'mkdir -p "$PAYLOAD_DIR"',
+    'export PAYLOAD_DIR EXPAND_DIR',
+    `python3 - <<'PY'
+import gzip
+import lzma
+import os
+import struct
+import subprocess
+from pathlib import Path
+
+payload_dir = Path(os.environ['PAYLOAD_DIR'])
+expand_dir = Path(os.environ['EXPAND_DIR'])
+
+
+def decode_pbzx(payload_bytes: bytes) -> bytes:
+    offset = 12
+    chunks: list[bytes] = []
+    while offset < len(payload_bytes):
+        if offset + 16 > len(payload_bytes):
+            raise ValueError('truncated pbzx chunk header')
+        offset += 8  # per-chunk flags
+        chunk_length = struct.unpack_from('>Q', payload_bytes, offset)[0]
+        offset += 8
+        chunk = payload_bytes[offset : offset + chunk_length]
+        if len(chunk) != chunk_length:
+            raise ValueError('truncated pbzx chunk payload')
+        offset += chunk_length
+        if chunk.startswith(b'\\xfd7zXZ\\x00'):
+            chunks.append(lzma.decompress(chunk))
+        else:
+            chunks.append(chunk)
+    return b''.join(chunks)
+
+
+def decode_payload(payload_path: Path) -> bytes:
+    payload_bytes = payload_path.read_bytes()
+    if payload_bytes[:4] == b'pbzx':
+        return decode_pbzx(payload_bytes)
+    try:
+        return gzip.decompress(payload_bytes)
+    except OSError:
+        return payload_bytes
+
+
+payloads = sorted(expand_dir.rglob('Payload'))
+if not payloads:
+    raise SystemExit('Failed to locate any Payload files in expanded pkg.')
+
+extracted_payloads = 0
+for payload in payloads:
+    try:
+        decoded_payload = decode_payload(payload)
+    except Exception:
+        continue
+    extraction = subprocess.run(
+        ['cpio', '-idm'],
+        cwd=payload_dir,
+        input=decoded_payload,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if extraction.returncode == 0:
+        extracted_payloads += 1
+
+if extracted_payloads == 0:
+    raise SystemExit('Failed to extract any pkg Payload archives.')
+PY`,
+  ].join('; ')
 
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
     `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
-    `PAYLOAD_DIR=${quoteShell(payloadDir)}; rm -rf "$PAYLOAD_DIR"; mkdir -p "$PAYLOAD_DIR"; for PAYLOAD_FILE in $(find ${quoteShell(expandDir)} -name Payload -type f); do if gzip -t "$PAYLOAD_FILE" >/dev/null 2>&1; then (cd "$PAYLOAD_DIR" && gzip -dc "$PAYLOAD_FILE" | cpio -idm >/dev/null 2>&1); else (cd "$PAYLOAD_DIR" && cat "$PAYLOAD_FILE" | cpio -idm >/dev/null 2>&1); fi; done`,
+    payloadExtractCommand,
     `FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); if [ -z "$FRAMEWORK_DIR" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
     `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
@@ -291,25 +364,30 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
   const installerUrl = buildMinicondaUrl(input)
   const installerPath = `${installPaths.installRootDir}\\Miniconda3-installer.exe`
   const condaEnvName = input.condaEnvName ?? 'base'
-  const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
-  const condaExeRef = `([System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)}))`
+  const condaCommandResolver = [
+    `$condaCandidates = @([System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\Scripts\\conda.exe`)}), [System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\_conda.exe`)}), [System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\condabin\\conda.bat`)}))`,
+    '$condaCommand = $condaCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1',
+    `if (-not $condaCommand) { throw 'Failed to locate conda command after Miniconda install.' }`,
+  ].join('; ')
 
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(installerUrl)} -OutFile ${quotePowerShell(installerPath)}`,
-    `Start-Process -FilePath ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) -ArgumentList '/S','/D=${installPaths.condaDir}' -Wait -NoNewWindow`,
+    `& ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) /InstallationType=JustMe /RegisterPython=0 /AddToPath=0 /S /D=${installPaths.condaDir}; if ($LASTEXITCODE -ne 0) { throw "Miniconda installer failed with exit code $LASTEXITCODE." }`,
     `Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`,
   ]
 
   if (condaEnvName !== 'base') {
     commands.push(
-      `& ${condaExeRef} create -y -c conda-forge -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
+      `${condaCommandResolver}; & $condaCommand create -y -c conda-forge -n ${quotePowerShell(condaEnvName)} python=${input.pythonVersion}`,
     )
   } else {
-    commands.push(`& ${condaExeRef} install -y -c conda-forge python=${input.pythonVersion}`)
+    commands.push(
+      `${condaCommandResolver}; & $condaCommand install -y -c conda-forge python=${input.pythonVersion}`,
+    )
   }
 
-  commands.push(`& ${condaExeRef} run python --version`)
+  commands.push(`${condaCommandResolver}; & $condaCommand run python --version`)
 
   return commands
 }
@@ -344,8 +422,12 @@ function buildVerifyCommands(input: PythonPluginParams): string[] {
   }
 
   if (input.pythonManager === 'conda') {
-    const condaExe = `${installPaths.condaDir}\\Scripts\\conda.exe`
-    return [`& ([System.IO.Path]::GetFullPath(${quotePowerShell(condaExe)})) run python --version`]
+    const condaCommandResolver = [
+      `$condaCandidates = @([System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\Scripts\\conda.exe`)}), [System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\_conda.exe`)}), [System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\condabin\\conda.bat`)}))`,
+      '$condaCommand = $condaCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1',
+      `if (-not $condaCommand) { throw 'Failed to locate conda command after Miniconda install.' }`,
+    ].join('; ')
+    return [`${condaCommandResolver}; & $condaCommand run python --version`]
   }
 
   return [`& ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} --version`]
