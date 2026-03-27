@@ -5,6 +5,7 @@ import type { EnvSetupApi, TaskProgressEvent } from '../main/core/contracts'
 let taskProgressListener: ((event: TaskProgressEvent) => void) | undefined
 
 const api: EnvSetupApi = {
+  loadBootstrap: () => ipcRenderer.invoke('bootstrap:load'),
   listTemplates: () => ipcRenderer.invoke('template:list'),
   listNodeLtsVersions: () => ipcRenderer.invoke('node:list-lts-versions'),
   listJavaLtsVersions: () => ipcRenderer.invoke('java:list-lts-versions'),

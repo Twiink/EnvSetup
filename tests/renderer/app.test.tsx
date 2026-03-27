@@ -303,6 +303,14 @@ beforeEach(() => {
   })
 
   const api: EnvSetupApi = {
+    loadBootstrap: vi.fn().mockResolvedValue({
+      templates: [nodeTemplateFixture, javaTemplateFixture, pythonTemplateFixture, gitTemplateFixture],
+      nodeLtsVersions: ['24.13.1', '22.22.1', '20.20.1'],
+      javaLtsVersions: ['21.0.6', '17.0.14', '11.0.26'],
+      pythonVersions: ['3.12.10', '3.11.10', '3.10.15'],
+      gitVersions: ['2.47.1'],
+      loadedAt: new Date().toISOString(),
+    }),
     listTemplates: vi
       .fn()
       .mockResolvedValue([

@@ -13,13 +13,14 @@ import {
 } from '../core/environment'
 import { resolveDryRun } from '../core/executionMode'
 import { runPrecheck as runEnhancedPrecheck } from '../core/enhancedPrecheck'
-import { listNodeLtsVersions } from '../core/nodeVersions'
-import { listJavaLtsVersions } from '../core/javaVersions'
-import { listPythonVersions } from '../core/pythonVersions'
-import { listGitVersions } from '../core/gitVersions'
+import { listNodeLtsVersions as fetchNodeLtsVersions } from '../core/nodeVersions'
+import { listJavaLtsVersions as fetchJavaLtsVersions } from '../core/javaVersions'
+import { listPythonVersions as fetchPythonVersions } from '../core/pythonVersions'
+import { listGitVersions as fetchGitVersions } from '../core/gitVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
 import { buildRuntimePrecheckInput, runPrecheck } from '../core/precheck'
 import { executeRollback, suggestRollbackSnapshots } from '../core/rollback'
+import { createRuntimeCache } from '../core/runtimeCache'
 import {
   createSnapshot,
   deleteSnapshot,
@@ -40,6 +41,7 @@ import {
 } from '../core/task'
 import { loadTemplatesFromDirectory, mapTemplateValuesToPluginParams } from '../core/template'
 import type {
+  BootstrapData,
   DetectedEnvironment,
   EnvChange,
   FailureAnalysis,
@@ -66,11 +68,89 @@ const BUILTIN_PLUGINS: PluginRegistry = {
   'git-env': gitEnvPlugin,
 }
 
+const TEMPLATE_CACHE_TTL_MS = 60_000
+const VERSION_CACHE_TTL_MS = 5 * 60_000
+const BOOTSTRAP_CACHE_TTL_MS = 60_000
+const PRECHECK_CACHE_TTL_MS = 15_000
+const PRECHECK_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USERPROFILE',
+  'JAVA_HOME',
+  'SDKMAN_DIR',
+  'CONDA_PREFIX',
+  'VIRTUAL_ENV',
+  'PYENV_ROOT',
+  'NVM_DIR',
+  'NVM_HOME',
+  'NVM_SYMLINK',
+  'npm_config_prefix',
+  'GIT_HOME',
+  'SCOOP',
+] as const
+
+const templatesCache = createRuntimeCache<ResolvedTemplate[]>()
+const versionsCache = createRuntimeCache<string[]>()
+const bootstrapCache = createRuntimeCache<BootstrapData>()
+const precheckCache =
+  createRuntimeCache<ReturnType<typeof runPrecheck> extends Promise<infer T> ? T : never>()
+
 const taskCache = new Map<string, InstallTask>()
 let ipcRegistered = false
 
 async function listTemplates(): Promise<ResolvedTemplate[]> {
-  return loadTemplatesFromDirectory(BUILTIN_TEMPLATE_DIR)
+  return templatesCache.getOrLoad('builtin-templates', TEMPLATE_CACHE_TTL_MS, async () =>
+    loadTemplatesFromDirectory(BUILTIN_TEMPLATE_DIR),
+  )
+}
+
+function buildPrecheckEnvironmentFingerprint(): string {
+  return JSON.stringify(
+    Object.fromEntries(PRECHECK_ENV_KEYS.map((key) => [key, process.env[key] ?? ''])),
+  )
+}
+
+async function listNodeLtsVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('node-lts', VERSION_CACHE_TTL_MS, () => fetchNodeLtsVersions())
+}
+
+async function listJavaLtsVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('java-lts', VERSION_CACHE_TTL_MS, () => fetchJavaLtsVersions())
+}
+
+async function listPythonVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('python', VERSION_CACHE_TTL_MS, () => fetchPythonVersions())
+}
+
+async function listGitVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('git', VERSION_CACHE_TTL_MS, () => fetchGitVersions())
+}
+
+async function loadBootstrap(): Promise<BootstrapData> {
+  return bootstrapCache.getOrLoad('bootstrap', BOOTSTRAP_CACHE_TTL_MS, async () => {
+    const [templates, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions] =
+      await Promise.all([
+        listTemplates(),
+        listNodeLtsVersionsCached(),
+        listJavaLtsVersionsCached(),
+        listPythonVersionsCached(),
+        listGitVersionsCached(),
+      ])
+
+    return {
+      templates,
+      nodeLtsVersions,
+      javaLtsVersions,
+      pythonVersions,
+      gitVersions,
+      loadedAt: new Date().toISOString(),
+    }
+  })
+}
+
+function clearRuntimeDerivedCaches(): void {
+  precheckCache.clear()
+  bootstrapCache.delete('bootstrap')
 }
 
 async function getTemplate(templateId: string): Promise<ResolvedTemplate> {
@@ -85,14 +165,19 @@ async function getTask(taskId: string, tasksDir: string): Promise<InstallTask> {
   return taskCache.get(taskId) ?? loadTask(taskId, tasksDir)
 }
 
-function getExecutionOptions(tasksDir: string, downloadCacheDir: string) {
+function getExecutionOptions(paths: {
+  tasksDir: string
+  downloadCacheDir: string
+  extractedCacheDir: string
+}) {
   return {
     registry: BUILTIN_PLUGINS,
     platform: (process.platform === 'win32' ? 'win32' : 'darwin') as 'win32' | 'darwin',
-    tasksDir,
+    tasksDir: paths.tasksDir,
     dryRun: resolveDryRun(app.isPackaged),
     runtimeContext: {
-      downloadCacheDir,
+      downloadCacheDir: paths.downloadCacheDir,
+      extractedCacheDir: paths.extractedCacheDir,
     },
     onProgress: (event: TaskProgressEvent) => {
       getMainWindow()?.webContents.send('task:progress', event)
@@ -107,14 +192,17 @@ export function registerIpcHandlers(): void {
 
   ipcRegistered = true
 
+  ipcMain.handle('bootstrap:load', async () => loadBootstrap())
   ipcMain.handle('template:list', async () => listTemplates())
-  ipcMain.handle('node:list-lts-versions', async () => listNodeLtsVersions())
-  ipcMain.handle('java:list-lts-versions', async () => listJavaLtsVersions())
-  ipcMain.handle('python:list-versions', async () => listPythonVersions())
-  ipcMain.handle('git:list-versions', async () => listGitVersions())
-  ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) =>
-    cleanupDetectedEnvironment(detection),
-  )
+  ipcMain.handle('node:list-lts-versions', async () => listNodeLtsVersionsCached())
+  ipcMain.handle('java:list-lts-versions', async () => listJavaLtsVersionsCached())
+  ipcMain.handle('python:list-versions', async () => listPythonVersionsCached())
+  ipcMain.handle('git:list-versions', async () => listGitVersionsCached())
+  ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) => {
+    const result = await cleanupDetectedEnvironment(detection)
+    clearRuntimeDerivedCaches()
+    return result
+  })
   ipcMain.handle('environment:cleanup-batch', async (_event, detections: DetectedEnvironment[]) => {
     const cleanupTargets = (detections ?? []).filter((detection) => detection.cleanupSupported)
     if (cleanupTargets.length === 0) {
@@ -133,6 +221,7 @@ export function registerIpcHandlers(): void {
     await updateSnapshotMeta(paths.snapshotsDir, snapshot)
 
     const cleanupResult = await cleanupDetectedEnvironments(cleanupTargets)
+    clearRuntimeDerivedCaches()
     return {
       snapshotId: snapshot.id,
       ...cleanupResult,
@@ -141,12 +230,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('environment:preview-changes', async (_event, changes: EnvChange[]) =>
     previewEnvChanges(changes ?? []),
   )
-  ipcMain.handle('environment:apply-changes', async (_event, payload: { changes: EnvChange[] }) =>
-    applyEnvChanges({
+  ipcMain.handle('environment:apply-changes', async (_event, payload: { changes: EnvChange[] }) => {
+    const result = await applyEnvChanges({
       changes: payload.changes ?? [],
       platform: (process.platform === 'win32' ? 'win32' : 'darwin') as 'win32' | 'darwin',
-    }),
-  )
+    })
+    clearRuntimeDerivedCaches()
+    return result
+  })
 
   ipcMain.handle(
     'task:precheck',
@@ -154,9 +245,19 @@ export function registerIpcHandlers(): void {
       _event,
       payload: { templateId: string; values: Record<string, Primitive>; locale: string },
     ) => {
-      const template = await getTemplate(payload.templateId)
-      const input = await buildRuntimePrecheckInput(template, payload.values)
-      return runPrecheck(input, normalizeLocale(payload.locale))
+      const normalizedLocale = normalizeLocale(payload.locale)
+      const cacheKey = JSON.stringify({
+        templateId: payload.templateId,
+        values: payload.values,
+        locale: normalizedLocale,
+        environment: buildPrecheckEnvironmentFingerprint(),
+      })
+
+      return precheckCache.getOrLoad(cacheKey, PRECHECK_CACHE_TTL_MS, async () => {
+        const template = await getTemplate(payload.templateId)
+        const input = await buildRuntimePrecheckInput(template, payload.values)
+        return runPrecheck(input, normalizedLocale)
+      })
     },
   )
 
@@ -226,7 +327,7 @@ export function registerIpcHandlers(): void {
 
     const nextTask = await executeTask({
       task,
-      ...getExecutionOptions(paths.tasksDir, paths.downloadCacheDir),
+      ...getExecutionOptions(paths),
     })
 
     const taskWithSnapshot: typeof nextTask = { ...nextTask, snapshotId }
@@ -271,7 +372,7 @@ export function registerIpcHandlers(): void {
       const nextTask = await retryTaskPlugin({
         task,
         pluginId: payload.pluginId,
-        ...getExecutionOptions(paths.tasksDir, paths.downloadCacheDir),
+        ...getExecutionOptions(paths),
       })
       taskCache.set(nextTask.id, nextTask)
       return nextTask
@@ -388,7 +489,7 @@ export function registerIpcHandlers(): void {
         rollbackCommands = []
       }
 
-      return executeRollback(
+      const rollbackResult = await executeRollback(
         paths.snapshotsDir,
         targetSnapshotId,
         payload.trackedPaths ?? [],
@@ -399,6 +500,8 @@ export function registerIpcHandlers(): void {
           skipRollbackCommands,
         },
       )
+      clearRuntimeDerivedCaches()
+      return rollbackResult
     },
   )
 

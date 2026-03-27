@@ -31,6 +31,28 @@ import {
 
 const execFileAsync = promisify(execFile)
 
+type SnapshotManifest = {
+  files: Record<
+    string,
+    {
+      hash: string
+      mode: number
+      mtimeMs: number
+      size: number
+    }
+  >
+  shellConfigs: Record<
+    string,
+    {
+      hash: string
+      lines: number
+      mode: number
+      mtimeMs: number
+      size: number
+    }
+  >
+}
+
 function uniqueStrings(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => typeof value === 'string'))]
 }
@@ -85,6 +107,7 @@ export async function loadObject(objectsDir: string, hash: string): Promise<Buff
 // ============================================================
 
 const REFS_FILE = 'objects-refs.json'
+const MANIFEST_FILE = 'snapshot-manifest.json'
 
 /**
  * 加载对象引用计数表
@@ -161,6 +184,51 @@ async function batchDecrementRefCounts(baseDir: string, hashes: string[]): Promi
   await saveRefCounts(baseDir, refs)
 }
 
+async function loadSnapshotManifest(baseDir: string): Promise<SnapshotManifest> {
+  try {
+    const content = await readFile(join(baseDir, MANIFEST_FILE), 'utf8')
+    const parsed = JSON.parse(content) as Partial<SnapshotManifest>
+    return {
+      files: typeof parsed.files === 'object' && parsed.files ? parsed.files : {},
+      shellConfigs:
+        typeof parsed.shellConfigs === 'object' && parsed.shellConfigs ? parsed.shellConfigs : {},
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) {
+      return { files: {}, shellConfigs: {} }
+    }
+    throw error
+  }
+}
+
+async function saveSnapshotManifest(baseDir: string, manifest: SnapshotManifest): Promise<void> {
+  await writeFile(join(baseDir, MANIFEST_FILE), JSON.stringify(manifest, null, 2))
+}
+
+function matchesManifestEntry(
+  entry:
+    | SnapshotManifest['files'][string]
+    | SnapshotManifest['shellConfigs'][string]
+    | undefined,
+  target: { mode: number; mtimeMs: number; size: number },
+): boolean {
+  return Boolean(
+    entry &&
+      entry.mode === target.mode &&
+      entry.mtimeMs === target.mtimeMs &&
+      entry.size === target.size,
+  )
+}
+
+async function hasStoredObject(objectsDir: string, hash: string): Promise<boolean> {
+  try {
+    await access(join(objectsDir, hash.slice(0, 2), hash.slice(2)), constants.F_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ============================================================
 // 快照创建与加载
 // ============================================================
@@ -176,6 +244,11 @@ export async function createSnapshot(options: {
   trackedPaths: string[]
 }): Promise<Snapshot> {
   const objectsDir = join(options.baseDir, 'objects')
+  const snapshotManifest = await loadSnapshotManifest(options.baseDir)
+  const nextSnapshotManifest: SnapshotManifest = {
+    files: { ...snapshotManifest.files },
+    shellConfigs: { ...snapshotManifest.shellConfigs },
+  }
   const files: Snapshot['files'] = {}
   const directories: NonNullable<Snapshot['directories']> = {}
   const symlinks: NonNullable<Snapshot['symlinks']> = {}
@@ -249,6 +322,20 @@ export async function createSnapshot(options: {
     }
 
     try {
+      const cachedEntry = snapshotManifest.files[targetPath]
+      if (matchesManifestEntry(cachedEntry, targetStat) && cachedEntry) {
+        if (await hasStoredObject(objectsDir, cachedEntry.hash)) {
+          files[targetPath] = { hash: cachedEntry.hash, mode: targetStat.mode, size: targetStat.size }
+          nextSnapshotManifest.files[targetPath] = {
+            hash: cachedEntry.hash,
+            mode: targetStat.mode,
+            mtimeMs: targetStat.mtimeMs,
+            size: targetStat.size,
+          }
+          return
+        }
+      }
+
       let content: Buffer
       try {
         content = await readFile(targetPath)
@@ -260,6 +347,12 @@ export async function createSnapshot(options: {
       }
       const hash = await storeObject(objectsDir, content)
       files[targetPath] = { hash, mode: targetStat.mode, size: targetStat.size }
+      nextSnapshotManifest.files[targetPath] = {
+        hash,
+        mode: targetStat.mode,
+        mtimeMs: targetStat.mtimeMs,
+        size: targetStat.size,
+      }
     } catch {
       // 跳过不可读文件
     }
@@ -303,10 +396,32 @@ export async function createSnapshot(options: {
   const shellResults = await Promise.all(
     configPaths.map(async (configPath) => {
       try {
+        const configStat = await stat(configPath)
+        const cachedEntry = snapshotManifest.shellConfigs[configPath]
+        if (matchesManifestEntry(cachedEntry, configStat) && cachedEntry) {
+          if (await hasStoredObject(objectsDir, cachedEntry.hash)) {
+            return {
+              configPath,
+              hash: cachedEntry.hash,
+              lines: cachedEntry.lines,
+              mode: configStat.mode,
+              mtimeMs: configStat.mtimeMs,
+              size: configStat.size,
+            } as const
+          }
+        }
+
         const content = await readFile(configPath)
         const hash = await storeObject(objectsDir, content)
         const lines = content.toString('utf8').split('\n').length
-        return { configPath, hash, lines } as const
+        return {
+          configPath,
+          hash,
+          lines,
+          mode: configStat.mode,
+          mtimeMs: configStat.mtimeMs,
+          size: configStat.size,
+        } as const
       } catch {
         return null
       }
@@ -318,6 +433,13 @@ export async function createSnapshot(options: {
     if (r) {
       shellConfigs[r.configPath] = { hash: r.hash, lines: r.lines }
       shellHashes.push(r.hash)
+      nextSnapshotManifest.shellConfigs[r.configPath] = {
+        hash: r.hash,
+        lines: r.lines,
+        mode: r.mode,
+        mtimeMs: r.mtimeMs,
+        size: r.size,
+      }
     }
   }
 
@@ -350,6 +472,7 @@ export async function createSnapshot(options: {
     join(snapshotsDir, `snapshot-${snapshot.id}.json`),
     JSON.stringify(snapshot, null, 2),
   )
+  await saveSnapshotManifest(options.baseDir, nextSnapshotManifest)
 
   return snapshot
 }

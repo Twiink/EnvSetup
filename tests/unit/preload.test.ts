@@ -44,6 +44,13 @@ describe('preload', () => {
     expect(invoke).toHaveBeenCalledWith('template:list')
   })
 
+  it('maps loadBootstrap to bootstrap:load invoke', async () => {
+    const api = await getApi()
+
+    api.loadBootstrap()
+    expect(invoke).toHaveBeenCalledWith('bootstrap:load')
+  })
+
   it('maps task cancel and cleanup actions to IPC invokes', async () => {
     const api = await getApi()
     const detection = { id: 'node:1', tool: 'node' }

@@ -214,6 +214,34 @@ describe('Snapshot - Index Creation', () => {
     expect(loaded.label).toBe('my snapshot')
   })
 
+  it('should recreate object content when manifest hash exists but object file was GCd', async () => {
+    const testFile = join(testDir, 'manifest-reuse.txt')
+    await writeFile(testFile, 'manifest content')
+
+    const firstSnapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-manifest-a',
+      type: 'auto',
+      trackedPaths: [testFile],
+    })
+
+    const hash = firstSnapshot.files[testFile].hash
+    const objectPath = join(testDir, 'objects', hash.slice(0, 2), hash.slice(2))
+    await markSnapshotDeletable(testDir, firstSnapshot.id)
+    await deleteSnapshot(testDir, firstSnapshot.id)
+    await expect(access(objectPath, constants.F_OK)).rejects.toThrow()
+
+    const secondSnapshot = await createSnapshot({
+      baseDir: testDir,
+      taskId: 'task-manifest-b',
+      type: 'auto',
+      trackedPaths: [testFile],
+    })
+
+    expect(secondSnapshot.files[testFile].hash).toBe(hash)
+    await expect(access(objectPath, constants.F_OK)).resolves.toBeUndefined()
+  })
+
   it('should recursively capture directory trees and empty directories', async () => {
     const rootDir = join(testDir, 'toolchain')
     const nestedDir = join(rootDir, 'bin')

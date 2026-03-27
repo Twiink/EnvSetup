@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
+import { prepareExtractedArchive } from '../core/archiveCache'
 import { buildNodeEnvChanges, resolveNodeInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import type {
   AppLocale,
   DownloadArtifact,
+  DownloadResolvedArtifact,
   NodePluginParams,
   PluginExecutionInput,
   PluginInstallResult,
@@ -36,6 +38,103 @@ function quoteShellDouble(value: string): string {
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
+}
+
+function resolveDownloadedArtifactPath(
+  resolvedDownloads: DownloadResolvedArtifact[] | undefined,
+  tool: DownloadArtifact['tool'],
+): string | undefined {
+  return resolvedDownloads?.find((item) => item.artifact.tool === tool)?.localPath
+}
+
+function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
+  const suffix = detail ? ` ${detail}` : ''
+  logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
+}
+
+type PreparedNodeInstallSources = {
+  nodeArchiveDir?: string
+  nvmArchiveDir?: string
+  nvmWindowsArchiveDir?: string
+  entries: Array<{
+    cacheHit: boolean
+    label: string
+    path: string
+  }>
+}
+
+async function prepareInstallSources(
+  input: NodePluginParams,
+  resolvedDownloads: DownloadResolvedArtifact[],
+): Promise<PreparedNodeInstallSources> {
+  const preparedSources: PreparedNodeInstallSources = {
+    entries: [],
+  }
+
+  if (!input.extractedCacheDir) {
+    return preparedSources
+  }
+
+  if (input.nodeManager === 'node') {
+    const archivePath = resolveDownloadedArtifactPath(resolvedDownloads, 'node')
+    if (!archivePath) {
+      return preparedSources
+    }
+
+    const extractedArchive = await prepareExtractedArchive({
+      archivePath,
+      cacheDir: input.extractedCacheDir,
+      format: input.platform === 'win32' ? 'zip' : 'tar.gz',
+    })
+    const extractedDir = extractedArchive.extractedRootDir ?? extractedArchive.extractionDir
+    preparedSources.nodeArchiveDir = extractedDir
+    preparedSources.entries.push({
+      cacheHit: extractedArchive.cacheHit,
+      label: 'node',
+      path: extractedDir,
+    })
+    return preparedSources
+  }
+
+  if (input.platform === 'darwin') {
+    const archivePath = resolveDownloadedArtifactPath(resolvedDownloads, 'nvm')
+    if (!archivePath) {
+      return preparedSources
+    }
+
+    const extractedArchive = await prepareExtractedArchive({
+      archivePath,
+      cacheDir: input.extractedCacheDir,
+      format: 'tar.gz',
+    })
+    const extractedDir = extractedArchive.extractedRootDir ?? extractedArchive.extractionDir
+    preparedSources.nvmArchiveDir = extractedDir
+    preparedSources.entries.push({
+      cacheHit: extractedArchive.cacheHit,
+      label: 'nvm',
+      path: extractedDir,
+    })
+    return preparedSources
+  }
+
+  const archivePath = resolveDownloadedArtifactPath(resolvedDownloads, 'nvm-windows')
+  if (!archivePath) {
+    return preparedSources
+  }
+
+  const extractedArchive = await prepareExtractedArchive({
+    archivePath,
+    cacheDir: input.extractedCacheDir,
+    format: 'zip',
+  })
+  const extractedDir = extractedArchive.extractedRootDir ?? extractedArchive.extractionDir
+  preparedSources.nvmWindowsArchiveDir = extractedDir
+  preparedSources.entries.push({
+    cacheHit: extractedArchive.cacheHit,
+    label: 'nvm-windows',
+    path: extractedDir,
+  })
+  return preparedSources
 }
 
 function resolveNodeArchiveBasename(input: NodePluginParams): string {
@@ -180,111 +279,218 @@ function toNodeParams(input: PluginExecutionInput): NodePluginParams {
     npmGlobalPrefix: input.npmGlobalPrefix,
     downloadCacheDir:
       typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
+    extractedCacheDir:
+      typeof input.extractedCacheDir === 'string' ? input.extractedCacheDir : undefined,
     platform: input.platform,
     dryRun: input.dryRun,
   }
 }
 
-function buildDarwinStandaloneCommands(input: NodePluginParams): string[] {
+function buildDarwinStandaloneCommands(
+  input: NodePluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
+): string[] {
   const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = buildNodeArchiveUrl(input)
   const checksumUrl = buildNodeChecksumUrl(input)
   const archiveName = resolveNodeArchiveBasename(input)
-  const archivePath = `${installPaths.installRootDir}/${archiveName}`
-  const checksumPath = `${installPaths.installRootDir}/SHASUMS256.txt`
+  const localArchivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'node') ??
+    `${installPaths.installRootDir}/${archiveName}`
   const extractedNodeDir = archiveName.replace(/\.tar\.gz$/, '')
 
-  return [
+  const commands = [
     `mkdir -p ${quoteShell(installPaths.installRootDir)} ${quoteShell(input.npmCacheDir)} ${quoteShell(input.npmGlobalPrefix)}`,
-    `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`,
-    `curl -fsSL ${quoteShell(checksumUrl)} -o ${quoteShell(checksumPath)}`,
-    `(cd ${quoteShell(installPaths.installRootDir)} && grep ${quoteShell(` ${archiveName}$`)} SHASUMS256.txt | shasum -a 256 -c -)`,
-    `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
-    `rm -rf ${quoteShell(installPaths.standaloneNodeDir)} && mv ${quoteShell(`${installPaths.installRootDir}/${extractedNodeDir}`)} ${quoteShell(installPaths.standaloneNodeDir)}`,
-    `export PATH=${quoteShellDouble(`${installPaths.standaloneNodeBinDir}:$PATH`)} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
   ]
+
+  if (!resolvedDownloads) {
+    const archivePath = `${installPaths.installRootDir}/${archiveName}`
+    const checksumPath = `${installPaths.installRootDir}/SHASUMS256.txt`
+    commands.push(
+      `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`,
+      `curl -fsSL ${quoteShell(checksumUrl)} -o ${quoteShell(checksumPath)}`,
+      `(cd ${quoteShell(installPaths.installRootDir)} && grep ${quoteShell(` ${archiveName}$`)} SHASUMS256.txt | shasum -a 256 -c -)`,
+    )
+  }
+
+  if (cachedArchiveDir) {
+    commands.push(
+      `rm -rf ${quoteShell(installPaths.standaloneNodeDir)}`,
+      `mkdir -p ${quoteShell(installPaths.standaloneNodeDir)}`,
+      `cp -R ${quoteShell(`${cachedArchiveDir}/.`)} ${quoteShell(installPaths.standaloneNodeDir)}`,
+    )
+  } else {
+    commands.push(
+      `tar -xzf ${quoteShell(localArchivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
+      `rm -rf ${quoteShell(installPaths.standaloneNodeDir)} && mv ${quoteShell(`${installPaths.installRootDir}/${extractedNodeDir}`)} ${quoteShell(installPaths.standaloneNodeDir)}`,
+    )
+  }
+
+  commands.push(
+    `export PATH=${quoteShellDouble(`${installPaths.standaloneNodeBinDir}:$PATH`)} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
+  )
+
+  return commands
 }
 
-function buildDarwinNvmCommands(input: NodePluginParams): string[] {
+function buildDarwinNvmCommands(
+  input: NodePluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
+): string[] {
   const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = `${NVM_ARCHIVE_BASE_URL}/v${PINNED_NVM_VERSION}.tar.gz`
-  const archivePath = `${installPaths.installRootDir}/nvm-v${PINNED_NVM_VERSION}.tar.gz`
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'nvm') ??
+    `${installPaths.installRootDir}/nvm-v${PINNED_NVM_VERSION}.tar.gz`
   const extractedDir = `${installPaths.installRootDir}/nvm-${PINNED_NVM_VERSION}`
 
-  return [
+  const commands = [
     `mkdir -p ${quoteShell(installPaths.installRootDir)} ${quoteShell(installPaths.nvmDir)} ${quoteShell(input.npmCacheDir)} ${quoteShell(input.npmGlobalPrefix)}`,
-    `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`,
-    `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
-    `cp -R ${quoteShell(`${extractedDir}/.`)} ${quoteShell(installPaths.nvmDir)}`,
-    `rm -rf ${quoteShell(extractedDir)} ${quoteShell(archivePath)}`,
-    `unset npm_config_prefix npm_config_globalconfig; if command -v npm >/dev/null 2>&1; then npm config delete prefix 2>/dev/null || true; npm config delete globalconfig 2>/dev/null || true; fi; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm install ${input.nodeVersion} && nvm alias default ${input.nodeVersion} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
   ]
+
+  if (!resolvedDownloads) {
+    commands.push(`curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`)
+  }
+
+  if (cachedArchiveDir) {
+    commands.push(`cp -R ${quoteShell(`${cachedArchiveDir}/.`)} ${quoteShell(installPaths.nvmDir)}`)
+  } else {
+    commands.push(
+      `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
+      `cp -R ${quoteShell(`${extractedDir}/.`)} ${quoteShell(installPaths.nvmDir)}`,
+      `rm -rf ${quoteShell(extractedDir)}${resolvedDownloads ? '' : ` ${quoteShell(archivePath)}`}`,
+    )
+  }
+
+  commands.push(
+    `unset npm_config_prefix npm_config_globalconfig; if command -v npm >/dev/null 2>&1; then npm config delete prefix 2>/dev/null || true; npm config delete globalconfig 2>/dev/null || true; fi; export NVM_DIR=${quoteShell(installPaths.nvmDir)} NVM_NODEJS_ORG_MIRROR=${quoteShell(installPaths.nvmNodeMirror)} && . ${quoteShell(`${installPaths.nvmDir}/nvm.sh`)} && nvm install ${input.nodeVersion} && nvm alias default ${input.nodeVersion} && npm config set cache ${quoteShell(input.npmCacheDir)} && npm config set prefix ${quoteShell(input.npmGlobalPrefix)}`,
+  )
+
+  return commands
 }
 
-function buildWindowsStandaloneCommands(input: NodePluginParams): string[] {
+function buildWindowsStandaloneCommands(
+  input: NodePluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
+): string[] {
   const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = buildNodeArchiveUrl(input)
   const checksumUrl = buildNodeChecksumUrl(input)
   const archiveName = resolveNodeArchiveBasename(input)
-  const archivePath = `${installPaths.installRootDir}\\${archiveName}`
-  const checksumPath = `${installPaths.installRootDir}\\SHASUMS256.txt`
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'node') ??
+    `${installPaths.installRootDir}\\${archiveName}`
   const extractedNodeDir = `${installPaths.installRootDir}\\${archiveName.replace(/\.zip$/, '')}`
-  const checksumValidationCommand = [
-    `$expectedHash = ((Select-String -Path ${quotePowerShell(checksumPath)} -Pattern ${quotePowerShell(` ${archiveName}$`)}).Line -split '\\s+')[0]`,
-    `if (-not $expectedHash) { throw 'Failed to locate Node.js checksum entry.' }`,
-    `$_archive = [System.IO.Path]::GetFullPath(${quotePowerShell(archivePath)})`,
-    '$_sha256 = [System.Security.Cryptography.SHA256]::Create()',
-    '$_stream = [System.IO.File]::OpenRead($_archive)',
-    "try { $_actualHash = ([System.BitConverter]::ToString($_sha256.ComputeHash($_stream))).Replace('-', '').ToLower() } finally { $_stream.Dispose(); $_sha256.Dispose() }",
-    `if ($_actualHash -ne $expectedHash.ToLower()) { throw 'Node.js checksum verification failed.' }`,
-  ].join('; ')
-
-  return [
+  const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmCacheDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmGlobalPrefix)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(checksumUrl)} -OutFile ${quotePowerShell(checksumPath)}`,
-    checksumValidationCommand,
-    `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
-    `if (Test-Path ${quotePowerShell(installPaths.standaloneNodeDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneNodeDir)} -Recurse -Force }`,
-    `Move-Item -LiteralPath ${quotePowerShell(extractedNodeDir)} -Destination ${quotePowerShell(installPaths.standaloneNodeDir)} -Force`,
+  ]
+
+  if (!resolvedDownloads) {
+    const checksumPath = `${installPaths.installRootDir}\\SHASUMS256.txt`
+    const checksumValidationCommand = [
+      `$expectedHash = ((Select-String -Path ${quotePowerShell(checksumPath)} -Pattern ${quotePowerShell(` ${archiveName}$`)}).Line -split '\\s+')[0]`,
+      `if (-not $expectedHash) { throw 'Failed to locate Node.js checksum entry.' }`,
+      `$_archive = [System.IO.Path]::GetFullPath(${quotePowerShell(archivePath)})`,
+      '$_sha256 = [System.Security.Cryptography.SHA256]::Create()',
+      '$_stream = [System.IO.File]::OpenRead($_archive)',
+      "try { $_actualHash = ([System.BitConverter]::ToString($_sha256.ComputeHash($_stream))).Replace('-', '').ToLower() } finally { $_stream.Dispose(); $_sha256.Dispose() }",
+      `if ($_actualHash -ne $expectedHash.ToLower()) { throw 'Node.js checksum verification failed.' }`,
+    ].join('; ')
+
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
+      `Invoke-WebRequest -Uri ${quotePowerShell(checksumUrl)} -OutFile ${quotePowerShell(checksumPath)}`,
+      checksumValidationCommand,
+    )
+  }
+
+  if (cachedArchiveDir) {
+    commands.push(
+      `if (Test-Path ${quotePowerShell(installPaths.standaloneNodeDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneNodeDir)} -Recurse -Force }`,
+      `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.standaloneNodeDir)} | Out-Null`,
+      `Copy-Item -Path (Join-Path ${quotePowerShell(cachedArchiveDir)} '*') -Destination ${quotePowerShell(installPaths.standaloneNodeDir)} -Recurse -Force`,
+    )
+  } else {
+    commands.push(
+      `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
+      `if (Test-Path ${quotePowerShell(installPaths.standaloneNodeDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneNodeDir)} -Recurse -Force }`,
+      `Move-Item -LiteralPath ${quotePowerShell(extractedNodeDir)} -Destination ${quotePowerShell(installPaths.standaloneNodeDir)} -Force`,
+    )
+  }
+
+  commands.push(
     `$env:Path = ${quotePowerShell(`${installPaths.standaloneNodeBinDir};$env:Path`)}`,
     `& ${quotePowerShell(`${installPaths.standaloneNodeBinDir}\\npm.cmd`)} config set cache ${quotePowerShell(input.npmCacheDir)}`,
     `& ${quotePowerShell(`${installPaths.standaloneNodeBinDir}\\npm.cmd`)} config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
-  ]
+  )
+
+  return commands
 }
 
-function buildWindowsNvmCommands(input: NodePluginParams): string[] {
+function buildWindowsNvmCommands(
+  input: NodePluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
+): string[] {
   const installPaths = resolveNodeInstallPaths(input)
   const archiveUrl = `${NVM_WINDOWS_RELEASE_BASE_URL}/${PINNED_NVM_WINDOWS_VERSION}/nvm-noinstall.zip`
-  const archivePath = `${installPaths.installRootDir}\\nvm-noinstall.zip`
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'nvm-windows') ??
+    `${installPaths.installRootDir}\\nvm-noinstall.zip`
   const settingsPath = `${installPaths.nvmDir}\\settings.txt`
 
-  return [
+  const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.nvmDir)} | Out-Null`,
     // Do NOT pre-create nvmWindowsSymlinkDir — nvm-windows creates it as a directory junction via `nvm use`.
     // Pre-creating it as a real directory prevents the junction from being established.
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmCacheDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmGlobalPrefix)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
-    `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.nvmDir)} -Force`,
+  ]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
+    )
+  }
+
+  if (cachedArchiveDir) {
+    commands.push(
+      `Copy-Item -Path (Join-Path ${quotePowerShell(cachedArchiveDir)} '*') -Destination ${quotePowerShell(installPaths.nvmDir)} -Recurse -Force`,
+    )
+  } else {
+    commands.push(
+      `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.nvmDir)} -Force`,
+    )
+  }
+
+  commands.push(
     `@('root: ${installPaths.nvmDir}','path: ${installPaths.nvmWindowsSymlinkDir}','arch: 64','proxy: none','node_mirror: ${NODEJS_DIST_BASE_URL}/') | Set-Content -LiteralPath ${quotePowerShell(settingsPath)} -Encoding ASCII`,
     `$ErrorActionPreference = 'Stop'; $_nvm = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmDir)}); $_sym = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.nvmWindowsSymlinkDir)}); $_ver = "$_nvm\\v${input.nodeVersion}"; $env:NVM_HOME = $_nvm; $env:NVM_SYMLINK = $_sym; $env:Path = $_nvm + ';' + $_sym + ';' + $env:Path; & "$_nvm\\nvm.exe" install ${input.nodeVersion}; if ($LASTEXITCODE -ne 0) { throw "nvm install failed (exit code $LASTEXITCODE)" }; & "$_nvm\\nvm.exe" use ${input.nodeVersion}; if (!(Test-Path "$_sym\\node.exe")) { if (Test-Path $_sym) { Remove-Item -LiteralPath $_sym -Recurse -Force }; cmd /c mklink /J "$_sym" "$_ver"; if (!(Test-Path "$_sym\\node.exe")) { throw "junction creation failed" } }; & "$_sym\\npm.cmd" config set cache ${quotePowerShell(input.npmCacheDir)}; & "$_sym\\npm.cmd" config set prefix ${quotePowerShell(input.npmGlobalPrefix)}`,
-  ]
+  )
+
+  return commands
 }
 
-export function buildInstallCommands(input: NodePluginParams): string[] {
+export function buildInstallCommands(
+  input: NodePluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  preparedSources?: PreparedNodeInstallSources,
+): string[] {
   if (input.platform === 'darwin') {
     return input.nodeManager === 'nvm'
-      ? buildDarwinNvmCommands(input)
-      : buildDarwinStandaloneCommands(input)
+      ? buildDarwinNvmCommands(input, resolvedDownloads, preparedSources?.nvmArchiveDir)
+      : buildDarwinStandaloneCommands(input, resolvedDownloads, preparedSources?.nodeArchiveDir)
   }
 
   return input.nodeManager === 'nvm'
-    ? buildWindowsNvmCommands(input)
-    : buildWindowsStandaloneCommands(input)
+    ? buildWindowsNvmCommands(input, resolvedDownloads, preparedSources?.nvmWindowsArchiveDir)
+    : buildWindowsStandaloneCommands(input, resolvedDownloads, preparedSources?.nodeArchiveDir)
 }
 
 function buildVerifyCommands(input: NodePluginParams): string[] {
@@ -385,8 +591,8 @@ const nodeEnvPlugin = {
     const params = toNodeParams(input)
     const installPaths = resolveNodeInstallPaths(params)
     const downloads = buildDownloadPlan(params)
-    const commands = buildInstallCommands(params)
     const envChanges = buildNodeEnvChanges(params)
+    let commands = buildInstallCommands(params)
 
     assertOfficialDownloadPlan(downloads)
 
@@ -407,18 +613,44 @@ const nodeEnvPlugin = {
         })
       }
 
+      const downloadStartedAt = Date.now()
       const resolvedDownloads = await downloadArtifacts({
         downloads,
         cacheDir: params.downloadCacheDir,
       })
       logs.push(
         ...resolvedDownloads.map(
-          (item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`,
+          (item) =>
+            `download_cache_hit=${item.cacheHit} ${item.artifact.url} localPath=${item.localPath}`,
         ),
       )
+      appendPhaseLog(logs, 'download', downloadStartedAt, `artifacts=${resolvedDownloads.length}`)
 
+      let preparedSources: PreparedNodeInstallSources | undefined
+      if (params.extractedCacheDir) {
+        const extractStartedAt = Date.now()
+        preparedSources = await prepareInstallSources(params, resolvedDownloads)
+        if (preparedSources.entries.length > 0) {
+          logs.push(
+            ...preparedSources.entries.map(
+              (entry) =>
+                `extract_cache_hit=${entry.cacheHit} ${entry.label} sourcePath=${entry.path}`,
+            ),
+          )
+          appendPhaseLog(
+            logs,
+            'extract_cache',
+            extractStartedAt,
+            `artifacts=${preparedSources.entries.length}`,
+          )
+        }
+      }
+
+      commands = buildInstallCommands(params, resolvedDownloads, preparedSources)
+      const commandStartedAt = Date.now()
       const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
       logs.push(...cmdOutput)
+      appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
     return {

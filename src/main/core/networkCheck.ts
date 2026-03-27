@@ -12,8 +12,11 @@ import { planGitDownloads } from '../plugins/gitEnvPlugin'
 import { planJavaDownloads } from '../plugins/javaEnvPlugin'
 import { planNodeDownloads } from '../plugins/nodeEnvPlugin'
 import { planPythonDownloads } from '../plugins/pythonEnvPlugin'
+import { createRuntimeCache } from './runtimeCache'
 
 const DEFAULT_NETWORK_CHECK_TIMEOUT_MS = 5000
+const NETWORK_RESULT_CACHE_TTL_MS = 60_000
+const networkResultCache = createRuntimeCache<NetworkCheckResult>()
 
 type TemplateNetworkCheckOptions = {
   fetchImpl?: typeof fetch
@@ -185,7 +188,15 @@ export async function runNetworkChecks(
   const fetchImpl = options.fetchImpl ?? fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_NETWORK_CHECK_TIMEOUT_MS
 
-  return Promise.all(targets.map((target) => probeTarget(target, { fetchImpl, timeoutMs })))
+  return Promise.all(
+    targets.map((target) =>
+      networkResultCache.getOrLoad(
+        `${target.id}:${timeoutMs}`,
+        NETWORK_RESULT_CACHE_TTL_MS,
+        () => probeTarget(target, { fetchImpl, timeoutMs }),
+      ),
+    ),
+  )
 }
 
 export async function runTemplateNetworkChecks(

@@ -17,6 +17,7 @@ describe('getAppPaths', () => {
     expect(paths.pluginStagingDir).toBe(join(base, 'plugin-staging'))
     expect(paths.snapshotsDir).toBe(join(base, 'snapshots'))
     expect(paths.downloadCacheDir).toBe(join(base, 'downloads-cache'))
+    expect(paths.extractedCacheDir).toBe(join(base, 'extracted-cache'))
   })
 
   it('uses ENVSETUP_DATA_DIR when baseDir is omitted', () => {
@@ -35,6 +36,32 @@ describe('getAppPaths', () => {
       }
     }
   })
+
+  it('uses dedicated cache directory overrides when provided', () => {
+    const originalDownloadOverride = process.env.ENVSETUP_DOWNLOAD_CACHE_DIR
+    const originalExtractedOverride = process.env.ENVSETUP_EXTRACTED_CACHE_DIR
+    process.env.ENVSETUP_DOWNLOAD_CACHE_DIR = '/tmp/envsetup-download-cache'
+    process.env.ENVSETUP_EXTRACTED_CACHE_DIR = '/tmp/envsetup-extracted-cache'
+
+    try {
+      const paths = getAppPaths('/tmp/envsetup-base')
+      expect(paths.downloadCacheDir).toBe('/tmp/envsetup-download-cache')
+      expect(paths.extractedCacheDir).toBe('/tmp/envsetup-extracted-cache')
+      expect(paths.tasksDir).toBe(join('/tmp/envsetup-base', 'tasks'))
+    } finally {
+      if (originalDownloadOverride === undefined) {
+        delete process.env.ENVSETUP_DOWNLOAD_CACHE_DIR
+      } else {
+        process.env.ENVSETUP_DOWNLOAD_CACHE_DIR = originalDownloadOverride
+      }
+
+      if (originalExtractedOverride === undefined) {
+        delete process.env.ENVSETUP_EXTRACTED_CACHE_DIR
+      } else {
+        process.env.ENVSETUP_EXTRACTED_CACHE_DIR = originalExtractedOverride
+      }
+    }
+  })
 })
 
 describe('ensureAppPaths', () => {
@@ -49,6 +76,7 @@ describe('ensureAppPaths', () => {
       paths.pluginStagingDir,
       paths.snapshotsDir,
       paths.downloadCacheDir,
+      paths.extractedCacheDir,
     ]) {
       const s = await stat(dir)
       expect(s.isDirectory()).toBe(true)

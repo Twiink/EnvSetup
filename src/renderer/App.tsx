@@ -146,19 +146,13 @@ export default function App() {
 
     async function loadTemplates() {
       try {
-        const [
-          nextTemplates,
-          nextNodeLtsVersions,
-          nextJavaLtsVersions,
-          nextPythonVersions,
-          nextGitVersions,
-        ] = await Promise.all([
-          window.envSetup.listTemplates(),
-          window.envSetup.listNodeLtsVersions(),
-          window.envSetup.listJavaLtsVersions(),
-          window.envSetup.listPythonVersions(),
-          window.envSetup.listGitVersions(),
-        ])
+        const {
+          templates: nextTemplates,
+          nodeLtsVersions: nextNodeLtsVersions,
+          javaLtsVersions: nextJavaLtsVersions,
+          pythonVersions: nextPythonVersions,
+          gitVersions: nextGitVersions,
+        } = await window.envSetup.loadBootstrap()
         if (!active) {
           return
         }

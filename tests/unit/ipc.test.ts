@@ -47,8 +47,10 @@ vi.mock('../../src/main/index', () => ({
 
 vi.mock('../../src/main/core/appPaths', () => ({
   ensureAppPaths: vi.fn(async () => ({
+    rootDir: '/tmp/envsetup-data',
     tasksDir: '/tmp/tasks',
     downloadCacheDir: '/tmp/cache',
+    extractedCacheDir: '/tmp/extracted-cache',
     pluginsDir: '/tmp/plugins',
     pluginStagingDir: '/tmp/staging',
     snapshotsDir: '/tmp/snapshots',
@@ -312,6 +314,7 @@ beforeEach(async () => {
 
 describe('registerIpcHandlers', () => {
   it('registers key channels', () => {
+    expect(handlers.has('bootstrap:load')).toBe(true)
     expect(handlers.has('template:list')).toBe(true)
     expect(handlers.has('task:create')).toBe(true)
     expect(handlers.has('task:start')).toBe(true)

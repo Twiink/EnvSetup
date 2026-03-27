@@ -633,7 +633,19 @@ function splitExecutableCandidates(binary: string): string[] {
   return [binary]
 }
 
-export async function findExecutable(binaryNames: string[]): Promise<string | undefined> {
+function buildExecutableCacheKey(binaryNames: string[]): string {
+  return [...binaryNames].sort().join('\u0000')
+}
+
+export async function findExecutable(
+  binaryNames: string[],
+  lookupCache?: Map<string, string | undefined>,
+): Promise<string | undefined> {
+  const cacheKey = buildExecutableCacheKey(binaryNames)
+  if (lookupCache?.has(cacheKey)) {
+    return lookupCache.get(cacheKey)
+  }
+
   const entries = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
 
   for (const entry of entries) {
@@ -642,6 +654,7 @@ export async function findExecutable(binaryNames: string[]): Promise<string | un
         const candidatePath = resolve(entry, candidate)
         try {
           await access(candidatePath, constants.X_OK)
+          lookupCache?.set(cacheKey, candidatePath)
           return candidatePath
         } catch {
           continue
@@ -650,6 +663,7 @@ export async function findExecutable(binaryNames: string[]): Promise<string | un
     }
   }
 
+  lookupCache?.set(cacheKey, undefined)
   return undefined
 }
 
@@ -670,6 +684,7 @@ function buildDetection(input: Omit<DetectedEnvironment, 'id'>): DetectedEnviron
 
 async function detectNodeEnvironment(
   values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
 ): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
   const installRootDir =
@@ -734,7 +749,7 @@ async function detectNodeEnvironment(
     )
   }
 
-  const nodeExecutable = await findExecutable(['node'])
+  const nodeExecutable = await findExecutable(['node'], executableLookupCache)
   if (nodeExecutable) {
     detections.push(
       buildDetection({
@@ -753,6 +768,7 @@ async function detectNodeEnvironment(
 
 async function detectJavaEnvironment(
   values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
 ): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
 
@@ -810,7 +826,7 @@ async function detectJavaEnvironment(
     )
   }
 
-  const javaExecutable = await findExecutable(['java'])
+  const javaExecutable = await findExecutable(['java'], executableLookupCache)
   if (javaExecutable) {
     detections.push(
       buildDetection({
@@ -829,6 +845,7 @@ async function detectJavaEnvironment(
 
 async function detectPythonEnvironment(
   values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
 ): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
 
@@ -871,7 +888,7 @@ async function detectPythonEnvironment(
     )
   }
 
-  const pythonExecutable = await findExecutable(['python3', 'python', 'py'])
+  const pythonExecutable = await findExecutable(['python3', 'python', 'py'], executableLookupCache)
   if (pythonExecutable) {
     detections.push(
       buildDetection({
@@ -890,6 +907,7 @@ async function detectPythonEnvironment(
 
 async function detectGitEnvironment(
   values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
 ): Promise<DetectedEnvironment[]> {
   const detections: DetectedEnvironment[] = []
 
@@ -942,7 +960,7 @@ async function detectGitEnvironment(
     )
   }
 
-  const gitExecutable = await findExecutable(['git'])
+  const gitExecutable = await findExecutable(['git'], executableLookupCache)
   if (gitExecutable) {
     detections.push(
       buildDetection({
@@ -993,37 +1011,38 @@ export async function detectTemplateEnvironments(
   template: ResolvedTemplate,
   values: Record<string, Primitive>,
 ): Promise<DetectedEnvironment[]> {
-  const detections: DetectedEnvironment[] = []
+  const executableLookupCache = new Map<string, string | undefined>()
 
-  for (const target of resolveEnvironmentTargets(template)) {
-    if (target === 'node') {
-      const detectionValues =
-        template.id === 'node-template'
-          ? mapTemplateValuesToPluginParams('node-env', values)
-          : values
-      detections.push(...(await detectNodeEnvironment(detectionValues)))
-      continue
-    }
+  const detections = await Promise.all(
+    resolveEnvironmentTargets(template).map(async (target) => {
+      if (target === 'node') {
+        const detectionValues =
+          template.id === 'node-template'
+            ? mapTemplateValuesToPluginParams('node-env', values)
+            : values
+        return detectNodeEnvironment(detectionValues, executableLookupCache)
+      }
 
-    if (target === 'java') {
-      const detectionValues = mapTemplateValuesToPluginParams('java-env', values)
-      detections.push(...(await detectJavaEnvironment(detectionValues)))
-      continue
-    }
+      if (target === 'java') {
+        const detectionValues = mapTemplateValuesToPluginParams('java-env', values)
+        return detectJavaEnvironment(detectionValues, executableLookupCache)
+      }
 
-    if (target === 'python') {
-      const detectionValues = mapTemplateValuesToPluginParams('python-env', values)
-      detections.push(...(await detectPythonEnvironment(detectionValues)))
-      continue
-    }
+      if (target === 'python') {
+        const detectionValues = mapTemplateValuesToPluginParams('python-env', values)
+        return detectPythonEnvironment(detectionValues, executableLookupCache)
+      }
 
-    if (target === 'git') {
-      const detectionValues = mapTemplateValuesToPluginParams('git-env', values)
-      detections.push(...(await detectGitEnvironment(detectionValues)))
-    }
-  }
+      if (target === 'git') {
+        const detectionValues = mapTemplateValuesToPluginParams('git-env', values)
+        return detectGitEnvironment(detectionValues, executableLookupCache)
+      }
 
-  return uniqueDetections(detections)
+      return []
+    }),
+  )
+
+  return uniqueDetections(detections.flat())
 }
 
 export async function cleanupDetectedEnvironment(

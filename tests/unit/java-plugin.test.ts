@@ -9,12 +9,20 @@ vi.mock('node:child_process', () => ({
 vi.mock('../../src/main/core/download', () => ({
   downloadArtifacts: vi.fn().mockResolvedValue([
     {
-      artifact: { url: 'https://mock.test/file.tar.gz' },
+      artifact: { tool: 'temurin', url: 'https://mock.test/file.tar.gz' },
       localPath: '/tmp/cached',
       cacheHit: true,
     },
   ]),
   validateOfficialDownloads: vi.fn(),
+}))
+
+vi.mock('../../src/main/core/archiveCache', () => ({
+  prepareExtractedArchive: vi.fn().mockResolvedValue({
+    cacheHit: true,
+    extractionDir: '/tmp/extracted/java-cache',
+    extractedRootDir: '/tmp/extracted/java-cache/root',
+  }),
 }))
 
 import javaPlugin from '../../src/main/plugins/javaEnvPlugin'
@@ -150,6 +158,25 @@ describe('java env plugin', () => {
 
     expect(result.executionMode).toBe('real_run')
     expect(result.logs).toEqual(expect.arrayContaining([expect.stringContaining('mode=real-run')]))
+  })
+
+  it('reuses extracted archive cache for real-run jdk installs when available', async () => {
+    const result = await javaPlugin.install({
+      javaManager: 'jdk',
+      javaVersion: '21',
+      installRootDir: '/tmp/toolchain',
+      downloadCacheDir: '/tmp/download-cache',
+      extractedCacheDir: '/tmp/extracted-cache',
+      dryRun: false,
+      platform: 'darwin',
+      onProgress: vi.fn(),
+    })
+
+    expect(result.commands.join('\n')).toContain("cp -R '/tmp/extracted/java-cache/root/.'")
+    expect(result.commands.join('\n')).not.toContain('tar -xzf')
+    expect(result.logs).toEqual(
+      expect.arrayContaining([expect.stringContaining('extract_cache_hit=true temurin')]),
+    )
   })
 
   it('throws for invalid javaManager', async () => {

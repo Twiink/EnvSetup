@@ -49,8 +49,8 @@ async function createAndStartTask(
 }> {
   return page.evaluate(
     async ({ templateId, overrides }) => {
-      const templates = await window.envSetup.listTemplates()
-      const template = templates.find((entry) => entry.id === templateId)
+      const bootstrap = await window.envSetup.loadBootstrap()
+      const template = bootstrap.templates.find((entry) => entry.id === templateId)
       if (!template) {
         throw new Error(`Template not found: ${templateId}`)
       }
@@ -59,25 +59,20 @@ async function createAndStartTask(
         Object.values(template.fields).map((field) => [field.key, field.value]),
       ) as Record<string, string>
 
-      if ('node.nodeVersion' in values) {
-        const nodeVersions = await window.envSetup.listNodeLtsVersions()
-        if (nodeVersions[0]) {
-          values['node.nodeVersion'] = nodeVersions[0]
-        }
+      if ('node.nodeVersion' in values && bootstrap.nodeLtsVersions[0]) {
+        values['node.nodeVersion'] = bootstrap.nodeLtsVersions[0]
       }
 
-      if ('java.javaVersion' in values) {
-        const javaVersions = await window.envSetup.listJavaLtsVersions()
-        if (javaVersions[0]) {
-          values['java.javaVersion'] = javaVersions[0]
-        }
+      if ('java.javaVersion' in values && bootstrap.javaLtsVersions[0]) {
+        values['java.javaVersion'] = bootstrap.javaLtsVersions[0]
       }
 
-      if ('python.pythonVersion' in values) {
-        const pythonVersions = await window.envSetup.listPythonVersions()
-        if (pythonVersions[0]) {
-          values['python.pythonVersion'] = pythonVersions[0]
-        }
+      if ('python.pythonVersion' in values && bootstrap.pythonVersions[0]) {
+        values['python.pythonVersion'] = bootstrap.pythonVersions[0]
+      }
+
+      if ('git.gitVersion' in values && bootstrap.gitVersions[0]) {
+        values['git.gitVersion'] = bootstrap.gitVersions[0]
       }
 
       Object.assign(values, overrides)

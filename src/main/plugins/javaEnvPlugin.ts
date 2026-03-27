@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
+import { prepareExtractedArchive } from '../core/archiveCache'
 import { buildJavaEnvChanges, resolveJavaInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import type {
   AppLocale,
   DownloadArtifact,
+  DownloadResolvedArtifact,
   JavaPluginParams,
   PluginExecutionInput,
   PluginInstallResult,
@@ -36,6 +38,59 @@ function quotePowerShell(value: string): string {
 
 function quotePowerShellSingle(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
+}
+
+function resolveDownloadedArtifactPath(
+  resolvedDownloads: DownloadResolvedArtifact[] | undefined,
+  tool: DownloadArtifact['tool'],
+): string | undefined {
+  return resolvedDownloads?.find((item) => item.artifact.tool === tool)?.localPath
+}
+
+function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
+  const suffix = detail ? ` ${detail}` : ''
+  logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
+}
+
+type PreparedJavaInstallSources = {
+  temurinArchiveDir?: string
+  entries: Array<{
+    cacheHit: boolean
+    label: string
+    path: string
+  }>
+}
+
+async function prepareInstallSources(
+  input: JavaPluginParams,
+  resolvedDownloads: DownloadResolvedArtifact[],
+): Promise<PreparedJavaInstallSources> {
+  const preparedSources: PreparedJavaInstallSources = {
+    entries: [],
+  }
+
+  if (!input.extractedCacheDir || input.javaManager !== 'jdk') {
+    return preparedSources
+  }
+
+  const archivePath = resolveDownloadedArtifactPath(resolvedDownloads, 'temurin')
+  if (!archivePath) {
+    return preparedSources
+  }
+
+  const extractedArchive = await prepareExtractedArchive({
+    archivePath,
+    cacheDir: input.extractedCacheDir,
+    format: input.platform === 'win32' ? 'zip' : 'tar.gz',
+  })
+  const extractedDir = extractedArchive.extractedRootDir ?? extractedArchive.extractionDir
+  preparedSources.temurinArchiveDir = extractedDir
+  preparedSources.entries.push({
+    cacheHit: extractedArchive.cacheHit,
+    label: 'temurin',
+    path: extractedDir,
+  })
+  return preparedSources
 }
 
 /** Extract the major feature version from a Temurin version string like '21.0.6+7' or '21' */
@@ -163,32 +218,64 @@ function toJavaParams(input: PluginExecutionInput): JavaPluginParams {
     dryRun: input.dryRun,
     downloadCacheDir:
       typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
+    extractedCacheDir:
+      typeof input.extractedCacheDir === 'string' ? input.extractedCacheDir : undefined,
   }
 }
 
-function buildDarwinStandaloneCommands(input: JavaPluginParams): string[] {
+function buildDarwinStandaloneCommands(
+  input: JavaPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
+): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const archiveUrl = buildTemurinBinaryUrl(input)
-  const archivePath = `${installPaths.installRootDir}/temurin-jdk-${input.javaVersion}.tar.gz`
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'temurin') ??
+    `${installPaths.installRootDir}/temurin-jdk-${input.javaVersion}.tar.gz`
 
-  return [
-    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
-    `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`,
-    `mkdir -p ${quoteShell(installPaths.standaloneJdkDir)}`,
-    `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.standaloneJdkDir)} --strip-components=1`,
+  const commands = [`mkdir -p ${quoteShell(installPaths.installRootDir)}`]
+
+  if (!resolvedDownloads) {
+    commands.push(`curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(archivePath)}`)
+  }
+
+  commands.push(`mkdir -p ${quoteShell(installPaths.standaloneJdkDir)}`)
+
+  if (cachedArchiveDir) {
+    commands.push(
+      `cp -R ${quoteShell(`${cachedArchiveDir}/.`)} ${quoteShell(installPaths.standaloneJdkDir)}`,
+    )
+  } else {
+    commands.push(
+      `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.standaloneJdkDir)} --strip-components=1`,
+      ...(resolvedDownloads ? [] : [`rm -f ${quoteShell(archivePath)}`]),
+    )
+  }
+
+  commands.push(
     // macOS Temurin archives contain Contents/Home/; flatten if present
     `if [ -d ${quoteShell(installPaths.standaloneJdkDir + '/Contents/Home')} ]; then mv ${quoteShell(installPaths.standaloneJdkDir + '/Contents/Home')}/* ${quoteShell(installPaths.standaloneJdkDir)}/ && rm -rf ${quoteShell(installPaths.standaloneJdkDir + '/Contents')}; fi`,
-    `rm -f ${quoteShell(archivePath)}`,
     `export JAVA_HOME=${quoteShell(installPaths.standaloneJdkDir)} && export PATH="${installPaths.standaloneJdkBinDir}:$PATH" && java -version`,
-  ]
+  )
+
+  return commands
 }
 
-function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
+function buildDarwinSdkmanCommands(
+  input: JavaPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const featureVersion = extractFeatureVersion(input.javaVersion)
+  const sdkmanInstallerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman') ??
+    `${installPaths.installRootDir}/sdkman-install.sh`
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
-    `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
+    resolvedDownloads
+      ? `bash ${quoteShell(sdkmanInstallerPath)}`
+      : `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
     `sdk install java ${featureVersion}-tem`,
     'java -version',
@@ -201,42 +288,85 @@ function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   ]
 }
 
-function buildWindowsStandaloneCommands(input: JavaPluginParams): string[] {
+function buildWindowsStandaloneCommands(
+  input: JavaPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
+): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const archiveUrl = buildTemurinBinaryUrl(input)
-  const archivePath = `${installPaths.installRootDir}\\temurin-jdk-${input.javaVersion}.zip`
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'temurin') ??
+    `${installPaths.installRootDir}\\temurin-jdk-${input.javaVersion}.zip`
 
-  return [
+  const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
-    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.standaloneJdkDir)} | Out-Null`,
-    `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
-    // Temurin extracts to a directory like jdk-21.0.6+7; move its contents
-    `$extracted = Get-ChildItem -Path ${quotePowerShell(installPaths.installRootDir)} -Directory | Where-Object { $_.Name -like 'jdk-*' } | Select-Object -First 1; if ($extracted) { Move-Item -Path "$($extracted.FullName)\\*" -Destination ${quotePowerShell(installPaths.standaloneJdkDir)} -Force; Remove-Item -LiteralPath $extracted.FullName -Recurse -Force }`,
-    `Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`,
-    `$env:JAVA_HOME = ${quotePowerShell(installPaths.standaloneJdkDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneJdkBinDir)} + ';' + $env:Path; & ${quotePowerShell(installPaths.standaloneJdkBinDir + '\\java.exe')} -version`,
   ]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
+    )
+  }
+
+  commands.push(
+    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.standaloneJdkDir)} | Out-Null`,
+  )
+
+  if (cachedArchiveDir) {
+    commands.push(
+      `Copy-Item -Path (Join-Path ${quotePowerShell(cachedArchiveDir)} '*') -Destination ${quotePowerShell(installPaths.standaloneJdkDir)} -Recurse -Force`,
+    )
+  } else {
+    commands.push(
+      `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
+      // Temurin extracts to a directory like jdk-21.0.6+7; move its contents
+      `$extracted = Get-ChildItem -Path ${quotePowerShell(installPaths.installRootDir)} -Directory | Where-Object { $_.Name -like 'jdk-*' } | Select-Object -First 1; if ($extracted) { Move-Item -Path "$($extracted.FullName)\\*" -Destination ${quotePowerShell(installPaths.standaloneJdkDir)} -Force; Remove-Item -LiteralPath $extracted.FullName -Recurse -Force }`,
+      ...(resolvedDownloads
+        ? []
+        : [`Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`]),
+    )
+  }
+
+  commands.push(
+    `$env:JAVA_HOME = ${quotePowerShell(installPaths.standaloneJdkDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneJdkBinDir)} + ';' + $env:Path; & ${quotePowerShell(installPaths.standaloneJdkBinDir + '\\java.exe')} -version`,
+  )
+
+  return commands
 }
 
-function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
+function buildWindowsSdkmanCommands(
+  input: JavaPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const featureVersion = extractFeatureVersion(input.javaVersion)
   const gitBashDir = `${installPaths.installRootDir}\\git-bash`
   const fallbackBashPath = `${gitBashDir}\\bin\\bash.exe`
+  const gitInstallerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'git-for-windows') ??
+    `${installPaths.installRootDir}\\Git-installer.exe`
+  const sdkmanInstallerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman')?.replace(/\\/g, '/') ??
+    `${installPaths.installRootDir}\\sdkman-install.sh`
   const gitInstallerArgs = [...GIT_FOR_WINDOWS_SILENT_ARGS, `/DIR=${gitBashDir}`]
     .map((arg) => quotePowerShell(arg))
     .join(' ')
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir.replace(/\\/g, '/'))}`,
     'rm -rf "$SDKMAN_DIR"',
-    `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
+    resolvedDownloads
+      ? `bash ${quoteShell(sdkmanInstallerPath)}`
+      : `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     '. "$SDKMAN_DIR/bin/sdkman-init.sh"',
     `sdk install java ${featureVersion}-tem`,
     'java -version',
   ].join(' && ')
   const gitBashCommand = [
     `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
-    `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; $proc = Start-Process -FilePath $gitInstaller -ArgumentList ${gitInstallerArgs} -Wait -PassThru; $gitInstallerExitCode = $proc.ExitCode; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
+    resolvedDownloads
+      ? `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(gitInstallerPath)}); & $gitInstaller ${gitInstallerArgs}; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`
+      : `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; $proc = Start-Process -FilePath $gitInstaller -ArgumentList ${gitInstallerArgs} -Wait -PassThru; $gitInstallerExitCode = $proc.ExitCode; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
     `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
     `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
   ].join('; ')
@@ -248,16 +378,20 @@ function buildWindowsSdkmanCommands(input: JavaPluginParams): string[] {
   ]
 }
 
-export function buildInstallCommands(input: JavaPluginParams): string[] {
+export function buildInstallCommands(
+  input: JavaPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  preparedSources?: PreparedJavaInstallSources,
+): string[] {
   if (input.platform === 'darwin') {
     return input.javaManager === 'sdkman'
-      ? buildDarwinSdkmanCommands(input)
-      : buildDarwinStandaloneCommands(input)
+      ? buildDarwinSdkmanCommands(input, resolvedDownloads)
+      : buildDarwinStandaloneCommands(input, resolvedDownloads, preparedSources?.temurinArchiveDir)
   }
 
   return input.javaManager === 'sdkman'
-    ? buildWindowsSdkmanCommands(input)
-    : buildWindowsStandaloneCommands(input)
+    ? buildWindowsSdkmanCommands(input, resolvedDownloads)
+    : buildWindowsStandaloneCommands(input, resolvedDownloads, preparedSources?.temurinArchiveDir)
 }
 
 function buildVerifyCommands(input: JavaPluginParams): string[] {
@@ -366,8 +500,8 @@ const javaEnvPlugin = {
     const params = toJavaParams(input)
     const installPaths = resolveJavaInstallPaths(params)
     const downloads = buildDownloadPlan(params)
-    const commands = buildInstallCommands(params)
     const envChanges = buildJavaEnvChanges(params)
+    let commands = buildInstallCommands(params)
 
     assertOfficialDownloadPlan(downloads)
 
@@ -385,18 +519,44 @@ const javaEnvPlugin = {
         })
       }
 
+      const downloadStartedAt = Date.now()
       const resolvedDownloads = await downloadArtifacts({
         downloads,
         cacheDir: params.downloadCacheDir,
       })
       logs.push(
         ...resolvedDownloads.map(
-          (item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`,
+          (item) =>
+            `download_cache_hit=${item.cacheHit} ${item.artifact.url} localPath=${item.localPath}`,
         ),
       )
+      appendPhaseLog(logs, 'download', downloadStartedAt, `artifacts=${resolvedDownloads.length}`)
 
+      let preparedSources: PreparedJavaInstallSources | undefined
+      if (params.extractedCacheDir) {
+        const extractStartedAt = Date.now()
+        preparedSources = await prepareInstallSources(params, resolvedDownloads)
+        if (preparedSources.entries.length > 0) {
+          logs.push(
+            ...preparedSources.entries.map(
+              (entry) =>
+                `extract_cache_hit=${entry.cacheHit} ${entry.label} sourcePath=${entry.path}`,
+            ),
+          )
+          appendPhaseLog(
+            logs,
+            'extract_cache',
+            extractStartedAt,
+            `artifacts=${preparedSources.entries.length}`,
+          )
+        }
+      }
+
+      commands = buildInstallCommands(params, resolvedDownloads, preparedSources)
+      const commandStartedAt = Date.now()
       const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
       logs.push(...cmdOutput)
+      appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
     return {

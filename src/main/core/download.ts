@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import type { DownloadArtifact, ErrorCode } from './contracts'
@@ -10,7 +10,7 @@ const OFFICIAL_DOWNLOAD_HOSTS: Record<DownloadArtifact['tool'], Set<string>> = {
   'nvm-windows': new Set(['github.com']),
   temurin: new Set(['github.com', 'api.adoptium.net']),
   sdkman: new Set(['get.sdkman.io', 'api.sdkman.io', 'github.com']),
-  python: new Set(['www.python.org']),
+  python: new Set(['www.python.org', 'bootstrap.pypa.io']),
   miniconda: new Set(['repo.anaconda.com']),
   git: new Set(['sourceforge.net', 'git-scm.com']),
   'git-for-windows': new Set(['github.com', 'gitforwindows.org']),
@@ -35,14 +35,17 @@ export type DownloadArtifactsOptions = {
   retryCount?: number
 }
 
+const inFlightDownloads = new Map<string, Promise<DownloadResolvedArtifact>>()
+const inFlightChecksums = new Map<string, Promise<string>>()
+
 function makeError(code: ErrorCode, message: string): DownloadError {
   const error = new Error(message) as DownloadError
   error.code = code
   return error
 }
 
-function getArchiveArtifacts(downloads: DownloadArtifact[]): DownloadArtifact[] {
-  return downloads.filter((download) => download.kind === 'archive')
+function getDownloadableArtifacts(downloads: DownloadArtifact[]): DownloadArtifact[] {
+  return downloads.filter((download) => download.kind === 'archive' || download.kind === 'installer')
 }
 
 function ensureOfficialHost(download: DownloadArtifact): void {
@@ -65,7 +68,16 @@ function ensureOfficialHost(download: DownloadArtifact): void {
 
 function buildCacheKey(download: DownloadArtifact): string {
   const payload = JSON.stringify({
+    kind: download.kind,
     url: download.url,
+    checksumUrl: download.checksumUrl,
+    checksumAlgorithm: download.checksumAlgorithm,
+  })
+  return createHash('sha256').update(payload).digest('hex')
+}
+
+function buildChecksumCacheKey(download: DownloadArtifact): string {
+  const payload = JSON.stringify({
     checksumUrl: download.checksumUrl,
     checksumAlgorithm: download.checksumAlgorithm,
   })
@@ -87,6 +99,14 @@ function inferChecksumTargetName(download: DownloadArtifact): string {
   }
 
   return basename(new URL(download.url).pathname)
+}
+
+function resolveCacheFile(cacheDir: string, download: DownloadArtifact): string {
+  return join(cacheDir, `${buildCacheKey(download)}-${inferFileName(download)}`)
+}
+
+function resolveChecksumCacheFile(cacheDir: string, download: DownloadArtifact): string {
+  return join(cacheDir, 'checksums', `${buildChecksumCacheKey(download)}.txt`)
 }
 
 async function fetchWithRetry(options: {
@@ -132,32 +152,76 @@ async function fetchWithRetry(options: {
   throw makeError('DOWNLOAD_RETRY_EXHAUSTED', `Download retries exhausted: ${options.url}`)
 }
 
-async function downloadArchive(options: {
+async function loadChecksumText(options: {
   download: DownloadArtifact
   cacheDir: string
   fetchImpl: typeof fetch
   retryCount: number
-}): Promise<DownloadResolvedArtifact> {
-  const cacheKey = buildCacheKey(options.download)
-  const cacheFile = join(options.cacheDir, `${cacheKey}-${inferFileName(options.download)}`)
+}): Promise<string> {
+  if (!options.download.checksumUrl) {
+    return ''
+  }
+
+  const cacheFile = resolveChecksumCacheFile(options.cacheDir, options.download)
 
   try {
-    const cacheStat = await stat(cacheFile)
+    return await readFile(cacheFile, 'utf8')
+  } catch {
+    // cache miss
+  }
+
+  const inFlight = inFlightChecksums.get(cacheFile)
+  if (inFlight) {
+    return inFlight
+  }
+
+  const nextPromise = (async () => {
+    const response = await fetchWithRetry({
+      url: options.download.checksumUrl!,
+      fetchImpl: options.fetchImpl,
+      retryCount: options.retryCount,
+    })
+    const checksumText = await response.text()
+    await mkdir(join(options.cacheDir, 'checksums'), { recursive: true })
+    await writeFile(cacheFile, checksumText, 'utf8')
+    return checksumText
+  })()
+
+  inFlightChecksums.set(cacheFile, nextPromise)
+  try {
+    return await nextPromise
+  } finally {
+    inFlightChecksums.delete(cacheFile)
+  }
+}
+
+async function downloadArtifact(options: {
+  download: DownloadArtifact
+  cacheDir: string
+  cacheFile: string
+  fetchImpl: typeof fetch
+  retryCount: number
+}): Promise<DownloadResolvedArtifact> {
+  try {
+    const cacheStat = await stat(options.cacheFile)
     if (cacheStat.isFile()) {
       await verifyChecksumIfNeeded(
         options.download,
-        cacheFile,
+        options.cacheFile,
+        options.cacheDir,
         options.fetchImpl,
         options.retryCount,
       )
       return {
         artifact: options.download,
-        localPath: cacheFile,
+        localPath: options.cacheFile,
         cacheHit: true,
       }
     }
-  } catch {
-    // cache miss
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error
+    }
   }
 
   const response = await fetchWithRetry({
@@ -166,13 +230,19 @@ async function downloadArchive(options: {
     retryCount: options.retryCount,
   })
   const bytes = Buffer.from(await response.arrayBuffer())
-  await writeFile(cacheFile, bytes)
+  await writeFile(options.cacheFile, bytes)
 
-  await verifyChecksumIfNeeded(options.download, cacheFile, options.fetchImpl, options.retryCount)
+  await verifyChecksumIfNeeded(
+    options.download,
+    options.cacheFile,
+    options.cacheDir,
+    options.fetchImpl,
+    options.retryCount,
+  )
 
   return {
     artifact: options.download,
-    localPath: cacheFile,
+    localPath: options.cacheFile,
     cacheHit: false,
   }
 }
@@ -180,6 +250,7 @@ async function downloadArchive(options: {
 async function verifyChecksumIfNeeded(
   download: DownloadArtifact,
   localPath: string,
+  cacheDir: string,
   fetchImpl: typeof fetch,
   retryCount: number,
 ): Promise<void> {
@@ -187,13 +258,12 @@ async function verifyChecksumIfNeeded(
     return
   }
 
-  const response = await fetchWithRetry({
-    url: download.checksumUrl,
+  const checksumText = await loadChecksumText({
+    download,
+    cacheDir,
     fetchImpl,
     retryCount,
   })
-
-  const checksumText = await response.text()
   const targetName = inferChecksumTargetName(download)
   const expectedHash = parseExpectedChecksum(checksumText, targetName)
 
@@ -243,20 +313,47 @@ export async function downloadArtifacts(
 
   await mkdir(options.cacheDir, { recursive: true })
 
-  const archiveDownloads = getArchiveArtifacts(options.downloads)
-  validateOfficialDownloads(archiveDownloads)
+  const downloadableArtifacts = getDownloadableArtifacts(options.downloads)
+  validateOfficialDownloads(downloadableArtifacts)
 
-  const resolved: DownloadResolvedArtifact[] = []
-  for (const download of archiveDownloads) {
-    resolved.push(
-      await downloadArchive({
-        download,
-        cacheDir: options.cacheDir,
-        fetchImpl,
-        retryCount,
-      }),
-    )
-  }
+  return Promise.all(
+    downloadableArtifacts.map(async (download) => {
+      const cacheFile = resolveCacheFile(options.cacheDir, download)
+      const inFlight = inFlightDownloads.get(cacheFile)
+      if (inFlight) {
+        return inFlight
+      }
 
-  return resolved
+      const nextPromise = (async () => {
+        try {
+          return await downloadArtifact({
+            download,
+            cacheDir: options.cacheDir,
+            cacheFile,
+            fetchImpl,
+            retryCount,
+          })
+        } catch (error) {
+          if ((error as { code?: ErrorCode }).code === 'DOWNLOAD_CHECKSUM_FAILED') {
+            await rm(cacheFile, { force: true }).catch(() => undefined)
+            return downloadArtifact({
+              download,
+              cacheDir: options.cacheDir,
+              cacheFile,
+              fetchImpl,
+              retryCount,
+            })
+          }
+          throw error
+        }
+      })()
+
+      inFlightDownloads.set(cacheFile, nextPromise)
+      try {
+        return await nextPromise
+      } finally {
+        inFlightDownloads.delete(cacheFile)
+      }
+    }),
+  )
 }

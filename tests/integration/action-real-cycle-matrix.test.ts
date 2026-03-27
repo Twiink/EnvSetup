@@ -42,6 +42,7 @@ const originalEnv = { ...process.env }
 
 let suiteDir: string
 let sharedDownloadCacheDir: string
+let sharedExtractedCacheDir: string
 let tmpDir: string
 let tasksDir: string
 let snapshotsDir: string
@@ -61,6 +62,14 @@ type RealCycleCase = {
   verifyRolledBackState?: () => Promise<void>
 }
 
+function withSharedCaches(params: Record<string, string>): Record<string, string> {
+  return {
+    ...params,
+    downloadCacheDir: sharedDownloadCacheDir,
+    extractedCacheDir: sharedExtractedCacheDir,
+  }
+}
+
 const allRealCycleCases: RealCycleCase[] = [
   {
     name: 'Node.js direct',
@@ -68,14 +77,14 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'node-env',
     plugin: nodeEnvPlugin,
     templateId: 'node-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      nodeManager: 'node',
-      nodeVersion: '20.20.1',
-      npmCacheDir: join(installRootDir, 'npm-cache'),
-      npmGlobalPrefix: join(installRootDir, 'npm-global'),
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        nodeManager: 'node',
+        nodeVersion: '20.20.1',
+        npmCacheDir: join(installRootDir, 'npm-cache'),
+        npmGlobalPrefix: join(installRootDir, 'npm-global'),
+      }),
     verifyPattern: /v\d+\.\d+\.\d+/,
   },
   {
@@ -84,14 +93,14 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'node-env',
     plugin: nodeEnvPlugin,
     templateId: 'node-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      nodeManager: 'nvm',
-      nodeVersion: '20.20.1',
-      npmCacheDir: join(installRootDir, 'npm-cache'),
-      npmGlobalPrefix: join(installRootDir, 'npm-global'),
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        nodeManager: 'nvm',
+        nodeVersion: '20.20.1',
+        npmCacheDir: join(installRootDir, 'npm-cache'),
+        npmGlobalPrefix: join(installRootDir, 'npm-global'),
+      }),
     verifyPattern: /v\d+\.\d+\.\d+/,
   },
   {
@@ -100,12 +109,12 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'java-env',
     plugin: javaEnvPlugin,
     templateId: 'java-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      javaManager: 'jdk',
-      javaVersion: '21',
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        javaManager: 'jdk',
+        javaVersion: '21',
+      }),
     verifyPattern: /(openjdk|temurin|version)/i,
   },
   {
@@ -114,12 +123,12 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'java-env',
     plugin: javaEnvPlugin,
     templateId: 'java-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      javaManager: 'sdkman',
-      javaVersion: '21',
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        javaManager: 'sdkman',
+        javaVersion: '21',
+      }),
     verifyPattern: /(openjdk|temurin|version)/i,
   },
   {
@@ -128,12 +137,12 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'python-env',
     plugin: pythonEnvPlugin,
     templateId: 'python-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      pythonManager: 'python',
-      pythonVersion: '3.12.10',
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        pythonManager: 'python',
+        pythonVersion: '3.12.10',
+      }),
     verifyPattern: /Python\s+\d+\.\d+\.\d+/,
   },
   {
@@ -142,13 +151,13 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'python-env',
     plugin: pythonEnvPlugin,
     templateId: 'python-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      pythonManager: 'conda',
-      pythonVersion: '3.12.10',
-      condaEnvName: 'base',
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        pythonManager: 'conda',
+        pythonVersion: '3.12.10',
+        condaEnvName: 'base',
+      }),
     verifyPattern: /Python\s+\d+\.\d+\.\d+/,
   },
   {
@@ -157,11 +166,11 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'git-env',
     plugin: gitEnvPlugin,
     templateId: 'git-template',
-    buildParams: (installRootDir) => ({
-      installRootDir,
-      gitManager: 'git',
-      downloadCacheDir: sharedDownloadCacheDir,
-    }),
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        gitManager: 'git',
+      }),
     verifyPattern: /git version/i,
   },
   ...(isMac
@@ -172,11 +181,11 @@ const allRealCycleCases: RealCycleCase[] = [
           pluginId: 'git-env',
           plugin: gitEnvPlugin,
           templateId: 'git-template',
-          buildParams: (installRootDir: string) => ({
-            installRootDir,
-            gitManager: 'homebrew',
-            downloadCacheDir: sharedDownloadCacheDir,
-          }),
+          buildParams: (installRootDir: string) =>
+            withSharedCaches({
+              installRootDir,
+              gitManager: 'homebrew',
+            }),
           verifyPattern: /git version/i,
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
@@ -196,11 +205,11 @@ const allRealCycleCases: RealCycleCase[] = [
           pluginId: 'git-env',
           plugin: gitEnvPlugin,
           templateId: 'git-template',
-          buildParams: (installRootDir: string) => ({
-            installRootDir,
-            gitManager: 'scoop',
-            downloadCacheDir: sharedDownloadCacheDir,
-          }),
+          buildParams: (installRootDir: string) =>
+            withSharedCaches({
+              installRootDir,
+              gitManager: 'scoop',
+            }),
           verifyPattern: /git version/i,
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
@@ -225,8 +234,14 @@ const realCycleCases = allRealCycleCases.filter(shouldRunRealCycleCaseInCi)
 
 beforeAll(async () => {
   suiteDir = await mkdtemp(join(tmpdir(), 'envsetup-real-cycle-suite-'))
-  sharedDownloadCacheDir = join(suiteDir, 'download-cache')
-  await mkdir(sharedDownloadCacheDir, { recursive: true })
+  sharedDownloadCacheDir =
+    process.env.ENVSETUP_DOWNLOAD_CACHE_DIR || join(suiteDir, 'download-cache')
+  sharedExtractedCacheDir =
+    process.env.ENVSETUP_EXTRACTED_CACHE_DIR || join(suiteDir, 'extracted-cache')
+  await Promise.all([
+    mkdir(sharedDownloadCacheDir, { recursive: true }),
+    mkdir(sharedExtractedCacheDir, { recursive: true }),
+  ])
   templatesById = new Map(
     (await loadTemplatesFromDirectory(join(process.cwd(), 'fixtures', 'templates'))).map(
       (template) => [template.id, template],

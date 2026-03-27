@@ -13,12 +13,20 @@ vi.mock('node:child_process', () => ({
 vi.mock('../../src/main/core/download', () => ({
   downloadArtifacts: vi.fn().mockResolvedValue([
     {
-      artifact: { url: 'https://mock.test/file.tar.gz' },
+      artifact: { tool: 'node', url: 'https://mock.test/file.tar.gz' },
       localPath: '/tmp/cached',
       cacheHit: true,
     },
   ]),
   validateOfficialDownloads: vi.fn(),
+}))
+
+vi.mock('../../src/main/core/archiveCache', () => ({
+  prepareExtractedArchive: vi.fn().mockResolvedValue({
+    cacheHit: true,
+    extractionDir: '/tmp/extracted/node-cache',
+    extractedRootDir: '/tmp/extracted/node-cache/root',
+  }),
 }))
 
 import nodePlugin from '../../fixtures/plugins/node-env/index'
@@ -121,6 +129,27 @@ describe('node env plugin', () => {
 
     expect(result.executionMode).toBe('real_run')
     expect(result.logs).toEqual(expect.arrayContaining([expect.stringContaining('mode=real-run')]))
+  })
+
+  it('reuses extracted archive cache for real-run direct installs when available', async () => {
+    const result = await nodePlugin.install({
+      nodeManager: 'node',
+      nodeVersion: '20.11.1',
+      installRootDir: '/tmp/toolchain',
+      npmCacheDir: '/tmp/npm-cache',
+      npmGlobalPrefix: '/tmp/npm-global',
+      downloadCacheDir: '/tmp/download-cache',
+      extractedCacheDir: '/tmp/extracted-cache',
+      dryRun: false,
+      platform: 'darwin',
+      onProgress: vi.fn(),
+    })
+
+    expect(result.commands.join('\n')).toContain("cp -R '/tmp/extracted/node-cache/root/.'")
+    expect(result.commands.join('\n')).not.toContain('tar -xzf')
+    expect(result.logs).toEqual(
+      expect.arrayContaining([expect.stringContaining('extract_cache_hit=true node')]),
+    )
   })
 
   it('builds standalone node downloads from nodejs.org with checksum verification', async () => {

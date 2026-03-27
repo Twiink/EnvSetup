@@ -8,6 +8,7 @@ export type AppPaths = {
   pluginStagingDir: string
   snapshotsDir: string
   downloadCacheDir: string
+  extractedCacheDir: string
 }
 
 function resolveDefaultAppDataDir(): string {
@@ -18,14 +19,25 @@ function resolveDefaultAppDataDir(): string {
     : join(process.cwd(), '.envsetup-data')
 }
 
+function resolveOptionalDirOverride(envKey: string): string | undefined {
+  const value = process.env[envKey]
+  return value && value.trim().length > 0 ? value : undefined
+}
+
 export function getAppPaths(baseDir = resolveDefaultAppDataDir()): AppPaths {
+  const downloadCacheDir =
+    resolveOptionalDirOverride('ENVSETUP_DOWNLOAD_CACHE_DIR') ?? join(baseDir, 'downloads-cache')
+  const extractedCacheDir =
+    resolveOptionalDirOverride('ENVSETUP_EXTRACTED_CACHE_DIR') ?? join(baseDir, 'extracted-cache')
+
   return {
     rootDir: baseDir,
     tasksDir: join(baseDir, 'tasks'),
     pluginsDir: join(baseDir, 'plugins'),
     pluginStagingDir: join(baseDir, 'plugin-staging'),
     snapshotsDir: join(baseDir, 'snapshots'),
-    downloadCacheDir: join(baseDir, 'downloads-cache'),
+    downloadCacheDir,
+    extractedCacheDir,
   }
 }
 
@@ -38,6 +50,7 @@ export async function ensureAppPaths(baseDir?: string): Promise<AppPaths> {
     mkdir(paths.pluginStagingDir, { recursive: true }),
     mkdir(paths.snapshotsDir, { recursive: true }),
     mkdir(paths.downloadCacheDir, { recursive: true }),
+    mkdir(paths.extractedCacheDir, { recursive: true }),
   ])
   return paths
 }

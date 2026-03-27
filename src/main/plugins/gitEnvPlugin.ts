@@ -6,6 +6,7 @@ import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import type {
   AppLocale,
   DownloadArtifact,
+  DownloadResolvedArtifact,
   GitPluginParams,
   PluginExecutionInput,
   PluginInstallResult,
@@ -33,6 +34,18 @@ function quoteShell(value: string): string {
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
+}
+
+function resolveDownloadedArtifactPath(
+  resolvedDownloads: DownloadResolvedArtifact[] | undefined,
+  tool: DownloadArtifact['tool'],
+): string | undefined {
+  return resolvedDownloads?.find((item) => item.artifact.tool === tool)?.localPath
+}
+
+function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
+  const suffix = detail ? ` ${detail}` : ''
+  logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
 }
 
 function buildResolveHomebrewCommand(): string {
@@ -168,69 +181,113 @@ function toGitParams(input: PluginExecutionInput): GitPluginParams {
     installRootDir,
     downloadCacheDir:
       typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
+    extractedCacheDir:
+      typeof input.extractedCacheDir === 'string' ? input.extractedCacheDir : undefined,
     platform: input.platform,
     dryRun: input.dryRun,
   }
 }
 
-function buildDarwinDirectCommands(input: GitPluginParams): string[] {
+function buildDarwinDirectCommands(
+  input: GitPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const paths = resolveGitInstallPaths(input)
-  const dmgPath = `${paths.installRootDir}/git-installer.dmg`
+  const dmgPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'git') ?? `${paths.installRootDir}/git-installer.dmg`
   const mountPoint = `${paths.installRootDir}/git-installer-mount`
 
-  return [
-    `mkdir -p ${quoteShell(paths.installRootDir)}`,
-    `curl -fL ${quoteShell(GIT_MACOS_DMG_URL)} -o ${quoteShell(dmgPath)}`,
+  const commands = [`mkdir -p ${quoteShell(paths.installRootDir)}`]
+
+  if (!resolvedDownloads) {
+    commands.push(`curl -fL ${quoteShell(GIT_MACOS_DMG_URL)} -o ${quoteShell(dmgPath)}`)
+  }
+
+  commands.push(
     `hdiutil attach ${quoteShell(dmgPath)} -mountpoint ${quoteShell(mountPoint)}`,
     `rm -rf ${quoteShell(paths.gitDir)}`,
     `PKG_PATH=$(find ${quoteShell(mountPoint)} -path '*/.Trashes' -prune -o -name '*.pkg' -print | head -n 1); [ -n "$PKG_PATH" ] && pkgutil --expand-full "$PKG_PATH" ${quoteShell(paths.gitDir)}`,
     `hdiutil detach ${quoteShell(mountPoint)} || true`,
-    `rm -f ${quoteShell(dmgPath)}`,
+    ...(resolvedDownloads ? [] : [`rm -f ${quoteShell(dmgPath)}`]),
     `rm -rf ${quoteShell(mountPoint)}`,
-  ]
+  )
+
+  return commands
 }
 
-function buildDarwinHomebrewCommands(): string[] {
+function buildDarwinHomebrewCommands(resolvedDownloads?: DownloadResolvedArtifact[]): string[] {
   const resolveBrewCommand = buildResolveHomebrewCommand()
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'homebrew') ?? '/tmp/homebrew-install.sh'
   return [
-    `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install git || HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" upgrade git`,
+    resolvedDownloads
+      ? `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install git || HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" upgrade git`
+      : `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install git || HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" upgrade git`,
   ]
 }
 
-function buildWindowsDirectCommands(input: GitPluginParams): string[] {
+function buildWindowsDirectCommands(
+  input: GitPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const paths = resolveGitInstallPaths(input)
-  const installerPath = `${paths.installRootDir}\\Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'git-for-windows') ??
+    `${paths.installRootDir}\\Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
   const installerArgs = [...GIT_FOR_WINDOWS_SILENT_ARGS, `/DIR=${paths.gitDir}`]
     .map((arg) => quotePowerShell(arg))
     .join(' ')
 
-  return [
+  const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.installRootDir)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile ${quotePowerShell(installerPath)}`,
+  ]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile ${quotePowerShell(installerPath)}`,
+    )
+  }
+
+  commands.push(
     `$proc = Start-Process -FilePath ${quotePowerShell(installerPath)} -ArgumentList ${installerArgs} -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Git for Windows installer failed with exit code $($proc.ExitCode)." }`,
-    `if (Test-Path ${quotePowerShell(installerPath)}) { Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
-  ]
+  )
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `if (Test-Path ${quotePowerShell(installerPath)}) { Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
+    )
+  }
+
+  return commands
 }
 
-function buildWindowsScoopCommands(): string[] {
+function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[]): string[] {
   const resolveScoopCommand = buildResolveScoopCommand()
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
+    "$installer = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-scoop-install.ps1'; Invoke-WebRequest -UseBasicParsing -Uri \"https://get.scoop.sh\" -OutFile $installer"
   return [
-    `Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue; ${resolveScoopCommand}; if (-not $scoop) { $installer = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-scoop-install.ps1'; Invoke-WebRequest -UseBasicParsing -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} -OutFile $installer; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
+    resolvedDownloads
+      ? `Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue; ${resolveScoopCommand}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); & $installer; $installerExitCode = $LASTEXITCODE; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`
+      : `Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue; ${resolveScoopCommand}; if (-not $scoop) { ${installerPath}; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
   ]
 }
 
-function buildInstallCommands(input: GitPluginParams): string[] {
+function buildInstallCommands(
+  input: GitPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   if (input.gitManager === 'git') {
     return input.platform === 'darwin'
-      ? buildDarwinDirectCommands(input)
-      : buildWindowsDirectCommands(input)
+      ? buildDarwinDirectCommands(input, resolvedDownloads)
+      : buildWindowsDirectCommands(input, resolvedDownloads)
   }
 
   if (input.gitManager === 'homebrew') {
-    return buildDarwinHomebrewCommands()
+    return buildDarwinHomebrewCommands(resolvedDownloads)
   }
 
-  return buildWindowsScoopCommands()
+  return buildWindowsScoopCommands(resolvedDownloads)
 }
 
 function buildRollbackCommands(input: GitPluginParams): string[] {
@@ -332,9 +389,9 @@ const gitEnvPlugin = {
     const params = toGitParams(input)
     const paths = resolveGitInstallPaths(params)
     const downloads = buildDownloadPlan(params)
-    const commands = buildInstallCommands(params)
     const rollbackCommands = buildRollbackCommands(params)
     const envChanges = buildGitEnvChanges(params)
+    let commands = buildInstallCommands(params)
 
     validateOfficialDownloads(downloads)
 
@@ -352,16 +409,23 @@ const gitEnvPlugin = {
         })
       }
 
+      const downloadStartedAt = Date.now()
       const resolvedDownloads = await downloadArtifacts({
         downloads,
         cacheDir: params.downloadCacheDir,
       })
       logs.push(
         ...resolvedDownloads.map(
-          (item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`,
+          (item) =>
+            `download_cache_hit=${item.cacheHit} ${item.artifact.url} localPath=${item.localPath}`,
         ),
       )
+      appendPhaseLog(logs, 'download', downloadStartedAt, `artifacts=${resolvedDownloads.length}`)
+
+      commands = buildInstallCommands(params, resolvedDownloads)
+      const commandStartedAt = Date.now()
       logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
+      appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
     return {

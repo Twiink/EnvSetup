@@ -301,6 +301,7 @@ export type NodePluginParams = PluginExecutionInput & {
   npmCacheDir: string
   npmGlobalPrefix: string
   downloadCacheDir?: string
+  extractedCacheDir?: string
 }
 
 export type JavaPluginParams = PluginExecutionInput & {
@@ -308,6 +309,7 @@ export type JavaPluginParams = PluginExecutionInput & {
   javaVersion: string
   installRootDir: string
   downloadCacheDir?: string
+  extractedCacheDir?: string
 }
 
 export type PythonPluginParams = PluginExecutionInput & {
@@ -316,6 +318,7 @@ export type PythonPluginParams = PluginExecutionInput & {
   installRootDir: string
   condaEnvName?: string
   downloadCacheDir?: string
+  extractedCacheDir?: string
 }
 
 export type GitPluginParams = PluginExecutionInput & {
@@ -323,6 +326,7 @@ export type GitPluginParams = PluginExecutionInput & {
   gitVersion?: string
   installRootDir: string
   downloadCacheDir?: string
+  extractedCacheDir?: string
 }
 
 export type PluginCheckResult = {
@@ -529,6 +533,15 @@ export type ApplyEnvChangesResult = {
   skipped: EnvChange[]
 }
 
+export type BootstrapData = {
+  templates: ResolvedTemplate[]
+  nodeLtsVersions: string[]
+  javaLtsVersions: string[]
+  pythonVersions: string[]
+  gitVersions: string[]
+  loadedAt: string
+}
+
 export type EnvChangesPreview = {
   envCount: number
   pathCount: number
@@ -537,6 +550,7 @@ export type EnvChangesPreview = {
 }
 
 export type EnvSetupApi = {
+  loadBootstrap: () => Promise<BootstrapData>
   listTemplates: () => Promise<ResolvedTemplate[]>
   listNodeLtsVersions: () => Promise<string[]>
   listJavaLtsVersions: () => Promise<string[]>

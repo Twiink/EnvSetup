@@ -6,6 +6,7 @@ import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import type {
   AppLocale,
   DownloadArtifact,
+  DownloadResolvedArtifact,
   PythonPluginParams,
   PluginExecutionInput,
   PluginInstallResult,
@@ -29,6 +30,24 @@ function quoteShell(value: string): string {
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
+}
+
+function resolveDownloadedArtifactPath(
+  resolvedDownloads: DownloadResolvedArtifact[] | undefined,
+  tool: DownloadArtifact['tool'],
+  fileName?: string,
+): string | undefined {
+  const matchingDownloads = resolvedDownloads?.filter((item) => item.artifact.tool === tool) ?? []
+  if (!fileName) {
+    return matchingDownloads[0]?.localPath
+  }
+
+  return matchingDownloads.find((item) => item.artifact.fileName === fileName)?.localPath
+}
+
+function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
+  const suffix = detail ? ` ${detail}` : ''
+  logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
 }
 
 function resolvePythonArch(): string {
@@ -75,6 +94,14 @@ function buildDownloadPlan(input: PythonPluginParams): DownloadArtifact[] {
         official: true,
         note: 'Download the Python embeddable zip from python.org.',
         fileName: `python-${input.pythonVersion}-embed-amd64.zip`,
+      },
+      {
+        kind: 'installer',
+        tool: 'python',
+        url: 'https://bootstrap.pypa.io/get-pip.py',
+        official: true,
+        note: 'Download the official pip bootstrap script for embedded Python.',
+        fileName: 'get-pip.py',
       },
     ]
   }
@@ -185,6 +212,8 @@ function toPythonParams(input: PluginExecutionInput): PythonPluginParams {
     dryRun: input.dryRun,
     downloadCacheDir:
       typeof input.downloadCacheDir === 'string' ? input.downloadCacheDir : undefined,
+    extractedCacheDir:
+      typeof input.extractedCacheDir === 'string' ? input.extractedCacheDir : undefined,
   }
 }
 
@@ -198,10 +227,15 @@ function extractPythonMajorMinor(version: string): string {
   return `${parts[0]}.${parts[1]}`
 }
 
-function buildDarwinPkgCommands(input: PythonPluginParams): string[] {
+function buildDarwinPkgCommands(
+  input: PythonPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const pkgUrl = buildPythonPkgUrl(input)
-  const installerPath = `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'python', `python-${input.pythonVersion}-macos11.pkg`) ??
+    `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
   const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
   const payloadDir = `${installPaths.installRootDir}/python-pkg-payload`
   const majorMinor = extractPythonMajorMinor(input.pythonVersion)
@@ -279,15 +313,21 @@ if extracted_payloads == 0:
 PY`,
   ].join('; ')
 
-  return [
-    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
-    `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
+  const commands = [`mkdir -p ${quoteShell(installPaths.installRootDir)}`]
+
+  if (!resolvedDownloads) {
+    commands.push(`curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`)
+  }
+
+  commands.push(
     `pkgutil --expand ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
     payloadExtractCommand,
     `FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); if [ -z "$FRAMEWORK_DIR" ]; then FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Versions/${majorMinor}`)} -type d | head -n 1); fi; if [ -z "$FRAMEWORK_DIR" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
-    `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
+    `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)}${resolvedDownloads ? '' : ` ${quoteShell(installerPath)}`}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
-  ]
+  )
+
+  return commands
 }
 
 /** @deprecated Retained for potential future source-compilation option. Not called in production. */
@@ -308,18 +348,30 @@ function _buildDarwinStandaloneCommands(input: PythonPluginParams): string[] {
   ]
 }
 
-function buildDarwinCondaCommands(input: PythonPluginParams): string[] {
+function buildDarwinCondaCommands(
+  input: PythonPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const installerUrl = buildMinicondaUrl(input)
-  const installerPath = `${installPaths.installRootDir}/miniconda-installer.sh`
+  const installerPath =
+    resolveDownloadedArtifactPath(
+      resolvedDownloads,
+      'miniconda',
+      `Miniconda3-latest-MacOSX-${resolvePythonArch()}.sh`,
+    ) ?? `${installPaths.installRootDir}/miniconda-installer.sh`
   const condaEnvName = input.condaEnvName ?? 'base'
 
-  const commands = [
-    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
-    `curl -fsSL ${quoteShell(installerUrl)} -o ${quoteShell(installerPath)}`,
+  const commands = [`mkdir -p ${quoteShell(installPaths.installRootDir)}`]
+
+  if (!resolvedDownloads) {
+    commands.push(`curl -fsSL ${quoteShell(installerUrl)} -o ${quoteShell(installerPath)}`)
+  }
+
+  commands.push(
     `bash ${quoteShell(installerPath)} -b -p ${quoteShell(installPaths.condaDir)}`,
-    `rm -f ${quoteShell(installerPath)}`,
-  ]
+    ...(resolvedDownloads ? [] : [`rm -f ${quoteShell(installerPath)}`]),
+  )
 
   if (condaEnvName !== 'base') {
     commands.push(
@@ -338,31 +390,66 @@ function buildDarwinCondaCommands(input: PythonPluginParams): string[] {
   return commands
 }
 
-function buildWindowsStandaloneCommands(input: PythonPluginParams): string[] {
+function buildWindowsStandaloneCommands(
+  input: PythonPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const archiveUrl = buildPythonWindowsEmbedUrl(input)
-  const archivePath = `${installPaths.installRootDir}\\python-${input.pythonVersion}-embed-amd64.zip`
+  const archivePath =
+    resolveDownloadedArtifactPath(
+      resolvedDownloads,
+      'python',
+      `python-${input.pythonVersion}-embed-amd64.zip`,
+    ) ?? `${installPaths.installRootDir}\\python-${input.pythonVersion}-embed-amd64.zip`
   const getPipUrl = 'https://bootstrap.pypa.io/get-pip.py'
+  const getPipPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'python', 'get-pip.py') ??
+    `${installPaths.standalonePythonDir}\\get-pip.py`
 
-  return [
+  const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.standalonePythonDir)} | Out-Null`,
+  ]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(archiveUrl)} -OutFile ${quotePowerShell(archivePath)}`,
+    )
+  }
+
+  commands.push(
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.standalonePythonDir)} -Force`,
-    `Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`,
+    ...(resolvedDownloads ? [] : [`Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`]),
     // Enable pip in embedded Python by uncommenting import site
     `$pthFile = Get-ChildItem -Path ${quotePowerShell(installPaths.standalonePythonDir)} -Filter 'python*._pth' | Select-Object -First 1; if ($pthFile) { (Get-Content $pthFile.FullName) -replace '^#import site','import site' | Set-Content $pthFile.FullName }`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(getPipUrl)} -OutFile ${quotePowerShell(installPaths.standalonePythonDir + '\\get-pip.py')}`,
-    `& ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} ${quotePowerShell(installPaths.standalonePythonDir + '\\get-pip.py')}`,
-    `Remove-Item -LiteralPath ${quotePowerShell(installPaths.standalonePythonDir + '\\get-pip.py')} -Force`,
+  )
+
+  if (!resolvedDownloads) {
+    commands.push(`Invoke-WebRequest -Uri ${quotePowerShell(getPipUrl)} -OutFile ${quotePowerShell(getPipPath)}`)
+  }
+
+  commands.push(
+    `& ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} ${quotePowerShell(getPipPath)}`,
+    ...(resolvedDownloads ? [] : [`Remove-Item -LiteralPath ${quotePowerShell(getPipPath)} -Force`]),
     `$env:Path = ${quotePowerShell(installPaths.standalonePythonBinDir)} + ';' + $env:Path; & ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} --version`,
-  ]
+  )
+
+  return commands
 }
 
-function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
+function buildWindowsCondaCommands(
+  input: PythonPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const installerUrl = buildMinicondaUrl(input)
-  const installerPath = `${installPaths.installRootDir}\\Miniconda3-installer.exe`
+  const installerPath =
+    resolveDownloadedArtifactPath(
+      resolvedDownloads,
+      'miniconda',
+      'Miniconda3-latest-Windows-x86_64.exe',
+    ) ?? `${installPaths.installRootDir}\\Miniconda3-installer.exe`
   const condaEnvName = input.condaEnvName ?? 'base'
   const condaCommandResolver = [
     `$condaCandidates = @([System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\Scripts\\conda.exe`)}), [System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\_conda.exe`)}), [System.IO.Path]::GetFullPath(${quotePowerShell(`${installPaths.condaDir}\\condabin\\conda.bat`)}))`,
@@ -370,12 +457,18 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
     `if (-not $condaCommand) { throw 'Failed to locate conda command after Miniconda install.' }`,
   ].join('; ')
 
-  const commands = [
-    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Invoke-WebRequest -Uri ${quotePowerShell(installerUrl)} -OutFile ${quotePowerShell(installerPath)}`,
+  const commands = [`New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(installerUrl)} -OutFile ${quotePowerShell(installerPath)}`,
+    )
+  }
+
+  commands.push(
     `$condaTarget = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.condaDir)}); $proc = Start-Process -FilePath ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) -ArgumentList '/InstallationType=JustMe','/RegisterPython=0','/AddToPath=0','/S',"/D=$condaTarget" -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Miniconda installer failed with exit code $($proc.ExitCode)." }`,
-    `Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`,
-  ]
+    ...(resolvedDownloads ? [] : [`Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`]),
+  )
 
   if (condaEnvName !== 'base') {
     commands.push(
@@ -392,16 +485,19 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
   return commands
 }
 
-export function buildInstallCommands(input: PythonPluginParams): string[] {
+export function buildInstallCommands(
+  input: PythonPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   if (input.platform === 'darwin') {
-    if (input.pythonManager === 'conda') return buildDarwinCondaCommands(input)
+    if (input.pythonManager === 'conda') return buildDarwinCondaCommands(input, resolvedDownloads)
     // 'python' and 'pkg' managers both use .pkg extraction on macOS (fast, precompiled)
-    return buildDarwinPkgCommands(input)
+    return buildDarwinPkgCommands(input, resolvedDownloads)
   }
 
   return input.pythonManager === 'conda'
-    ? buildWindowsCondaCommands(input)
-    : buildWindowsStandaloneCommands(input)
+    ? buildWindowsCondaCommands(input, resolvedDownloads)
+    : buildWindowsStandaloneCommands(input, resolvedDownloads)
 }
 
 function buildVerifyCommands(input: PythonPluginParams): string[] {
@@ -502,8 +598,8 @@ const pythonEnvPlugin = {
     const params = toPythonParams(input)
     const installPaths = resolvePythonInstallPaths(params)
     const downloads = buildDownloadPlan(params)
-    const commands = buildInstallCommands(params)
     const envChanges = buildPythonEnvChanges(params)
+    let commands = buildInstallCommands(params)
 
     assertOfficialDownloadPlan(downloads)
 
@@ -522,18 +618,24 @@ const pythonEnvPlugin = {
         })
       }
 
+      const downloadStartedAt = Date.now()
       const resolvedDownloads = await downloadArtifacts({
         downloads,
         cacheDir: params.downloadCacheDir,
       })
       logs.push(
         ...resolvedDownloads.map(
-          (item) => `download_cache_hit=${item.cacheHit} ${item.artifact.url}`,
+          (item) =>
+            `download_cache_hit=${item.cacheHit} ${item.artifact.url} localPath=${item.localPath}`,
         ),
       )
+      appendPhaseLog(logs, 'download', downloadStartedAt, `artifacts=${resolvedDownloads.length}`)
 
+      commands = buildInstallCommands(params, resolvedDownloads)
+      const commandStartedAt = Date.now()
       const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
       logs.push(...cmdOutput)
+      appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
     return {
