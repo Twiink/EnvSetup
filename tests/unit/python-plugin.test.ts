@@ -17,7 +17,10 @@ vi.mock('../../src/main/core/download', () => ({
   validateOfficialDownloads: vi.fn(),
 }))
 
+import { execFile } from 'node:child_process'
 import pythonPlugin from '../../src/main/plugins/pythonEnvPlugin'
+
+const execFileMock = vi.mocked(execFile)
 
 describe('python env plugin', () => {
   it('returns dry-run install result with python manager on darwin', async () => {
@@ -144,6 +147,36 @@ describe('python env plugin', () => {
     })
 
     expect(verifyResult.checks[0]).toContain('Planned Python version')
+  })
+
+  it('verifies standalone Python with python -m pip on darwin', async () => {
+    execFileMock.mockClear()
+
+    await pythonPlugin.verify({
+      pythonManager: 'python',
+      pythonVersion: '3.12.10',
+      installRootDir: '/tmp/toolchain',
+      dryRun: false,
+      platform: 'darwin',
+      installResult: {
+        status: 'installed_unverified',
+        executionMode: 'real_run',
+        version: '3.12.10',
+        paths: { installRootDir: '/tmp/toolchain', pythonDir: '/tmp/toolchain/python-3.12.10' },
+        envChanges: [],
+        downloads: [],
+        commands: [],
+        logs: [],
+        summary: 'ok',
+        context: {},
+      },
+    })
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      'sh',
+      ['-c', "'/tmp/toolchain/python-3.12.10/bin/python3' -m pip --version"],
+      expect.any(Function),
+    )
   })
 
   it('returns real-run result when dryRun is false', async () => {

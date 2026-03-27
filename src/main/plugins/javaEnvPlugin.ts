@@ -40,6 +40,10 @@ function quotePowerShellSingle(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
+function buildPowerShellArrayLiteral(values: string[]): string {
+  return `@(${values.map((value) => quotePowerShell(value)).join(', ')})`
+}
+
 function resolveDownloadedArtifactPath(
   resolvedDownloads: DownloadResolvedArtifact[] | undefined,
   tool: DownloadArtifact['tool'],
@@ -50,6 +54,14 @@ function resolveDownloadedArtifactPath(
 function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
   const suffix = detail ? ` ${detail}` : ''
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
+}
+
+function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
+  const versionPattern = `^${featureVersion}(\\.[^ ]+)?-tem$`
+  return [
+    `SDKMAN_JAVA_VERSION="$(sdk list java | tr -d '\\r' | sed -E 's/\\x1B\\[[0-9;]*[A-Za-z]//g' | awk '$NF ~ /${versionPattern}/ { print $NF; exit }')"`,
+    `[ -n "$SDKMAN_JAVA_VERSION" ] || { echo "Failed to resolve SDKMAN Java candidate for feature version ${featureVersion}." >&2; exit 1; }`,
+  ].join(' && ')
 }
 
 type PreparedJavaInstallSources = {
@@ -277,14 +289,16 @@ function buildDarwinSdkmanCommands(
       ? `bash ${quoteShell(sdkmanInstallerPath)}`
       : `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
-    `sdk install java ${featureVersion}-tem`,
+    buildResolveSdkmanJavaVersionCommand(featureVersion),
+    'sdk install java "$SDKMAN_JAVA_VERSION"',
+    'sdk default java "$SDKMAN_JAVA_VERSION"',
     'java -version',
   ].join(' && ')
 
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
-    `/bin/bash -lc ${quoteShell(bashScript)}`,
+    bashScript,
   ]
 }
 
@@ -349,9 +363,10 @@ function buildWindowsSdkmanCommands(
   const sdkmanInstallerPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman')?.replace(/\\/g, '/') ??
     `${installPaths.installRootDir}\\sdkman-install.sh`
-  const gitInstallerArgs = [...GIT_FOR_WINDOWS_SILENT_ARGS, `/DIR=${gitBashDir}`]
-    .map((arg) => quotePowerShell(arg))
-    .join(' ')
+  const gitInstallerArgs = buildPowerShellArrayLiteral([
+    ...GIT_FOR_WINDOWS_SILENT_ARGS,
+    `/DIR=${gitBashDir}`,
+  ])
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir.replace(/\\/g, '/'))}`,
     'rm -rf "$SDKMAN_DIR"',
@@ -359,14 +374,16 @@ function buildWindowsSdkmanCommands(
       ? `bash ${quoteShell(sdkmanInstallerPath)}`
       : `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     '. "$SDKMAN_DIR/bin/sdkman-init.sh"',
-    `sdk install java ${featureVersion}-tem`,
+    buildResolveSdkmanJavaVersionCommand(featureVersion),
+    'sdk install java "$SDKMAN_JAVA_VERSION"',
+    'sdk default java "$SDKMAN_JAVA_VERSION"',
     'java -version',
   ].join(' && ')
   const gitBashCommand = [
     `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
     resolvedDownloads
-      ? `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(gitInstallerPath)}); & $gitInstaller ${gitInstallerArgs}; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`
-      : `if (-not $gitBash) { $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; $proc = Start-Process -FilePath $gitInstaller -ArgumentList ${gitInstallerArgs} -Wait -PassThru; $gitInstallerExitCode = $proc.ExitCode; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
+      ? `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(gitInstallerPath)}); & $gitInstaller @gitInstallerArgs; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`
+      : `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; & $gitInstaller @gitInstallerArgs; $gitInstallerExitCode = $LASTEXITCODE; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
     `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
     `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
   ].join('; ')
@@ -459,7 +476,7 @@ async function runCommands(
               '-Command',
               command,
             ])
-          : await execFileAsync('/bin/sh', ['-c', command])
+          : await execFileAsync('/bin/bash', ['-lc', command])
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({

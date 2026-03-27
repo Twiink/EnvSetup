@@ -381,37 +381,6 @@ async function assertRealRollbackSucceeded(
   await testCase.verifyRolledBackState?.()
 }
 
-async function assertRollbackRestoredInstalledState(
-  testCase: RealCycleCase,
-  snapshotId: string,
-  installRootDir: string,
-  params: Record<string, string>,
-  installResult: PluginInstallResult,
-) {
-  const rollbackResult = await executeRollback(snapshotsDir, snapshotId, [], undefined, {
-    skipRollbackCommands: true,
-  })
-
-  expect(rollbackResult.success).toBe(true)
-  expect(rollbackResult.executionMode).toBe('real_run')
-
-  if (testCase.expectInstallRootAfterInstall === false) {
-    expect(await pathExists(installRootDir)).toBe(false)
-  } else {
-    expect(await pathExists(installRootDir)).toBe(true)
-  }
-
-  const verifyResult = await testCase.plugin.verify({
-    ...params,
-    platform,
-    dryRun: false,
-    installResult,
-  })
-  expect(verifyResult.status).toBe('verified_success')
-  expect(verifyResult.checks.join('\n')).toMatch(testCase.verifyPattern)
-  await testCase.verifyInstalledState?.()
-}
-
 async function commandSucceeds(file: string, args: string[]): Promise<boolean> {
   try {
     await execFileAsync(file, args)
@@ -703,14 +672,16 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         expect(cleanupTrackedPaths.length).toBeGreaterThan(0)
 
         logRealCyclePhase(testCase, 'cleanup', 'snapshotting pre-cleanup state')
-        const cleanupSnapshot = await createSnapshot({
-          baseDir: snapshotsDir,
-          taskId: `${seededInstall.result.id}-cleanup`,
-          type: 'manual',
-          label: 'cleanup-backup',
-          trackedPaths: cleanupTrackedPaths,
-        })
-        await updateSnapshotMeta(snapshotsDir, cleanupSnapshot)
+        await updateSnapshotMeta(
+          snapshotsDir,
+          await createSnapshot({
+            baseDir: snapshotsDir,
+            taskId: `${seededInstall.result.id}-cleanup`,
+            type: 'manual',
+            label: 'cleanup-backup',
+            trackedPaths: cleanupTrackedPaths,
+          }),
+        )
 
         logRealCyclePhase(testCase, 'cleanup', 'cleaning detected environment')
         const cleanupResult = await cleanupDetectedEnvironments(cleanupTargets)
@@ -723,7 +694,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
         }
 
         logRealCyclePhase(testCase, 'cleanup', 'reinstalling after cleanup')
-        const { result, params } = await runRealInstall(testCase, installRootDir)
+        const { result } = await runRealInstall(testCase, installRootDir)
         const plugin = result.plugins[0]
 
         logRealCyclePhase(testCase, 'cleanup', 'verifying reinstall')
@@ -736,18 +707,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           plugin.status,
           plugin,
         )
-
-        await persistUserEnvChanges(plugin.lastResult?.envChanges ?? [])
-        await hydrateDetectionEnvironment(testCase, params)
-
-        logRealCyclePhase(testCase, 'cleanup', 'restoring cleanup snapshot')
-        await assertRollbackRestoredInstalledState(
-          testCase,
-          cleanupSnapshot.id,
-          installRootDir,
-          seededInstall.params,
-          seededPlugin.lastResult!,
-        )
+        // Full restore-to-pre-cleanup rollback is covered in action-real-rollback.test.ts.
       },
       resolveRealCycleTimeout(testCase, 'cleanup'),
     )

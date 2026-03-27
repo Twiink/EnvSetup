@@ -64,8 +64,9 @@ describe('java env plugin', () => {
     expect(result.downloads[0].tool).toBe('sdkman')
     expect(result.downloads[0].url).toContain('get.sdkman.io')
     expect(result.envChanges.some((e) => e.key === 'SDKMAN_DIR')).toBe(true)
-    expect(result.commands.join('\n')).toContain('bash -lc')
-    expect(result.commands.join('\n')).toContain('sdk install java 21-tem')
+    expect(result.commands.join('\n')).toContain('sdk list java')
+    expect(result.commands.join('\n')).toContain('sdk install java "$SDKMAN_JAVA_VERSION"')
+    expect(result.commands.join('\n')).toContain('sdk default java "$SDKMAN_JAVA_VERSION"')
     expect(result.commands.join('\n')).toContain('sdkman-init.sh')
   })
 
@@ -95,9 +96,10 @@ describe('java env plugin', () => {
 
     expect(result.status).toBe('installed_unverified')
     expect(result.commands.join('\n')).toContain("Get-Command 'bash.exe'")
-    expect(result.commands.join('\n')).toContain('Start-Process')
-    expect(result.commands.join('\n')).not.toContain('& $gitInstaller')
+    expect(result.commands.join('\n')).toContain('$gitInstallerArgs = @(')
+    expect(result.commands.join('\n')).toContain('& $gitInstaller @gitInstallerArgs')
     expect(result.commands.join('\n')).toContain('& $gitBash -lc')
+    expect(result.commands.join('\n')).toContain('sdk list java')
   })
 
   it('verifies dry-run output without touching the system', async () => {

@@ -234,8 +234,11 @@ function buildDarwinPkgCommands(
   const installPaths = resolvePythonInstallPaths(input)
   const pkgUrl = buildPythonPkgUrl(input)
   const installerPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'python', `python-${input.pythonVersion}-macos11.pkg`) ??
-    `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
+    resolveDownloadedArtifactPath(
+      resolvedDownloads,
+      'python',
+      `python-${input.pythonVersion}-macos11.pkg`,
+    ) ?? `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
   const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
   const payloadDir = `${installPaths.installRootDir}/python-pkg-payload`
   const majorMinor = extractPythonMajorMinor(input.pythonVersion)
@@ -420,18 +423,24 @@ function buildWindowsStandaloneCommands(
 
   commands.push(
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.standalonePythonDir)} -Force`,
-    ...(resolvedDownloads ? [] : [`Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`]),
+    ...(resolvedDownloads
+      ? []
+      : [`Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`]),
     // Enable pip in embedded Python by uncommenting import site
     `$pthFile = Get-ChildItem -Path ${quotePowerShell(installPaths.standalonePythonDir)} -Filter 'python*._pth' | Select-Object -First 1; if ($pthFile) { (Get-Content $pthFile.FullName) -replace '^#import site','import site' | Set-Content $pthFile.FullName }`,
   )
 
   if (!resolvedDownloads) {
-    commands.push(`Invoke-WebRequest -Uri ${quotePowerShell(getPipUrl)} -OutFile ${quotePowerShell(getPipPath)}`)
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(getPipUrl)} -OutFile ${quotePowerShell(getPipPath)}`,
+    )
   }
 
   commands.push(
     `& ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} ${quotePowerShell(getPipPath)}`,
-    ...(resolvedDownloads ? [] : [`Remove-Item -LiteralPath ${quotePowerShell(getPipPath)} -Force`]),
+    ...(resolvedDownloads
+      ? []
+      : [`Remove-Item -LiteralPath ${quotePowerShell(getPipPath)} -Force`]),
     `$env:Path = ${quotePowerShell(installPaths.standalonePythonBinDir)} + ';' + $env:Path; & ${quotePowerShell(installPaths.standalonePythonBinDir + '\\python.exe')} --version`,
   )
 
@@ -457,7 +466,9 @@ function buildWindowsCondaCommands(
     `if (-not $condaCommand) { throw 'Failed to locate conda command after Miniconda install.' }`,
   ].join('; ')
 
-  const commands = [`New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`]
+  const commands = [
+    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
+  ]
 
   if (!resolvedDownloads) {
     commands.push(
@@ -467,7 +478,9 @@ function buildWindowsCondaCommands(
 
   commands.push(
     `$condaTarget = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.condaDir)}); $proc = Start-Process -FilePath ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) -ArgumentList '/InstallationType=JustMe','/RegisterPython=0','/AddToPath=0','/S',"/D=$condaTarget" -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Miniconda installer failed with exit code $($proc.ExitCode)." }`,
-    ...(resolvedDownloads ? [] : [`Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`]),
+    ...(resolvedDownloads
+      ? []
+      : [`Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`]),
   )
 
   if (condaEnvName !== 'base') {
@@ -513,7 +526,7 @@ function buildVerifyCommands(input: PythonPluginParams): string[] {
   if (input.platform === 'darwin') {
     return [
       `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version`,
-      `${quoteShell(`${installPaths.standalonePythonBinDir}/pip3`)} --version`,
+      `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m pip --version`,
     ]
   }
 
