@@ -282,7 +282,7 @@ PY`,
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `curl -fsSL ${quoteShell(pkgUrl)} -o ${quoteShell(installerPath)}`,
-    `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
+    `pkgutil --expand ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
     payloadExtractCommand,
     `FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); if [ -z "$FRAMEWORK_DIR" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
     `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)} ${quoteShell(installerPath)}`,
@@ -373,7 +373,7 @@ function buildWindowsCondaCommands(input: PythonPluginParams): string[] {
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(installerUrl)} -OutFile ${quotePowerShell(installerPath)}`,
-    `& ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) /InstallationType=JustMe /RegisterPython=0 /AddToPath=0 /S /D=${installPaths.condaDir}; if ($LASTEXITCODE -ne 0) { throw "Miniconda installer failed with exit code $LASTEXITCODE." }`,
+    `$proc = Start-Process -FilePath ([System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})) -ArgumentList '/InstallationType=JustMe','/RegisterPython=0','/AddToPath=0','/S',${quotePowerShell('/D=' + installPaths.condaDir)} -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Miniconda installer failed with exit code $($proc.ExitCode)." }`,
     `Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force`,
   ]
 

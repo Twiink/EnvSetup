@@ -186,7 +186,7 @@ function buildDarwinStandaloneCommands(input: JavaPluginParams): string[] {
 function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   const installPaths = resolveJavaInstallPaths(input)
   const featureVersion = extractFeatureVersion(input.javaVersion)
-  const shellScript = [
+  const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
     `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
     `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
@@ -197,7 +197,7 @@ function buildDarwinSdkmanCommands(input: JavaPluginParams): string[] {
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
     `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
-    shellScript,
+    `/bin/bash -lc ${quoteShell(bashScript)}`,
   ]
 }
 

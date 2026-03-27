@@ -191,7 +191,7 @@ function buildDarwinDirectCommands(input: GitPluginParams): string[] {
 function buildDarwinHomebrewCommands(): string[] {
   const resolveBrewCommand = buildResolveHomebrewCommand()
   return [
-    `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; "$BREW_BIN" install git || "$BREW_BIN" upgrade git`,
+    `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install git || HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" upgrade git`,
   ]
 }
 
@@ -206,14 +206,14 @@ function buildWindowsDirectCommands(input: GitPluginParams): string[] {
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.installRootDir)} | Out-Null`,
     `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile ${quotePowerShell(installerPath)}`,
     `& ${quotePowerShell(installerPath)} ${installerArgs}; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }`,
-    `if (Test-Path ${quotePowerShell(installerPath)}) { Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
+    `if (Test-Path ${quotePowerShell(installerPath)}) { Start-Sleep -Seconds 2; Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
   ]
 }
 
 function buildWindowsScoopCommands(): string[] {
   const resolveScoopCommand = buildResolveScoopCommand()
   return [
-    `${resolveScoopCommand}; if (-not $scoop) { $installer = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-scoop-install.ps1'; Invoke-WebRequest -UseBasicParsing -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} -OutFile $installer; Import-Module Microsoft.PowerShell.Security -ErrorAction Stop; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
+    `${resolveScoopCommand}; if (-not $scoop) { $installer = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-scoop-install.ps1'; Invoke-WebRequest -UseBasicParsing -Uri ${quotePowerShell(SCOOP_INSTALL_URL)} -OutFile $installer; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
   ]
 }
 
