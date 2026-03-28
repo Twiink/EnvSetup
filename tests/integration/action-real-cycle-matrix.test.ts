@@ -404,7 +404,7 @@ async function isScoopGitInstalled(): Promise<boolean> {
     '-ExecutionPolicy',
     'Bypass',
     '-Command',
-    `$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; & $scoop prefix git *> $null; exit $LASTEXITCODE`,
+    `$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { exit 0 }; $shimDir = Split-Path $scoop -Parent; $scoopRoot = Split-Path $shimDir -Parent; $gitCurrent = Join-Path $scoopRoot 'apps\\git\\current'; if (Test-Path $gitCurrent) { exit 0 }; exit 1`,
   ])
 }
 
