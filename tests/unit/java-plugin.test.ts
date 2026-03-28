@@ -60,18 +60,31 @@ describe('java env plugin', () => {
 
     expect(result.status).toBe('installed_unverified')
     expect(result.executionMode).toBe('dry_run')
-    expect(result.downloads.length).toBe(1)
-    expect(result.downloads[0].tool).toBe('sdkman')
-    expect(result.downloads[0].url).toContain('get.sdkman.io')
+    expect(result.downloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'sdkman' }),
+        expect.objectContaining({ tool: 'temurin' }),
+      ]),
+    )
+    expect(result.downloads.find((download) => download.tool === 'sdkman')?.url).toContain(
+      'get.sdkman.io',
+    )
+    expect(result.downloads.find((download) => download.tool === 'temurin')?.url).toContain(
+      'api.adoptium.net',
+    )
     expect(result.envChanges.some((e) => e.key === 'SDKMAN_DIR')).toBe(true)
     const commands = result.commands.join('\n')
-    expect(commands).toContain('sdk list java 2>&1')
-    expect(commands).toContain('SDKMAN_LIST_FILE="$(mktemp)"')
-    expect(commands).toContain('case "$token" in 21*-[A-Za-z]*)')
-    expect(commands).toContain('sdk install java "$SDKMAN_JAVA_VERSION"')
-    expect(commands).toContain('sdk default java "$SDKMAN_JAVA_VERSION"')
+    expect(commands).toContain('curl -fsSL')
+    expect(commands).toContain('temurin-jdk-21.tar.gz')
+    expect(commands).toContain('SDKMAN_LOCAL_JAVA_DIR=')
+    expect(commands).toContain('SDKMAN_LOCAL_JAVA_ALIAS=')
+    expect(commands).toContain(
+      'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
+    )
+    expect(commands).toContain('sdk default java "$SDKMAN_LOCAL_JAVA_ALIAS"')
+    expect(commands).toContain('Contents/Home')
     expect(commands).toContain('sdkman-init.sh')
-    expect(commands).not.toContain('grep -oE')
+    expect(commands).not.toContain('sdk list java')
   })
 
   it('returns dry-run install result with jdk manager on win32', async () => {
@@ -106,11 +119,24 @@ describe('java env plugin', () => {
       'Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru',
     )
     const commands = result.commands.join('\n')
-    expect(commands).toContain('& $gitBash -lc')
-    expect(commands).toContain('sdk list java 2>&1')
-    expect(commands).toContain('SDKMAN_LIST_FILE="$(mktemp)"')
-    expect(commands).toContain('case "$token" in 21*-[A-Za-z]*)')
-    expect(commands).not.toContain('grep -oE')
+    expect(commands).toContain(
+      'Invoke-WebRequest -Uri "https://get.sdkman.io?ci=true&rcupdate=false"',
+    )
+    expect(commands).toContain(
+      'Invoke-WebRequest -Uri "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse"',
+    )
+    expect(commands).toContain(
+      'Set-Content -LiteralPath $sdkmanInstallScriptPath -Value $sdkmanInstallScript -Encoding Ascii -NoNewline',
+    )
+    expect(commands).toContain(
+      'Set-Content -LiteralPath $sdkmanRegisterScriptPath -Value $sdkmanRegisterScript -Encoding Ascii -NoNewline',
+    )
+    expect(commands).toContain('Expand-Archive -LiteralPath')
+    expect(commands).toContain(
+      'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
+    )
+    expect(commands).not.toContain('sdk list java')
+    expect(commands).not.toContain('& $gitBash -lc')
     expect(commands).not.toContain('node -e')
   })
 

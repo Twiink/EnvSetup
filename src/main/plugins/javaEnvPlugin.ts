@@ -42,12 +42,12 @@ function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
-function quotePowerShellSingle(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
-}
-
 function buildPowerShellArrayLiteral(values: string[]): string {
   return `@(${values.map((value) => quotePowerShell(value)).join(', ')})`
+}
+
+function buildPowerShellHereString(value: string): string {
+  return `@'\n${value.replace(/\r\n/g, '\n')}\n'@`
 }
 
 function resolveDownloadedArtifactPath(
@@ -62,15 +62,17 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
 }
 
-function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
-  return [
-    'SDKMAN_JAVA_VERSION=',
-    'SDKMAN_LIST_FILE="$(mktemp)"',
-    `sdk list java 2>&1 | tr -d '\\r' | sed -E 's/\\x1B\\[[0-9;]*[A-Za-z]//g' > "$SDKMAN_LIST_FILE"`,
-    `while IFS= read -r line; do for token in $line; do case "$token" in ${featureVersion}*-[A-Za-z]*) SDKMAN_JAVA_VERSION="$token"; break 2 ;; esac; done; done < "$SDKMAN_LIST_FILE"`,
-    'rm -f "$SDKMAN_LIST_FILE"',
-    `[ -n "$SDKMAN_JAVA_VERSION" ] || { echo "Failed to resolve SDKMAN Java candidate for feature version ${featureVersion}." >&2; exit 1; }`,
-  ].join(' && ')
+function sanitizePathSegment(value: string): string {
+  const sanitized = value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
+  return sanitized.length > 0 ? sanitized : 'default'
+}
+
+function toBashPath(value: string): string {
+  return value.replace(/\\/g, '/')
+}
+
+function buildSdkmanLocalJavaAlias(javaVersion: string): string {
+  return `envsetup-${sanitizePathSegment(javaVersion)}`
 }
 
 type PreparedJavaInstallSources = {
@@ -90,7 +92,7 @@ async function prepareInstallSources(
     entries: [],
   }
 
-  if (!input.extractedCacheDir || input.javaManager !== 'jdk') {
+  if (!input.extractedCacheDir) {
     return preparedSources
   }
 
@@ -149,6 +151,14 @@ function buildDownloadPlan(input: JavaPluginParams): DownloadArtifact[] {
   }
 
   const downloads: DownloadArtifact[] = [
+    {
+      kind: 'archive',
+      tool: 'temurin',
+      url: buildTemurinBinaryUrl(input),
+      official: true,
+      fileName: `temurin-jdk-${input.javaVersion}${resolveTemurinArchiveExtension(input.platform)}`,
+      note: 'Download the official Eclipse Temurin JDK archive used for SDKMAN local installation.',
+    },
     {
       kind: 'installer',
       tool: 'sdkman',
@@ -286,29 +296,56 @@ function buildDarwinStandaloneCommands(
 function buildDarwinSdkmanCommands(
   input: JavaPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
 ): string[] {
   const installPaths = resolveJavaInstallPaths(input)
-  const featureVersion = extractFeatureVersion(input.javaVersion)
+  const archiveUrl = buildTemurinBinaryUrl(input)
+  const sdkmanLocalJavaDir = `${installPaths.sdkmanDir}/local/java-${sanitizePathSegment(input.javaVersion)}`
+  const sdkmanLocalJavaAlias = buildSdkmanLocalJavaAlias(input.javaVersion)
+  const temurinArchivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'temurin') ??
+    `${installPaths.installRootDir}/temurin-jdk-${input.javaVersion}.tar.gz`
   const sdkmanInstallerPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman') ??
     `${installPaths.installRootDir}/sdkman-install.sh`
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
-    resolvedDownloads
-      ? `bash ${quoteShell(sdkmanInstallerPath)}`
-      : `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
+    `bash ${quoteShell(sdkmanInstallerPath)}`,
     `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
-    buildResolveSdkmanJavaVersionCommand(featureVersion),
-    'sdk install java "$SDKMAN_JAVA_VERSION"',
-    'sdk default java "$SDKMAN_JAVA_VERSION"',
+    `SDKMAN_LOCAL_JAVA_DIR=${quoteShell(sdkmanLocalJavaDir)}`,
+    `SDKMAN_LOCAL_JAVA_ALIAS=${quoteShell(sdkmanLocalJavaAlias)}`,
+    'rm -rf "$SDKMAN_LOCAL_JAVA_DIR"',
+    'mkdir -p "$SDKMAN_LOCAL_JAVA_DIR"',
+    ...(cachedArchiveDir
+      ? [`cp -R ${quoteShell(`${cachedArchiveDir}/.`)} "$SDKMAN_LOCAL_JAVA_DIR"`]
+      : [
+          `tar -xzf ${quoteShell(temurinArchivePath)} -C "$SDKMAN_LOCAL_JAVA_DIR" --strip-components=1`,
+        ]),
+    'if [ -d "$SDKMAN_LOCAL_JAVA_DIR/Contents/Home" ]; then mv "$SDKMAN_LOCAL_JAVA_DIR/Contents/Home"/* "$SDKMAN_LOCAL_JAVA_DIR"/ && rm -rf "$SDKMAN_LOCAL_JAVA_DIR/Contents"; fi',
+    'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
+    'sdk default java "$SDKMAN_LOCAL_JAVA_ALIAS"',
     'java -version',
   ].join(' && ')
 
-  return [
-    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
-    `rm -rf ${quoteShell(installPaths.sdkmanDir)}`,
-    bashScript,
-  ]
+  const commands = [`mkdir -p ${quoteShell(installPaths.installRootDir)}`]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} -o ${quoteShell(sdkmanInstallerPath)}`,
+      `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(temurinArchivePath)}`,
+    )
+  }
+
+  commands.push(`rm -rf ${quoteShell(installPaths.sdkmanDir)}`, bashScript)
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `rm -f ${quoteShell(sdkmanInstallerPath)}`,
+      `rm -f ${quoteShell(temurinArchivePath)}`,
+    )
+  }
+
+  return commands
 }
 
 function buildWindowsStandaloneCommands(
@@ -361,47 +398,108 @@ function buildWindowsStandaloneCommands(
 function buildWindowsSdkmanCommands(
   input: JavaPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
+  cachedArchiveDir?: string,
 ): string[] {
   const installPaths = resolveJavaInstallPaths(input)
-  const featureVersion = extractFeatureVersion(input.javaVersion)
   const gitBashDir = `${installPaths.installRootDir}\\git-bash`
   const fallbackBashPath = `${gitBashDir}\\bin\\bash.exe`
   const gitInstallerPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'git-for-windows') ??
     `${installPaths.installRootDir}\\Git-installer.exe`
+  const temurinArchiveUrl = buildTemurinBinaryUrl(input)
+  const temurinArchivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'temurin') ??
+    `${installPaths.installRootDir}\\temurin-jdk-${input.javaVersion}.zip`
   const sdkmanInstallerPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman')?.replace(/\\/g, '/') ??
+    resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman') ??
     `${installPaths.installRootDir}\\sdkman-install.sh`
+  const sdkmanInstallerBashPath = toBashPath(sdkmanInstallerPath)
+  const sdkmanLocalJavaDir = `${installPaths.sdkmanDir}\\local\\java-${sanitizePathSegment(input.javaVersion)}`
+  const sdkmanLocalJavaBashDir = toBashPath(sdkmanLocalJavaDir)
+  const sdkmanLocalJavaAlias = buildSdkmanLocalJavaAlias(input.javaVersion)
+  const extractRoot = `${installPaths.installRootDir}\\sdkman-java-extract`
   const gitInstallerArgs = buildPowerShellArrayLiteral([
     ...GIT_FOR_WINDOWS_SILENT_ARGS,
     `/DIR=${gitBashDir}`,
   ])
-  const bashScript = [
-    `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir.replace(/\\/g, '/'))}`,
-    'rm -rf "$SDKMAN_DIR"',
-    resolvedDownloads
-      ? `bash ${quoteShell(sdkmanInstallerPath)}`
-      : `curl -fsSL ${quoteShell(SDKMAN_INSTALL_URL)} | bash`,
+  const installScriptPath = `${installPaths.installRootDir}\\envsetup-sdkman-install.sh`
+  const registerScriptPath = `${installPaths.installRootDir}\\envsetup-sdkman-register.sh`
+  const sdkmanInstallBashScript = [
+    `export SDKMAN_DIR=${quoteShell(toBashPath(installPaths.sdkmanDir))}`,
+    `bash ${quoteShell(sdkmanInstallerBashPath)}`,
+  ].join('\n')
+  const sdkmanRegisterBashScript = [
+    `export SDKMAN_DIR=${quoteShell(toBashPath(installPaths.sdkmanDir))}`,
     '. "$SDKMAN_DIR/bin/sdkman-init.sh"',
-    buildResolveSdkmanJavaVersionCommand(featureVersion),
-    'sdk install java "$SDKMAN_JAVA_VERSION"',
-    'sdk default java "$SDKMAN_JAVA_VERSION"',
+    `SDKMAN_LOCAL_JAVA_DIR=${quoteShell(sdkmanLocalJavaBashDir)}`,
+    `SDKMAN_LOCAL_JAVA_ALIAS=${quoteShell(sdkmanLocalJavaAlias)}`,
+    'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
+    'sdk default java "$SDKMAN_LOCAL_JAVA_ALIAS"',
     'java -version',
-  ].join(' && ')
+  ].join('\n')
   const gitBashCommand = [
     `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
     resolvedDownloads
       ? `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(gitInstallerPath)}); $proc = Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Git for Windows installer failed with exit code $($proc.ExitCode)." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`
       : `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; $proc = Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru; $gitInstallerExitCode = $proc.ExitCode; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
     `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
-    `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
+    `$sdkmanDir = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.sdkmanDir)})`,
+    `if (Test-Path $sdkmanDir) { Remove-Item -LiteralPath $sdkmanDir -Recurse -Force }`,
+    `$sdkmanInstallScriptPath = [System.IO.Path]::GetFullPath(${quotePowerShell(installScriptPath)})`,
+    `$sdkmanInstallScript = ${buildPowerShellHereString(sdkmanInstallBashScript)}`,
+    `Set-Content -LiteralPath $sdkmanInstallScriptPath -Value $sdkmanInstallScript -Encoding Ascii -NoNewline`,
+    `& $gitBash $sdkmanInstallScriptPath`,
+    `$sdkmanInstallExitCode = $LASTEXITCODE`,
+    `if (Test-Path $sdkmanInstallScriptPath) { Remove-Item -LiteralPath $sdkmanInstallScriptPath -Force -ErrorAction SilentlyContinue }`,
+    `if ($sdkmanInstallExitCode -ne 0) { throw "SDKMAN installer failed with exit code $sdkmanInstallExitCode." }`,
+    `$localJavaDir = [System.IO.Path]::GetFullPath(${quotePowerShell(sdkmanLocalJavaDir)})`,
+    `if (Test-Path $localJavaDir) { Remove-Item -LiteralPath $localJavaDir -Recurse -Force }`,
+    `New-Item -ItemType Directory -Force -Path $localJavaDir | Out-Null`,
+    ...(cachedArchiveDir
+      ? [
+          `Copy-Item -Path (Join-Path ${quotePowerShell(cachedArchiveDir)} '*') -Destination $localJavaDir -Recurse -Force`,
+        ]
+      : [
+          `$extractRoot = [System.IO.Path]::GetFullPath(${quotePowerShell(extractRoot)})`,
+          `if (Test-Path $extractRoot) { Remove-Item -LiteralPath $extractRoot -Recurse -Force }`,
+          `New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null`,
+          `Expand-Archive -LiteralPath ${quotePowerShell(temurinArchivePath)} -DestinationPath $extractRoot -Force`,
+          `$entries = @(Get-ChildItem -LiteralPath $extractRoot -Force)`,
+          `$sourceRoot = if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) { $entries[0].FullName } else { $extractRoot }`,
+          `Get-ChildItem -LiteralPath $sourceRoot -Force | ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination $localJavaDir -Force }`,
+          `if (Test-Path $extractRoot) { Remove-Item -LiteralPath $extractRoot -Recurse -Force }`,
+        ]),
+    `$sdkmanRegisterScriptPath = [System.IO.Path]::GetFullPath(${quotePowerShell(registerScriptPath)})`,
+    `$sdkmanRegisterScript = ${buildPowerShellHereString(sdkmanRegisterBashScript)}`,
+    `Set-Content -LiteralPath $sdkmanRegisterScriptPath -Value $sdkmanRegisterScript -Encoding Ascii -NoNewline`,
+    `& $gitBash $sdkmanRegisterScriptPath`,
+    `$sdkmanRegisterExitCode = $LASTEXITCODE`,
+    `if (Test-Path $sdkmanRegisterScriptPath) { Remove-Item -LiteralPath $sdkmanRegisterScriptPath -Force -ErrorAction SilentlyContinue }`,
+    `if ($sdkmanRegisterExitCode -ne 0) { throw "SDKMAN local Java registration failed with exit code $sdkmanRegisterExitCode." }`,
   ].join('; ')
 
   // SDKMAN on Windows requires Git Bash
-  return [
+  const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    gitBashCommand,
   ]
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `Invoke-WebRequest -Uri ${quotePowerShell(SDKMAN_INSTALL_URL)} -OutFile ${quotePowerShell(sdkmanInstallerPath)}`,
+      `Invoke-WebRequest -Uri ${quotePowerShell(temurinArchiveUrl)} -OutFile ${quotePowerShell(temurinArchivePath)}`,
+    )
+  }
+
+  commands.push(gitBashCommand)
+
+  if (!resolvedDownloads) {
+    commands.push(
+      `if (Test-Path ${quotePowerShell(sdkmanInstallerPath)}) { Remove-Item -LiteralPath ${quotePowerShell(sdkmanInstallerPath)} -Force -ErrorAction SilentlyContinue }`,
+      `if (Test-Path ${quotePowerShell(temurinArchivePath)}) { Remove-Item -LiteralPath ${quotePowerShell(temurinArchivePath)} -Force -ErrorAction SilentlyContinue }`,
+    )
+  }
+
+  return commands
 }
 
 export function buildInstallCommands(
@@ -411,12 +509,12 @@ export function buildInstallCommands(
 ): string[] {
   if (input.platform === 'darwin') {
     return input.javaManager === 'sdkman'
-      ? buildDarwinSdkmanCommands(input, resolvedDownloads)
+      ? buildDarwinSdkmanCommands(input, resolvedDownloads, preparedSources?.temurinArchiveDir)
       : buildDarwinStandaloneCommands(input, resolvedDownloads, preparedSources?.temurinArchiveDir)
   }
 
   return input.javaManager === 'sdkman'
-    ? buildWindowsSdkmanCommands(input, resolvedDownloads)
+    ? buildWindowsSdkmanCommands(input, resolvedDownloads, preparedSources?.temurinArchiveDir)
     : buildWindowsStandaloneCommands(input, resolvedDownloads, preparedSources?.temurinArchiveDir)
 }
 

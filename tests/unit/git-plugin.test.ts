@@ -98,6 +98,10 @@ describe('git env plugin', () => {
     expect(result.rollbackCommands?.join('\n')).toContain(
       'Scoop git uninstall failed with exit code',
     )
+    expect(result.rollbackCommands?.join('\n')).toContain('function Get-ScoopGitPrefix')
+    expect(result.rollbackCommands?.join('\n')).toContain(
+      '$remainingPrefix = Get-ScoopGitPrefix $scoop',
+    )
     expect(result.rollbackCommands?.join('\n')).toContain(
       "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1'))",
     )
@@ -188,12 +192,14 @@ describe('git env plugin', () => {
     expect(verifyCall?.[0]).toBe('powershell')
     expect(verifyCall?.[1]).toEqual(
       expect.arrayContaining([
+        expect.stringContaining('function Get-ScoopGitPrefix'),
+        expect.stringContaining('$prefix = Get-ScoopGitPrefix $scoop'),
         expect.stringContaining('Get-ChildItem -Path $prefix -Recurse -File'),
         expect.stringContaining("Where-Object { $_.Name -in @('git.exe', 'git.cmd') }"),
       ]),
     )
     expect(verifyCall?.[1]).not.toEqual(
-      expect.arrayContaining([expect.stringContaining("Join-Path $shimDir 'git.cmd'")]),
+      expect.arrayContaining([expect.stringContaining('$prefix = (& $scoop prefix git).Trim()')]),
     )
   })
 })

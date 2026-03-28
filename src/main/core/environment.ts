@@ -308,24 +308,37 @@ function buildResolveScoopCommand(): string {
   return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
 }
 
+function buildResolveScoopGitPrefixFunction(): string {
+  return [
+    'function Get-ScoopGitPrefix {',
+    'param([string]$ScoopPath)',
+    '$rawPrefix = & $ScoopPath prefix git 2>$null | Select-Object -First 1',
+    'if (-not $rawPrefix) { return $null }',
+    '$prefix = $rawPrefix.ToString().Trim()',
+    'if (-not $prefix) { return $null }',
+    'if (-not [System.IO.Path]::IsPathRooted($prefix)) { return $null }',
+    'if (-not (Test-Path $prefix)) { return $null }',
+    'return [System.IO.Path]::GetFullPath($prefix)',
+    '}',
+  ].join('; ')
+}
+
 function buildScoopGitCleanupCommand(): string {
   return [
+    buildResolveScoopGitPrefixFunction(),
     buildResolveScoopCommand(),
     'if ($scoop) {',
-    '$prefix = (& $scoop prefix git).Trim()',
-    'if ($LASTEXITCODE -eq 0 -and $prefix) {',
-    '& $scoop uninstall git *> $null',
-    '$uninstallExitCode = $LASTEXITCODE',
-    'if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." }',
-    '& $scoop prefix git *> $null',
-    'if ($LASTEXITCODE -eq 0) {',
-    '$gitParent = Split-Path $prefix -Parent',
-    'if (Test-Path $gitParent) { Remove-Item -LiteralPath $gitParent -Recurse -Force }',
+    '$prefix = Get-ScoopGitPrefix $scoop',
+    'if ($prefix) { & $scoop uninstall git *> $null; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." } }',
+    '$remainingPrefix = Get-ScoopGitPrefix $scoop',
+    '$residualPaths = @()',
+    'foreach ($candidate in @($prefix, $remainingPrefix)) { if ($candidate) { $normalized = [System.IO.Path]::GetFullPath($candidate); if ($normalized.ToLower().EndsWith("\\current")) { $parent = Split-Path $normalized -Parent; if ($parent) { $normalized = $parent } }; $residualPaths += $normalized } }',
+    '$residualPaths = $residualPaths | Select-Object -Unique',
+    'foreach ($residualPath in $residualPaths) { if ($residualPath -and (Test-Path $residualPath)) { Remove-Item -LiteralPath $residualPath -Recurse -Force } }',
     '$shimDir = Split-Path $scoop -Parent',
-    "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } }",
-    '& $scoop prefix git *> $null',
-    "if ($LASTEXITCODE -eq 0) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
-    '}',
+    `if ($shimDir -and (Test-Path $shimDir)) { foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } } }`,
+    '$remainingPrefix = Get-ScoopGitPrefix $scoop',
+    "if ($remainingPrefix) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
     '}',
     '}',
   ].join('; ')
