@@ -64,11 +64,14 @@ describe('java env plugin', () => {
     expect(result.downloads[0].tool).toBe('sdkman')
     expect(result.downloads[0].url).toContain('get.sdkman.io')
     expect(result.envChanges.some((e) => e.key === 'SDKMAN_DIR')).toBe(true)
-    expect(result.commands.join('\n')).toContain('sdk list java 2>&1')
-    expect(result.commands.join('\n')).toContain('grep -oE "21(\\.[0-9]+)*-tem"')
-    expect(result.commands.join('\n')).toContain('sdk install java "$SDKMAN_JAVA_VERSION"')
-    expect(result.commands.join('\n')).toContain('sdk default java "$SDKMAN_JAVA_VERSION"')
-    expect(result.commands.join('\n')).toContain('sdkman-init.sh')
+    const commands = result.commands.join('\n')
+    expect(commands).toContain('sdk list java 2>&1')
+    expect(commands).toContain('SDKMAN_LIST_FILE="$(mktemp)"')
+    expect(commands).toContain('case "$token" in 21*-[A-Za-z]*)')
+    expect(commands).toContain('sdk install java "$SDKMAN_JAVA_VERSION"')
+    expect(commands).toContain('sdk default java "$SDKMAN_JAVA_VERSION"')
+    expect(commands).toContain('sdkman-init.sh')
+    expect(commands).not.toContain('grep -oE')
   })
 
   it('returns dry-run install result with jdk manager on win32', async () => {
@@ -102,10 +105,13 @@ describe('java env plugin', () => {
     expect(result.commands.join('\n')).toContain(
       'Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru',
     )
-    expect(result.commands.join('\n')).toContain('& $gitBash -lc')
-    expect(result.commands.join('\n')).toContain('sdk list java 2>&1')
-    expect(result.commands.join('\n')).toContain(`grep -oE "21(\\.[0-9]+)*-tem"`)
-    expect(result.commands.join('\n')).not.toContain('node -e')
+    const commands = result.commands.join('\n')
+    expect(commands).toContain('& $gitBash -lc')
+    expect(commands).toContain('sdk list java 2>&1')
+    expect(commands).toContain('SDKMAN_LIST_FILE="$(mktemp)"')
+    expect(commands).toContain('case "$token" in 21*-[A-Za-z]*)')
+    expect(commands).not.toContain('grep -oE')
+    expect(commands).not.toContain('node -e')
   })
 
   it('verifies dry-run output without touching the system', async () => {

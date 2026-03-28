@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { execFile } from 'node:child_process'
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn((_file, _args, callback) => {
@@ -94,6 +95,12 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).toContain('& $scoop install git')
     expect(result.commands.join('\n')).toContain('Scoop git install failed with exit code')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
+    expect(result.rollbackCommands?.join('\n')).toContain(
+      'Scoop git uninstall failed with exit code',
+    )
+    expect(result.rollbackCommands?.join('\n')).toContain(
+      "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1'))",
+    )
   })
 
   it('rejects homebrew mode on win32', async () => {
@@ -152,5 +159,41 @@ describe('git env plugin', () => {
 
     expect(result.executionMode).toBe('real_run')
     expect(result.logs).toEqual(expect.arrayContaining([expect.stringContaining('mode=real-run')]))
+  })
+
+  it('verifies scoop installs by resolving the git executable from the scoop prefix', async () => {
+    vi.mocked(execFile).mockClear()
+
+    await gitPlugin.verify({
+      gitManager: 'scoop',
+      installRootDir: 'C:\\toolchain',
+      dryRun: false,
+      platform: 'win32',
+      installResult: {
+        status: 'installed_unverified',
+        executionMode: 'real_run',
+        version: '2.47.1',
+        paths: {},
+        envChanges: [],
+        downloads: [],
+        commands: [],
+        logs: [],
+        summary: '',
+        context: {},
+      },
+    })
+
+    expect(vi.mocked(execFile)).toHaveBeenCalled()
+    const verifyCall = vi.mocked(execFile).mock.calls.at(-1)
+    expect(verifyCall?.[0]).toBe('powershell')
+    expect(verifyCall?.[1]).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Get-ChildItem -Path $prefix -Recurse -File'),
+        expect.stringContaining("Where-Object { $_.Name -in @('git.exe', 'git.cmd') }"),
+      ]),
+    )
+    expect(verifyCall?.[1]).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("Join-Path $shimDir 'git.cmd'")]),
+    )
   })
 })

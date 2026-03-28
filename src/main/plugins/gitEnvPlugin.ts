@@ -55,6 +55,42 @@ function buildResolveScoopCommand(): string {
   return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
 }
 
+function buildScoopGitUninstallCommand(): string {
+  return [
+    buildResolveScoopCommand(),
+    'if ($scoop) {',
+    '$prefix = (& $scoop prefix git).Trim()',
+    'if ($LASTEXITCODE -eq 0 -and $prefix) {',
+    '& $scoop uninstall git *> $null',
+    '$uninstallExitCode = $LASTEXITCODE',
+    'if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." }',
+    '& $scoop prefix git *> $null',
+    'if ($LASTEXITCODE -eq 0) {',
+    '$gitParent = Split-Path $prefix -Parent',
+    'if (Test-Path $gitParent) { Remove-Item -LiteralPath $gitParent -Recurse -Force }',
+    '$shimDir = Split-Path $scoop -Parent',
+    "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } }",
+    '& $scoop prefix git *> $null',
+    "if ($LASTEXITCODE -eq 0) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
+    '}',
+    '}',
+    '}',
+  ].join('; ')
+}
+
+function buildVerifyScoopGitCommand(): string {
+  return [
+    buildResolveScoopCommand(),
+    "if (-not $scoop) { throw 'Scoop not found.' }",
+    '$prefix = (& $scoop prefix git).Trim()',
+    "if ($LASTEXITCODE -ne 0 -or -not $prefix) { throw 'Failed to resolve Scoop git prefix.' }",
+    'Write-Output $prefix',
+    "$gitExe = Get-ChildItem -Path $prefix -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('git.exe', 'git.cmd') } | Select-Object -ExpandProperty FullName -First 1",
+    'if (-not $gitExe) { throw "Failed to locate Git executable under Scoop prefix $prefix." }',
+    '& $gitExe --version',
+  ].join('; ')
+}
+
 function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
   if (input.gitManager === 'git') {
     if (input.platform === 'darwin') {
@@ -295,9 +331,7 @@ function buildRollbackCommands(input: GitPluginParams): string[] {
   }
 
   if (input.gitManager === 'scoop') {
-    return [
-      `${buildResolveScoopCommand()}; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }`,
-    ]
+    return [buildScoopGitUninstallCommand()]
   }
 
   return []
@@ -321,9 +355,7 @@ function buildVerifyCommands(input: GitPluginParams): string[] {
     ]
   }
 
-  return [
-    `${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $prefix = (& $scoop prefix git).Trim(); Write-Output $prefix; $shimDir = Split-Path $scoop -Parent; $gitExe = Join-Path $shimDir 'git.exe'; if (-not (Test-Path $gitExe)) { $gitExe = Join-Path $shimDir 'git.cmd' }; & $gitExe --version`,
-  ]
+  return [buildVerifyScoopGitCommand()]
 }
 
 async function runCommands(

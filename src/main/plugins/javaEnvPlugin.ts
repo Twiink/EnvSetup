@@ -63,16 +63,12 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
 }
 
 function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
-  const versionPattern = `${featureVersion}(\\.[0-9]+)*-tem`
-  const candidateStream = [
-    'sdk list java 2>&1',
-    'tr -d "\\r"',
-    'sed -E "s/\\x1B\\[[0-9;]*[A-Za-z]//g"',
-    `grep -oE "${versionPattern}"`,
-    'head -n 1',
-  ].join(' | ')
   return [
-    `SDKMAN_JAVA_VERSION="$(${candidateStream})"`,
+    'SDKMAN_JAVA_VERSION=',
+    'SDKMAN_LIST_FILE="$(mktemp)"',
+    `sdk list java 2>&1 | tr -d '\\r' | sed -E 's/\\x1B\\[[0-9;]*[A-Za-z]//g' > "$SDKMAN_LIST_FILE"`,
+    `while IFS= read -r line; do for token in $line; do case "$token" in ${featureVersion}*-[A-Za-z]*) SDKMAN_JAVA_VERSION="$token"; break 2 ;; esac; done; done < "$SDKMAN_LIST_FILE"`,
+    'rm -f "$SDKMAN_LIST_FILE"',
     `[ -n "$SDKMAN_JAVA_VERSION" ] || { echo "Failed to resolve SDKMAN Java candidate for feature version ${featureVersion}." >&2; exit 1; }`,
   ].join(' && ')
 }

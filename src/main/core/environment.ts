@@ -304,8 +304,31 @@ function buildHomebrewGitCleanupCommand(): string {
   return 'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions git >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula git || true; fi'
 }
 
+function buildResolveScoopCommand(): string {
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
+}
+
 function buildScoopGitCleanupCommand(): string {
-  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }"
+  return [
+    buildResolveScoopCommand(),
+    'if ($scoop) {',
+    '$prefix = (& $scoop prefix git).Trim()',
+    'if ($LASTEXITCODE -eq 0 -and $prefix) {',
+    '& $scoop uninstall git *> $null',
+    '$uninstallExitCode = $LASTEXITCODE',
+    'if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." }',
+    '& $scoop prefix git *> $null',
+    'if ($LASTEXITCODE -eq 0) {',
+    '$gitParent = Split-Path $prefix -Parent',
+    'if (Test-Path $gitParent) { Remove-Item -LiteralPath $gitParent -Recurse -Force }',
+    '$shimDir = Split-Path $scoop -Parent',
+    "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } }",
+    '& $scoop prefix git *> $null',
+    "if ($LASTEXITCODE -eq 0) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
+    '}',
+    '}',
+    '}',
+  ].join('; ')
 }
 
 function buildCondaEnvCleanupCommand(cleanupPath: string): string {
