@@ -19,14 +19,7 @@ const execFileAsync = promisify(execFile)
 
 const GIT_MACOS_DMG_URL = 'https://sourceforge.net/projects/git-osx-installer/files/latest/download'
 const GIT_FOR_WINDOWS_VERSION = '2.47.1'
-const GIT_FOR_WINDOWS_EXE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
-const GIT_FOR_WINDOWS_SILENT_ARGS = [
-  '/VERYSILENT',
-  '/SUPPRESSMSGBOXES',
-  '/NORESTART',
-  '/NOCANCEL',
-  '/SP-',
-]
+const GIT_FOR_WINDOWS_ARCHIVE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.tar.bz2`
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -40,10 +33,6 @@ function quoteShell(value: string): string {
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
-}
-
-function buildPowerShellArrayLiteral(values: string[]): string {
-  return `@(${values.map((value) => quotePowerShell(value)).join(', ')})`
 }
 
 function resolveDownloadedArtifactPath(
@@ -63,7 +52,7 @@ function buildResolveHomebrewCommand(): string {
 }
 
 function buildResolveScoopCommand(): string {
-  return "$scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }"
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
 }
 
 function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
@@ -83,12 +72,12 @@ function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
 
     return [
       {
-        kind: 'installer',
+        kind: 'archive',
         tool: 'git-for-windows',
-        url: GIT_FOR_WINDOWS_EXE_URL,
+        url: GIT_FOR_WINDOWS_ARCHIVE_URL,
         official: true,
-        fileName: `Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`,
-        note: 'Download the official Git for Windows installer.',
+        fileName: `Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.tar.bz2`,
+        note: 'Download the official Git for Windows tarball for non-interactive extraction.',
       },
     ]
   }
@@ -242,13 +231,9 @@ function buildWindowsDirectCommands(
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
   const paths = resolveGitInstallPaths(input)
-  const installerPath =
+  const archivePath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'git-for-windows') ??
-    `${paths.installRootDir}\\Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
-  const installerArgs = buildPowerShellArrayLiteral([
-    ...GIT_FOR_WINDOWS_SILENT_ARGS,
-    `/DIR=${paths.gitDir}`,
-  ])
+    `${paths.installRootDir}\\Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.tar.bz2`
 
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.installRootDir)} | Out-Null`,
@@ -256,17 +241,17 @@ function buildWindowsDirectCommands(
 
   if (!resolvedDownloads) {
     commands.push(
-      `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile ${quotePowerShell(installerPath)}`,
+      `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_ARCHIVE_URL)} -OutFile ${quotePowerShell(archivePath)}`,
     )
   }
 
   commands.push(
-    `$gitInstallerArgs = ${installerArgs}; $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); $proc = Start-Process -FilePath $installer -ArgumentList $gitInstallerArgs -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Git for Windows installer failed with exit code $($proc.ExitCode)." }`,
+    `$archive = [System.IO.Path]::GetFullPath(${quotePowerShell(archivePath)}); $extractRoot = [System.IO.Path]::GetFullPath(${quotePowerShell(`${paths.installRootDir}\\git-extract`)}); if (Test-Path $extractRoot) { Remove-Item -LiteralPath $extractRoot -Recurse -Force }; if (Test-Path ${quotePowerShell(paths.gitDir)}) { Remove-Item -LiteralPath ${quotePowerShell(paths.gitDir)} -Recurse -Force }; New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null; New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.gitDir)} | Out-Null; tar -xjf $archive -C $extractRoot; if ($LASTEXITCODE -ne 0) { throw "Git for Windows archive extraction failed with exit code $LASTEXITCODE." }; $entries = @(Get-ChildItem -LiteralPath $extractRoot -Force); $sourceRoot = if ($entries.Count -eq 1 -and $entries[0].PSIsContainer) { $entries[0].FullName } else { $extractRoot }; Get-ChildItem -LiteralPath $sourceRoot -Force | ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination ${quotePowerShell(paths.gitDir)} -Force }; Remove-Item -LiteralPath $extractRoot -Recurse -Force`,
   )
 
   if (!resolvedDownloads) {
     commands.push(
-      `if (Test-Path ${quotePowerShell(installerPath)}) { Remove-Item -LiteralPath ${quotePowerShell(installerPath)} -Force -ErrorAction SilentlyContinue }`,
+      `if (Test-Path ${quotePowerShell(archivePath)}) { Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force -ErrorAction SilentlyContinue }`,
     )
   }
 
@@ -280,8 +265,8 @@ function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[
     '$installer = Join-Path ([System.IO.Path]::GetTempPath()) \'envsetup-scoop-install.ps1\'; Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer'
   return [
     resolvedDownloads
-      ? `${resolveScoopCommand}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`
-      : `${resolveScoopCommand}; if (-not $scoop) { ${installerPath}; function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
+      ? `${resolveScoopCommand}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }`
+      : `${resolveScoopCommand}; if (-not $scoop) { ${installerPath}; function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }`,
   ]
 }
 

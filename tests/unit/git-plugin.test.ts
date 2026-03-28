@@ -47,17 +47,11 @@ describe('git env plugin', () => {
     })
 
     expect(result.downloads[0].url).toContain('github.com/git-for-windows/git')
-    expect(result.commands.join('\n')).toContain('/VERYSILENT')
-    expect(result.commands.join('\n')).toContain('/SUPPRESSMSGBOXES')
-    expect(result.commands.join('\n')).toContain('/NOCANCEL')
-    expect(result.commands.join('\n')).toContain('/SP-')
-    expect(result.commands.join('\n')).not.toContain('/CLOSEAPPLICATIONS')
-    expect(result.commands.join('\n')).not.toContain('/RESTARTAPPLICATIONS')
-    expect(result.commands.join('\n')).toContain('$gitInstallerArgs = @(')
-    expect(result.commands.join('\n')).toContain(
-      'Start-Process -FilePath $installer -ArgumentList $gitInstallerArgs -Wait -PassThru',
-    )
-    expect(result.commands.join('\n')).not.toContain('& $installer @gitInstallerArgs')
+    expect(result.downloads[0].url).toContain('Git-2.47.1-64-bit.tar.bz2')
+    expect(result.commands.join('\n')).toContain('tar -xjf $archive -C $extractRoot')
+    expect(result.commands.join('\n')).toContain('Move-Item -LiteralPath $_.FullName')
+    expect(result.commands.join('\n')).not.toContain('Start-Process -FilePath $installer')
+    expect(result.commands.join('\n')).not.toContain('Git-2.47.1-64-bit.exe')
   })
 
   it('returns dry-run result for homebrew mode on darwin', async () => {
@@ -86,6 +80,10 @@ describe('git env plugin', () => {
     expect(result.downloads[0].url).toContain('get.scoop.sh')
     expect(result.commands).toHaveLength(1)
     expect(result.commands.join('\n')).toContain('Invoke-WebRequest')
+    expect(result.commands.join('\n')).toContain(
+      `Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'`,
+    )
+    expect(result.commands.join('\n')).toContain(`Get-Command 'scoop.cmd'`)
     expect(result.commands.join('\n')).toContain(`function Get-ExecutionPolicy { 'ByPass' }`)
     expect(result.commands.join('\n')).not.toContain(
       'Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue',
@@ -94,6 +92,7 @@ describe('git env plugin', () => {
       '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer',
     )
     expect(result.commands.join('\n')).toContain('& $scoop install git')
+    expect(result.commands.join('\n')).toContain('Scoop git install failed with exit code')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
   })
 

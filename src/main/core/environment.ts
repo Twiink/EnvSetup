@@ -305,7 +305,7 @@ function buildHomebrewGitCleanupCommand(): string {
 }
 
 function buildScoopGitCleanupCommand(): string {
-  return "$scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1; if (-not $scoop) { $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate } }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }"
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if ($scoop) { & $scoop prefix git *> $null; if ($LASTEXITCODE -eq 0) { & $scoop uninstall git *> $null } }"
 }
 
 function buildCondaEnvCleanupCommand(cleanupPath: string): string {
