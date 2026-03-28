@@ -87,7 +87,6 @@ function buildScoopGitUninstallCommand(): string {
     '$remainingPrefix = Get-ScoopGitPrefix $scoop',
     "if ($remainingPrefix) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
     '}',
-    '}',
   ].join('; ')
 }
 

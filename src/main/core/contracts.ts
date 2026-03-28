@@ -217,6 +217,8 @@ export type DownloadArtifact = {
     | 'nvm-windows'
     | 'temurin'
     | 'sdkman'
+    | 'sdkman-cli'
+    | 'sdkman-native'
     | 'python'
     | 'miniconda'
     | 'git'

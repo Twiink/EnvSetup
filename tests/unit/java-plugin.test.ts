@@ -63,12 +63,13 @@ describe('java env plugin', () => {
     expect(result.executionMode).toBe('dry_run')
     expect(result.downloads).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ tool: 'sdkman' }),
+        expect.objectContaining({ tool: 'sdkman-cli' }),
+        expect.objectContaining({ tool: 'sdkman-native' }),
         expect.objectContaining({ tool: 'temurin' }),
       ]),
     )
-    expect(result.downloads.find((download) => download.tool === 'sdkman')?.url).toContain(
-      'get.sdkman.io',
+    expect(result.downloads.find((download) => download.tool === 'sdkman-cli')?.url).toContain(
+      'api.sdkman.io',
     )
     expect(result.downloads.find((download) => download.tool === 'temurin')?.url).toContain(
       'api.adoptium.net',
@@ -121,13 +122,16 @@ describe('java env plugin', () => {
     )
     const commands = result.commands.join('\n')
     expect(commands).toContain(
-      'Invoke-WebRequest -Uri "https://get.sdkman.io?ci=true&rcupdate=false"',
+      'Invoke-WebRequest -Uri "https://api.sdkman.io/2/broker/download/sdkman/install/',
+    )
+    expect(commands).toContain(
+      'Invoke-WebRequest -Uri "https://api.sdkman.io/2/broker/download/native/install/',
     )
     expect(commands).toContain(
       'Invoke-WebRequest -Uri "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse"',
     )
     expect(commands).toContain(
-      'Set-Content -LiteralPath $sdkmanInstallScriptPath -Value $sdkmanInstallScript -Encoding Ascii -NoNewline',
+      'Set-Content -LiteralPath $sdkmanSetupScriptPath -Value $sdkmanSetupScript -Encoding Ascii -NoNewline',
     )
     expect(commands).toContain(
       'Set-Content -LiteralPath $sdkmanRegisterScriptPath -Value $sdkmanRegisterScript -Encoding Ascii -NoNewline',
@@ -139,7 +143,7 @@ describe('java env plugin', () => {
     )
     expect(commands).not.toContain('sdk list java')
     expect(commands).toContain(
-      "& $gitBash -lc 'bash ''C:/envsetup/toolchain/envsetup-sdkman-install.sh'''",
+      "& $gitBash -lc 'bash ''C:/envsetup/toolchain/envsetup-sdkman-setup.sh'''",
     )
     expect(commands).toContain(
       "& $gitBash -lc 'bash ''C:/envsetup/toolchain/envsetup-sdkman-register.sh'''",

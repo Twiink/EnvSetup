@@ -10,6 +10,8 @@ const OFFICIAL_DOWNLOAD_HOSTS: Record<DownloadArtifact['tool'], Set<string>> = {
   'nvm-windows': new Set(['github.com']),
   temurin: new Set(['github.com', 'api.adoptium.net']),
   sdkman: new Set(['get.sdkman.io', 'api.sdkman.io', 'github.com']),
+  'sdkman-cli': new Set(['api.sdkman.io']),
+  'sdkman-native': new Set(['api.sdkman.io']),
   python: new Set(['www.python.org', 'bootstrap.pypa.io']),
   miniconda: new Set(['repo.anaconda.com']),
   git: new Set(['sourceforge.net', 'git-scm.com']),
