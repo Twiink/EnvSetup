@@ -63,19 +63,7 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
 }
 
 function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
-  // The current shell pipeline regressed in CI in two ways:
-  // - Windows Git Bash broke on the nested awk/double-quote form.
-  // - macOS failed to strip/parse the SDKMAN list output consistently.
-  // Parse the full stream in Node instead so both platforms share one parser.
-  const versionPattern = `${featureVersion}(?:\\.[0-9]+)*-tem`
-  const candidateStream = [
-    `sdk list java`,
-    `node -e "const fs = require('node:fs'); const input = fs.readFileSync(0, 'utf8').replace(/\\r/g, '').replace(/\\u001b\\[[0-9;]*[A-Za-z]/g, ''); const match = input.match(/(?:^|\\s)(${versionPattern})(?=\\s|$)/m); if (!match) process.exit(1); process.stdout.write(match[1]);"`,
-  ].join(' | ')
-  return [
-    `SDKMAN_JAVA_VERSION="$(${candidateStream})"`,
-    `[ -n "$SDKMAN_JAVA_VERSION" ] || { echo "Failed to resolve SDKMAN Java candidate for feature version ${featureVersion}." >&2; exit 1; }`,
-  ].join(' && ')
+  return `SDKMAN_JAVA_VERSION=${quoteShell(`${featureVersion}-tem`)}`
 }
 
 type PreparedJavaInstallSources = {

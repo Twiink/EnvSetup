@@ -64,7 +64,7 @@ describe('java env plugin', () => {
     expect(result.downloads[0].tool).toBe('sdkman')
     expect(result.downloads[0].url).toContain('get.sdkman.io')
     expect(result.envChanges.some((e) => e.key === 'SDKMAN_DIR')).toBe(true)
-    expect(result.commands.join('\n')).toContain('sdk list java')
+    expect(result.commands.join('\n')).toContain(`SDKMAN_JAVA_VERSION='21-tem'`)
     expect(result.commands.join('\n')).toContain('sdk install java "$SDKMAN_JAVA_VERSION"')
     expect(result.commands.join('\n')).toContain('sdk default java "$SDKMAN_JAVA_VERSION"')
     expect(result.commands.join('\n')).toContain('sdkman-init.sh')
@@ -102,14 +102,9 @@ describe('java env plugin', () => {
       'Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru',
     )
     expect(result.commands.join('\n')).toContain('& $gitBash -lc')
-    expect(result.commands.join('\n')).toContain(
-      `sdk list java | node -e "const fs = require(''node:fs'');`,
-    )
-    expect(result.commands.join('\n')).toContain(
-      `input.match(/(?:^|\\s)(21(?:\\.[0-9]+)*-tem)(?=\\s|$)/m)`,
-    )
-    expect(result.commands.join('\n')).not.toContain('tr -d "\\r"')
-    expect(result.commands.join('\n')).not.toContain('awk "{ for (i = 1; i <= NF; i++)')
+    expect(result.commands.join('\n')).toContain(`SDKMAN_JAVA_VERSION=''21-tem''`)
+    expect(result.commands.join('\n')).not.toContain('sdk list java |')
+    expect(result.commands.join('\n')).not.toContain('node -e')
   })
 
   it('verifies dry-run output without touching the system', async () => {
