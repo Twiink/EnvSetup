@@ -57,15 +57,20 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
 }
 
 function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
+  // Use grep -oE to extract matching identifiers directly from sdk list output.
+  // Avoid single quotes to prevent quoting conflicts when the bash script is
+  // wrapped in PowerShell single quotes on Windows (quotePowerShellSingle).
+  // Use $'\\r' (ANSI-C quoting) instead of '\\r' to sidestep nested quote issues.
   const versionPattern = `${featureVersion}(\\.[0-9]+)*-tem`
   const candidateStream = [
     `sdk list java`,
-    `tr -d '\\r'`,
+    `tr -d $'\\r'`,
     `sed -E "s/\\x1B\\[[0-9;]*[A-Za-z]//g"`,
-    `tr -s '[:space:]' '\\n'`,
+    `grep -oE "${versionPattern}"`,
+    `head -n 1`,
   ].join(' | ')
   return [
-    `SDKMAN_JAVA_VERSION="$(${candidateStream} | grep -E "^${versionPattern}$" | head -n 1)"`,
+    `SDKMAN_JAVA_VERSION="$(${candidateStream})"`,
     `[ -n "$SDKMAN_JAVA_VERSION" ] || { echo "Failed to resolve SDKMAN Java candidate for feature version ${featureVersion}." >&2; exit 1; }`,
   ].join(' && ')
 }
