@@ -97,9 +97,11 @@ describe('java env plugin', () => {
     expect(result.status).toBe('installed_unverified')
     expect(result.commands.join('\n')).toContain("Get-Command 'bash.exe'")
     expect(result.commands.join('\n')).toContain('$gitInstallerArgs = @(')
-    expect(result.commands.join('\n')).toContain('& $gitInstaller @gitInstallerArgs')
+    expect(result.commands.join('\n')).toContain(
+      'Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru',
+    )
     expect(result.commands.join('\n')).toContain('& $gitBash -lc')
-    expect(result.commands.join('\n')).toContain('sdk list java')
+    expect(result.commands.join('\n')).toContain(`grep -E "^21(\\.[0-9]+)*-tem$"`)
   })
 
   it('verifies dry-run output without touching the system', async () => {

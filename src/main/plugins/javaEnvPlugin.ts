@@ -57,9 +57,15 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
 }
 
 function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
-  const versionPattern = `^${featureVersion}(\\.[^ ]+)?-tem$`
+  const versionPattern = `${featureVersion}(\\.[0-9]+)*-tem`
+  const candidateStream = [
+    `sdk list java`,
+    `tr -d '\\r'`,
+    `sed -E "s/\\x1B\\[[0-9;]*[A-Za-z]//g"`,
+    `tr -s '[:space:]' '\\n'`,
+  ].join(' | ')
   return [
-    `SDKMAN_JAVA_VERSION="$(sdk list java | tr -d '\\r' | sed -E 's/\\x1B\\[[0-9;]*[A-Za-z]//g' | awk '$NF ~ /${versionPattern}/ { print $NF; exit }')"`,
+    `SDKMAN_JAVA_VERSION="$(${candidateStream} | grep -E "^${versionPattern}$" | head -n 1)"`,
     `[ -n "$SDKMAN_JAVA_VERSION" ] || { echo "Failed to resolve SDKMAN Java candidate for feature version ${featureVersion}." >&2; exit 1; }`,
   ].join(' && ')
 }
@@ -382,8 +388,8 @@ function buildWindowsSdkmanCommands(
   const gitBashCommand = [
     `$gitBash = Get-Command 'bash.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1`,
     resolvedDownloads
-      ? `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(gitInstallerPath)}); & $gitInstaller @gitInstallerArgs; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`
-      : `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; & $gitInstaller @gitInstallerArgs; $gitInstallerExitCode = $LASTEXITCODE; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
+      ? `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(gitInstallerPath)}); $proc = Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Git for Windows installer failed with exit code $($proc.ExitCode)." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`
+      : `if (-not $gitBash) { $gitInstallerArgs = ${gitInstallerArgs}; $gitInstaller = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.installRootDir + '\\Git-installer.exe')}); Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_EXE_URL)} -OutFile $gitInstaller; $proc = Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru; $gitInstallerExitCode = $proc.ExitCode; if (Test-Path $gitInstaller) { Remove-Item -LiteralPath $gitInstaller -Force -ErrorAction SilentlyContinue }; if ($gitInstallerExitCode -ne 0) { throw "Git for Windows installer failed with exit code $gitInstallerExitCode." }; $fallbackBash = [System.IO.Path]::GetFullPath(${quotePowerShell(fallbackBashPath)}); if (Test-Path $fallbackBash) { $gitBash = $fallbackBash } }`,
     `if (-not $gitBash) { throw 'Failed to locate Git Bash for SDKMAN.' }`,
     `& $gitBash -lc ${quotePowerShellSingle(bashScript)}`,
   ].join('; ')

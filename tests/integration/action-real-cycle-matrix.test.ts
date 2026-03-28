@@ -48,6 +48,7 @@ let tasksDir: string
 let snapshotsDir: string
 let homeDir: string
 let templatesById = new Map<string, ResolvedTemplate>()
+const cleanupHookTimeout = isWindows ? 300_000 : 30_000
 
 type RealCycleCase = {
   name: string
@@ -265,11 +266,11 @@ beforeEach(async () => {
 afterEach(async () => {
   process.env = { ...originalEnv }
   await rm(tmpDir, { recursive: true, force: true })
-})
+}, cleanupHookTimeout)
 
 afterAll(async () => {
   await rm(suiteDir, { recursive: true, force: true })
-})
+}, cleanupHookTimeout)
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {

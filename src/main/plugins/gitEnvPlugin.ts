@@ -255,7 +255,7 @@ function buildWindowsDirectCommands(
   }
 
   commands.push(
-    `$gitInstallerArgs = ${installerArgs}; $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); & $installer @gitInstallerArgs; if ($LASTEXITCODE -ne 0) { throw "Git for Windows installer failed with exit code $LASTEXITCODE." }`,
+    `$gitInstallerArgs = ${installerArgs}; $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); $proc = Start-Process -FilePath $installer -ArgumentList $gitInstallerArgs -Wait -PassThru; if ($proc.ExitCode -ne 0) { throw "Git for Windows installer failed with exit code $($proc.ExitCode)." }`,
   )
 
   if (!resolvedDownloads) {
@@ -274,8 +274,8 @@ function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[
     '$installer = Join-Path ([System.IO.Path]::GetTempPath()) \'envsetup-scoop-install.ps1\'; Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer'
   return [
     resolvedDownloads
-      ? `${resolveScoopCommand}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); & $installer; $installerExitCode = $LASTEXITCODE; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`
-      : `${resolveScoopCommand}; if (-not $scoop) { ${installerPath}; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
+      ? `Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue; ${resolveScoopCommand}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); & $installer; $installerExitCode = $LASTEXITCODE; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`
+      : `Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue; ${resolveScoopCommand}; if (-not $scoop) { ${installerPath}; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git`,
   ]
 }
 
