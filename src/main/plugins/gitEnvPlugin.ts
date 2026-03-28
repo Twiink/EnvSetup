@@ -334,7 +334,7 @@ function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[
     '$listOutput = & $scoop list *>&1 | Out-String',
     'throw "Scoop git install did not create apps\\git. scoopRoot=$scoopRoot SCOOP=$env:SCOOP USERPROFILE=$env:USERPROFILE scoopList=$listOutput"',
     '}',
-  ].join(' ')
+  ].join('; ')
   const installerPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
     '$installer = Join-Path ([System.IO.Path]::GetTempPath()) \'envsetup-scoop-install.ps1\'; Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer'
