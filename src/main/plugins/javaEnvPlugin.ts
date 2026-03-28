@@ -20,7 +20,6 @@ const execFileAsync = promisify(execFile)
 
 const ADOPTIUM_BINARY_BASE_URL = 'https://api.adoptium.net/v3/binary/latest'
 const SDKMAN_CLI_VERSION = '5.22.3'
-const SDKMAN_NATIVE_VERSION = '0.7.24'
 const SDKMAN_API_BASE = 'https://api.sdkman.io/2'
 const GIT_FOR_WINDOWS_VERSION = '2.47.1'
 const GIT_FOR_WINDOWS_EXE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
@@ -101,8 +100,9 @@ const SDKMAN_CONFIG_LINES = [
   'sdkman_debug_mode=false',
   'sdkman_healthcheck_enable=true',
   'sdkman_insecure_ssl=false',
-  'sdkman_native_enable=true',
+  'sdkman_native_enable=false',
 ]
+const SDKMAN_CANDIDATE_NAMES = ['java']
 
 type PreparedJavaInstallSources = {
   temurinArchiveDir?: string
@@ -196,14 +196,6 @@ function buildDownloadPlan(input: JavaPluginParams): DownloadArtifact[] {
       official: true,
       fileName: `sdkman-cli-${SDKMAN_CLI_VERSION}.zip`,
       note: 'Download the SDKMAN CLI distribution zip.',
-    },
-    {
-      kind: 'archive',
-      tool: 'sdkman-native',
-      url: `${SDKMAN_API_BASE}/broker/download/native/install/${SDKMAN_NATIVE_VERSION}/${sdkmanPlatform}`,
-      official: true,
-      fileName: `sdkman-native-${SDKMAN_NATIVE_VERSION}.zip`,
-      note: 'Download the SDKMAN native CLI distribution zip.',
     },
   ]
 
@@ -347,9 +339,6 @@ function buildDarwinSdkmanCommands(
   const sdkmanCliZipPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman-cli') ??
     `${installPaths.installRootDir}/sdkman-cli-${SDKMAN_CLI_VERSION}.zip`
-  const sdkmanNativeZipPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman-native') ??
-    `${installPaths.installRootDir}/sdkman-native-${SDKMAN_NATIVE_VERSION}.zip`
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
     // Set up SDKMAN directory structure manually (avoids network dependency of install script)
@@ -357,12 +346,10 @@ function buildDarwinSdkmanCommands(
     `unzip -qo ${quoteShell(sdkmanCliZipPath)} -d "$SDKMAN_DIR/tmp"`,
     'cp -rf "$SDKMAN_DIR/tmp"/sdkman-*/* "$SDKMAN_DIR"',
     'rm -rf "$SDKMAN_DIR/tmp"/sdkman-*',
-    `unzip -qo ${quoteShell(sdkmanNativeZipPath)} -d "$SDKMAN_DIR/tmp"`,
-    'cp -rf "$SDKMAN_DIR/tmp"/sdkman-*/* "$SDKMAN_DIR"',
-    'rm -rf "$SDKMAN_DIR/tmp"/sdkman-*',
     `echo ${quoteShell(sdkmanPlatform)} > "$SDKMAN_DIR/var/platform"`,
     `echo ${quoteShell(SDKMAN_CLI_VERSION)} > "$SDKMAN_DIR/var/version"`,
     `printf '%s\\n' ${SDKMAN_CONFIG_LINES.map((l) => quoteShell(l)).join(' ')} > "$SDKMAN_DIR/etc/config"`,
+    `printf '%s' ${quoteShell(SDKMAN_CANDIDATE_NAMES.join(','))} > "$SDKMAN_DIR/var/candidates"`,
     `. ${quoteShell(`${installPaths.sdkmanDir}/bin/sdkman-init.sh`)}`,
     `SDKMAN_LOCAL_JAVA_DIR=${quoteShell(sdkmanLocalJavaDir)}`,
     `SDKMAN_LOCAL_JAVA_ALIAS=${quoteShell(sdkmanLocalJavaAlias)}`,
@@ -383,10 +370,8 @@ function buildDarwinSdkmanCommands(
 
   if (!resolvedDownloads) {
     const sdkmanCliUrl = `${SDKMAN_API_BASE}/broker/download/sdkman/install/${SDKMAN_CLI_VERSION}/${sdkmanPlatform}`
-    const sdkmanNativeUrl = `${SDKMAN_API_BASE}/broker/download/native/install/${SDKMAN_NATIVE_VERSION}/${sdkmanPlatform}`
     commands.push(
       `curl -fsSL ${quoteShell(sdkmanCliUrl)} -o ${quoteShell(sdkmanCliZipPath)}`,
-      `curl -fsSL ${quoteShell(sdkmanNativeUrl)} -o ${quoteShell(sdkmanNativeZipPath)}`,
       `curl -fsSL ${quoteShell(archiveUrl)} -o ${quoteShell(temurinArchivePath)}`,
     )
   }
@@ -396,7 +381,6 @@ function buildDarwinSdkmanCommands(
   if (!resolvedDownloads) {
     commands.push(
       `rm -f ${quoteShell(sdkmanCliZipPath)}`,
-      `rm -f ${quoteShell(sdkmanNativeZipPath)}`,
       `rm -f ${quoteShell(temurinArchivePath)}`,
     )
   }
@@ -470,9 +454,6 @@ function buildWindowsSdkmanCommands(
   const sdkmanCliZipPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman-cli') ??
     `${installPaths.installRootDir}\\sdkman-cli-${SDKMAN_CLI_VERSION}.zip`
-  const sdkmanNativeZipPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'sdkman-native') ??
-    `${installPaths.installRootDir}\\sdkman-native-${SDKMAN_NATIVE_VERSION}.zip`
   const sdkmanLocalJavaDir = `${installPaths.sdkmanDir}\\local\\java-${sanitizePathSegment(input.javaVersion)}`
   const sdkmanLocalJavaBashDir = toBashPath(sdkmanLocalJavaDir)
   const sdkmanLocalJavaAlias = buildSdkmanLocalJavaAlias(input.javaVersion)
@@ -486,19 +467,16 @@ function buildWindowsSdkmanCommands(
   const setupScriptBashPath = toBashPath(setupScriptPath)
   const registerScriptBashPath = toBashPath(registerScriptPath)
   const sdkmanCliZipBashPath = toBashPath(sdkmanCliZipPath)
-  const sdkmanNativeZipBashPath = toBashPath(sdkmanNativeZipPath)
   const sdkmanSetupBashScript = [
     `export SDKMAN_DIR=${quoteShell(toBashPath(installPaths.sdkmanDir))}`,
     'mkdir -p "$SDKMAN_DIR/bin" "$SDKMAN_DIR/src" "$SDKMAN_DIR/ext" "$SDKMAN_DIR/etc" "$SDKMAN_DIR/var" "$SDKMAN_DIR/tmp" "$SDKMAN_DIR/candidates"',
     `unzip -qo ${quoteShell(sdkmanCliZipBashPath)} -d "$SDKMAN_DIR/tmp"`,
     'cp -rf "$SDKMAN_DIR/tmp"/sdkman-*/* "$SDKMAN_DIR"',
     'rm -rf "$SDKMAN_DIR/tmp"/sdkman-*',
-    `unzip -qo ${quoteShell(sdkmanNativeZipBashPath)} -d "$SDKMAN_DIR/tmp"`,
-    'cp -rf "$SDKMAN_DIR/tmp"/sdkman-*/* "$SDKMAN_DIR"',
-    'rm -rf "$SDKMAN_DIR/tmp"/sdkman-*',
     `echo ${quoteShell(sdkmanPlatform)} > "$SDKMAN_DIR/var/platform"`,
     `echo ${quoteShell(SDKMAN_CLI_VERSION)} > "$SDKMAN_DIR/var/version"`,
     `printf '%s\\n' ${SDKMAN_CONFIG_LINES.map((l) => quoteShell(l)).join(' ')} > "$SDKMAN_DIR/etc/config"`,
+    `printf '%s' ${quoteShell(SDKMAN_CANDIDATE_NAMES.join(','))} > "$SDKMAN_DIR/var/candidates"`,
   ].join('\n')
   const sdkmanRegisterBashScript = [
     `export SDKMAN_DIR=${quoteShell(toBashPath(installPaths.sdkmanDir))}`,
@@ -557,10 +535,8 @@ function buildWindowsSdkmanCommands(
 
   if (!resolvedDownloads) {
     const sdkmanCliUrl = `${SDKMAN_API_BASE}/broker/download/sdkman/install/${SDKMAN_CLI_VERSION}/${sdkmanPlatform}`
-    const sdkmanNativeUrl = `${SDKMAN_API_BASE}/broker/download/native/install/${SDKMAN_NATIVE_VERSION}/${sdkmanPlatform}`
     commands.push(
       `Invoke-WebRequest -Uri ${quotePowerShell(sdkmanCliUrl)} -OutFile ${quotePowerShell(sdkmanCliZipPath)}`,
-      `Invoke-WebRequest -Uri ${quotePowerShell(sdkmanNativeUrl)} -OutFile ${quotePowerShell(sdkmanNativeZipPath)}`,
       `Invoke-WebRequest -Uri ${quotePowerShell(temurinArchiveUrl)} -OutFile ${quotePowerShell(temurinArchivePath)}`,
     )
   }
@@ -570,7 +546,6 @@ function buildWindowsSdkmanCommands(
   if (!resolvedDownloads) {
     commands.push(
       `if (Test-Path ${quotePowerShell(sdkmanCliZipPath)}) { Remove-Item -LiteralPath ${quotePowerShell(sdkmanCliZipPath)} -Force -ErrorAction SilentlyContinue }`,
-      `if (Test-Path ${quotePowerShell(sdkmanNativeZipPath)}) { Remove-Item -LiteralPath ${quotePowerShell(sdkmanNativeZipPath)} -Force -ErrorAction SilentlyContinue }`,
       `if (Test-Path ${quotePowerShell(temurinArchivePath)}) { Remove-Item -LiteralPath ${quotePowerShell(temurinArchivePath)} -Force -ErrorAction SilentlyContinue }`,
     )
   }

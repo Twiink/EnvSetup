@@ -64,10 +64,10 @@ describe('java env plugin', () => {
     expect(result.downloads).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ tool: 'sdkman-cli' }),
-        expect.objectContaining({ tool: 'sdkman-native' }),
         expect.objectContaining({ tool: 'temurin' }),
       ]),
     )
+    expect(result.downloads.some((download) => download.tool === 'sdkman-native')).toBe(false)
     expect(result.downloads.find((download) => download.tool === 'sdkman-cli')?.url).toContain(
       'api.sdkman.io',
     )
@@ -86,6 +86,10 @@ describe('java env plugin', () => {
     expect(commands).toContain('sdk default java "$SDKMAN_LOCAL_JAVA_ALIAS"')
     expect(commands).toContain('Contents/Home')
     expect(commands).toContain('sdkman-init.sh')
+    expect(commands).toContain("printf '%s' 'java' > \"$SDKMAN_DIR/var/candidates\"")
+    expect(commands).toContain('sdkman_native_enable=false')
+    expect(commands).not.toContain('sdkman-native')
+    expect(commands).not.toContain('/broker/download/native/install/')
     expect(commands).not.toContain('sdk list java')
   })
 
@@ -125,9 +129,6 @@ describe('java env plugin', () => {
       'Invoke-WebRequest -Uri "https://api.sdkman.io/2/broker/download/sdkman/install/',
     )
     expect(commands).toContain(
-      'Invoke-WebRequest -Uri "https://api.sdkman.io/2/broker/download/native/install/',
-    )
-    expect(commands).toContain(
       'Invoke-WebRequest -Uri "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse"',
     )
     expect(commands).toContain(
@@ -141,6 +142,10 @@ describe('java env plugin', () => {
     expect(commands).toContain(
       'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
     )
+    expect(commands).toContain("printf '%s' 'java' > \"$SDKMAN_DIR/var/candidates\"")
+    expect(commands).toContain('sdkman_native_enable=false')
+    expect(commands).not.toContain('/broker/download/native/install/')
+    expect(commands).not.toContain('sdkman-native')
     expect(commands).not.toContain('sdk list java')
     expect(commands).toContain(
       "& $gitBash -lc 'bash ''C:/envsetup/toolchain/envsetup-sdkman-setup.sh'''",

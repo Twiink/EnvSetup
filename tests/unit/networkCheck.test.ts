@@ -52,7 +52,7 @@ describe('networkCheck', () => {
 
     expect(targets.some((target) => target.tool === 'git-for-windows')).toBe(false)
     expect(targets.some((target) => target.tool === 'sdkman-cli')).toBe(true)
-    expect(targets.some((target) => target.tool === 'sdkman-native')).toBe(true)
+    expect(targets.some((target) => target.tool === 'sdkman-native')).toBe(false)
   })
 
   it('falls back to GET when HEAD is rejected and reports success', async () => {
