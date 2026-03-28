@@ -42,6 +42,10 @@ function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
+function quotePowerShellSingle(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
 function buildPowerShellArrayLiteral(values: string[]): string {
   return `@(${values.map((value) => quotePowerShell(value)).join(', ')})`
 }
@@ -72,7 +76,7 @@ function toBashPath(value: string): string {
 }
 
 function buildSdkmanLocalJavaAlias(javaVersion: string): string {
-  return `envsetup-${sanitizePathSegment(javaVersion)}`
+  return `${sanitizePathSegment(extractFeatureVersion(javaVersion))}-local`
 }
 
 type PreparedJavaInstallSources = {
@@ -424,6 +428,8 @@ function buildWindowsSdkmanCommands(
   ])
   const installScriptPath = `${installPaths.installRootDir}\\envsetup-sdkman-install.sh`
   const registerScriptPath = `${installPaths.installRootDir}\\envsetup-sdkman-register.sh`
+  const installScriptBashPath = toBashPath(installScriptPath)
+  const registerScriptBashPath = toBashPath(registerScriptPath)
   const sdkmanInstallBashScript = [
     `export SDKMAN_DIR=${quoteShell(toBashPath(installPaths.sdkmanDir))}`,
     `bash ${quoteShell(sdkmanInstallerBashPath)}`,
@@ -448,7 +454,7 @@ function buildWindowsSdkmanCommands(
     `$sdkmanInstallScriptPath = [System.IO.Path]::GetFullPath(${quotePowerShell(installScriptPath)})`,
     `$sdkmanInstallScript = ${buildPowerShellHereString(sdkmanInstallBashScript)}`,
     `Set-Content -LiteralPath $sdkmanInstallScriptPath -Value $sdkmanInstallScript -Encoding Ascii -NoNewline`,
-    `& $gitBash $sdkmanInstallScriptPath`,
+    `& $gitBash -lc ${quotePowerShellSingle(`bash ${quoteShell(installScriptBashPath)}`)}`,
     `$sdkmanInstallExitCode = $LASTEXITCODE`,
     `if (Test-Path $sdkmanInstallScriptPath) { Remove-Item -LiteralPath $sdkmanInstallScriptPath -Force -ErrorAction SilentlyContinue }`,
     `if ($sdkmanInstallExitCode -ne 0) { throw "SDKMAN installer failed with exit code $sdkmanInstallExitCode." }`,
@@ -472,7 +478,7 @@ function buildWindowsSdkmanCommands(
     `$sdkmanRegisterScriptPath = [System.IO.Path]::GetFullPath(${quotePowerShell(registerScriptPath)})`,
     `$sdkmanRegisterScript = ${buildPowerShellHereString(sdkmanRegisterBashScript)}`,
     `Set-Content -LiteralPath $sdkmanRegisterScriptPath -Value $sdkmanRegisterScript -Encoding Ascii -NoNewline`,
-    `& $gitBash $sdkmanRegisterScriptPath`,
+    `& $gitBash -lc ${quotePowerShellSingle(`bash ${quoteShell(registerScriptBashPath)}`)}`,
     `$sdkmanRegisterExitCode = $LASTEXITCODE`,
     `if (Test-Path $sdkmanRegisterScriptPath) { Remove-Item -LiteralPath $sdkmanRegisterScriptPath -Force -ErrorAction SilentlyContinue }`,
     `if ($sdkmanRegisterExitCode -ne 0) { throw "SDKMAN local Java registration failed with exit code $sdkmanRegisterExitCode." }`,

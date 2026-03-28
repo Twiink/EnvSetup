@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { execFile } from 'node:child_process'
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn((_file, _args, callback) => {
@@ -77,7 +78,7 @@ describe('java env plugin', () => {
     expect(commands).toContain('curl -fsSL')
     expect(commands).toContain('temurin-jdk-21.tar.gz')
     expect(commands).toContain('SDKMAN_LOCAL_JAVA_DIR=')
-    expect(commands).toContain('SDKMAN_LOCAL_JAVA_ALIAS=')
+    expect(commands).toContain("SDKMAN_LOCAL_JAVA_ALIAS='21-local'")
     expect(commands).toContain(
       'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
     )
@@ -131,12 +132,18 @@ describe('java env plugin', () => {
     expect(commands).toContain(
       'Set-Content -LiteralPath $sdkmanRegisterScriptPath -Value $sdkmanRegisterScript -Encoding Ascii -NoNewline',
     )
+    expect(commands).toContain("SDKMAN_LOCAL_JAVA_ALIAS='21-local'")
     expect(commands).toContain('Expand-Archive -LiteralPath')
     expect(commands).toContain(
       'sdk install java "$SDKMAN_LOCAL_JAVA_ALIAS" "$SDKMAN_LOCAL_JAVA_DIR"',
     )
     expect(commands).not.toContain('sdk list java')
-    expect(commands).not.toContain('& $gitBash -lc')
+    expect(commands).toContain(
+      "& $gitBash -lc 'bash ''C:/envsetup/toolchain/envsetup-sdkman-install.sh'''",
+    )
+    expect(commands).toContain(
+      "& $gitBash -lc 'bash ''C:/envsetup/toolchain/envsetup-sdkman-register.sh'''",
+    )
     expect(commands).not.toContain('node -e')
   })
 
@@ -198,6 +205,44 @@ describe('java env plugin', () => {
 
     expect(result.executionMode).toBe('real_run')
     expect(result.logs).toEqual(expect.arrayContaining([expect.stringContaining('mode=real-run')]))
+  })
+
+  it('verifies sdkman installs on win32 through Git Bash login commands', async () => {
+    vi.mocked(execFile).mockClear()
+
+    const verifyResult = await javaPlugin.verify({
+      javaManager: 'sdkman',
+      javaVersion: '21',
+      installRootDir: 'C:\\envsetup\\toolchain',
+      dryRun: false,
+      platform: 'win32',
+      installResult: {
+        status: 'installed_unverified',
+        executionMode: 'real_run',
+        version: '21',
+        paths: {},
+        envChanges: [],
+        downloads: [],
+        commands: [],
+        logs: [],
+        summary: '',
+        context: {},
+      },
+    })
+
+    expect(verifyResult.status).toBe('verified_success')
+    expect(vi.mocked(execFile)).toHaveBeenCalled()
+    const verifyCall = vi.mocked(execFile).mock.calls.at(-1)
+    expect(verifyCall?.[0]).toBe('powershell')
+    expect(verifyCall?.[1]).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "& $gitBash -lc 'export SDKMAN_DIR=''C:/envsetup/toolchain/sdkman''",
+        ),
+        expect.stringContaining('. "$SDKMAN_DIR/bin/sdkman-init.sh"'),
+        expect.stringContaining('java -version'),
+      ]),
+    )
   })
 
   it('reuses extracted archive cache for real-run jdk installs when available', async () => {

@@ -67,7 +67,7 @@ function buildResolveScoopGitPrefixFunction(): string {
     'if (-not (Test-Path $prefix)) { return $null }',
     'return [System.IO.Path]::GetFullPath($prefix)',
     '}',
-  ].join('; ')
+  ].join('\n')
 }
 
 function buildScoopGitUninstallCommand(): string {

@@ -99,6 +99,9 @@ describe('git env plugin', () => {
       'Scoop git uninstall failed with exit code',
     )
     expect(result.rollbackCommands?.join('\n')).toContain('function Get-ScoopGitPrefix')
+    expect(result.rollbackCommands?.join('\n')).not.toContain(
+      'function Get-ScoopGitPrefix {; param([string]$ScoopPath)',
+    )
     expect(result.rollbackCommands?.join('\n')).toContain(
       '$remainingPrefix = Get-ScoopGitPrefix $scoop',
     )
@@ -193,6 +196,7 @@ describe('git env plugin', () => {
     expect(verifyCall?.[1]).toEqual(
       expect.arrayContaining([
         expect.stringContaining('function Get-ScoopGitPrefix'),
+        expect.stringContaining('function Get-ScoopGitPrefix {\nparam([string]$ScoopPath)'),
         expect.stringContaining('$prefix = Get-ScoopGitPrefix $scoop'),
         expect.stringContaining('Get-ChildItem -Path $prefix -Recurse -File'),
         expect.stringContaining("Where-Object { $_.Name -in @('git.exe', 'git.cmd') }"),
