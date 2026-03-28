@@ -101,7 +101,12 @@ describe('java env plugin', () => {
       'Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru',
     )
     expect(result.commands.join('\n')).toContain('& $gitBash -lc')
-    expect(result.commands.join('\n')).toContain(`grep -oE "21(\\.[0-9]+)*-tem"`)
+    expect(result.commands.join('\n')).toContain('tr -d "\\r"')
+    expect(result.commands.join('\n')).toContain(
+      'awk "{ for (i = 1; i <= NF; i++) if (\\$i ~ /^21(\\.[0-9]+)*-tem$/) { print \\$i; exit } }"',
+    )
+    expect(result.commands.join('\n')).not.toContain(`grep -oE "21(\\.[0-9]+)*-tem"`)
+    expect(result.commands.join('\n')).not.toContain(`$'\\r'`)
   })
 
   it('verifies dry-run output without touching the system', async () => {
