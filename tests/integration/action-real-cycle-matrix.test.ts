@@ -265,11 +265,11 @@ beforeEach(async () => {
 
 afterEach(async () => {
   process.env = { ...originalEnv }
-  await rm(tmpDir, { recursive: true, force: true })
+  await rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 })
 }, cleanupHookTimeout)
 
 afterAll(async () => {
-  await rm(suiteDir, { recursive: true, force: true })
+  await rm(suiteDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 })
 }, cleanupHookTimeout)
 
 async function pathExists(targetPath: string): Promise<boolean> {

@@ -1119,7 +1119,7 @@ export async function cleanupDetectedEnvironment(
   for (const removePath of plan.removePaths) {
     const existedBeforeCleanup = await pathExists(removePath)
     try {
-      await rm(removePath, { recursive: true, force: true })
+      await rm(removePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 })
     } catch (error) {
       if (!isPermissionError(error)) {
         removalErrors.push({

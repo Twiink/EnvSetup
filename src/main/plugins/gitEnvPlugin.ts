@@ -325,13 +325,23 @@ function buildWindowsDirectCommands(
 
 function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[]): string[] {
   const resolveScoopCommand = buildResolveScoopCommand()
+  const setScoopEnvFallback =
+    "if (-not $env:SCOOP) { $env:SCOOP = Join-Path $env:USERPROFILE 'scoop' }"
+  const postInstallVerify = [
+    '$scoopRoot = Split-Path (Split-Path $scoop -Parent) -Parent',
+    "$appsGit = Join-Path $scoopRoot 'apps\\git'",
+    'if (-not (Test-Path $appsGit)) {',
+    '$listOutput = & $scoop list *>&1 | Out-String',
+    'throw "Scoop git install did not create apps\\git. scoopRoot=$scoopRoot SCOOP=$env:SCOOP USERPROFILE=$env:USERPROFILE scoopList=$listOutput"',
+    '}',
+  ].join(' ')
   const installerPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
     '$installer = Join-Path ([System.IO.Path]::GetTempPath()) \'envsetup-scoop-install.ps1\'; Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer'
   return [
     resolvedDownloads
-      ? `${resolveScoopCommand}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }`
-      : `${resolveScoopCommand}; if (-not $scoop) { ${installerPath}; function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }`,
+      ? `${resolveScoopCommand}; ${setScoopEnvFallback}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }; ${postInstallVerify}`
+      : `${resolveScoopCommand}; ${setScoopEnvFallback}; if (-not $scoop) { ${installerPath}; function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }; ${postInstallVerify}`,
   ]
 }
 
