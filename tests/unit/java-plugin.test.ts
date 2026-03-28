@@ -97,16 +97,19 @@ describe('java env plugin', () => {
     expect(result.status).toBe('installed_unverified')
     expect(result.commands.join('\n')).toContain("Get-Command 'bash.exe'")
     expect(result.commands.join('\n')).toContain('$gitInstallerArgs = @(')
+    expect(result.commands.join('\n')).toContain('/SUPPRESSMSGBOXES')
     expect(result.commands.join('\n')).toContain(
       'Start-Process -FilePath $gitInstaller -ArgumentList $gitInstallerArgs -Wait -PassThru',
     )
     expect(result.commands.join('\n')).toContain('& $gitBash -lc')
-    expect(result.commands.join('\n')).toContain('tr -d "\\r"')
     expect(result.commands.join('\n')).toContain(
-      'awk "{ for (i = 1; i <= NF; i++) if (\\$i ~ /^21(\\.[0-9]+)*-tem$/) { print \\$i; exit } }"',
+      `sdk list java | node -e "const fs = require(''node:fs'');`,
     )
-    expect(result.commands.join('\n')).not.toContain(`grep -oE "21(\\.[0-9]+)*-tem"`)
-    expect(result.commands.join('\n')).not.toContain(`$'\\r'`)
+    expect(result.commands.join('\n')).toContain(
+      `input.match(/(?:^|\\s)(21(?:\\.[0-9]+)*-tem)(?=\\s|$)/m)`,
+    )
+    expect(result.commands.join('\n')).not.toContain('tr -d "\\r"')
+    expect(result.commands.join('\n')).not.toContain('awk "{ for (i = 1; i <= NF; i++)')
   })
 
   it('verifies dry-run output without touching the system', async () => {

@@ -48,6 +48,7 @@ describe('git env plugin', () => {
 
     expect(result.downloads[0].url).toContain('github.com/git-for-windows/git')
     expect(result.commands.join('\n')).toContain('/VERYSILENT')
+    expect(result.commands.join('\n')).toContain('/SUPPRESSMSGBOXES')
     expect(result.commands.join('\n')).toContain('/NOCANCEL')
     expect(result.commands.join('\n')).toContain('/SP-')
     expect(result.commands.join('\n')).not.toContain('/CLOSEAPPLICATIONS')
@@ -84,9 +85,11 @@ describe('git env plugin', () => {
     expect(result.commands).toHaveLength(1)
     expect(result.commands.join('\n')).toContain('Invoke-WebRequest')
     expect(result.commands.join('\n')).toContain(
+      '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer',
+    )
+    expect(result.commands.join('\n')).not.toContain(
       'Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue',
     )
-    expect(result.commands.join('\n')).toContain('& $installer')
     expect(result.commands.join('\n')).toContain('& $scoop install git')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
   })

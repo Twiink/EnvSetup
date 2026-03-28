@@ -22,7 +22,13 @@ const ADOPTIUM_BINARY_BASE_URL = 'https://api.adoptium.net/v3/binary/latest'
 const SDKMAN_INSTALL_URL = 'https://get.sdkman.io?ci=true&rcupdate=false'
 const GIT_FOR_WINDOWS_VERSION = '2.47.1'
 const GIT_FOR_WINDOWS_EXE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.exe`
-const GIT_FOR_WINDOWS_SILENT_ARGS = ['/VERYSILENT', '/NORESTART', '/NOCANCEL', '/SP-']
+const GIT_FOR_WINDOWS_SILENT_ARGS = [
+  '/VERYSILENT',
+  '/SUPPRESSMSGBOXES',
+  '/NORESTART',
+  '/NOCANCEL',
+  '/SP-',
+]
 
 function translate(locale: AppLocale, text: { 'zh-CN': string; en: string }): string {
   return text[locale]
@@ -57,15 +63,14 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
 }
 
 function buildResolveSdkmanJavaVersionCommand(featureVersion: string): string {
-  // SDKMAN list output changes column layout over time, so parse individual
-  // whitespace-separated tokens instead of grepping the whole line. Keep the
-  // pipeline free of single quotes to avoid PowerShell -> bash quoting issues.
-  const versionPattern = `^${featureVersion}(\\.[0-9]+)*-tem$`
+  // The current shell pipeline regressed in CI in two ways:
+  // - Windows Git Bash broke on the nested awk/double-quote form.
+  // - macOS failed to strip/parse the SDKMAN list output consistently.
+  // Parse the full stream in Node instead so both platforms share one parser.
+  const versionPattern = `${featureVersion}(?:\\.[0-9]+)*-tem`
   const candidateStream = [
     `sdk list java`,
-    `tr -d "\\r"`,
-    `sed -E "s/\\x1B\\[[0-9;]*[A-Za-z]//g"`,
-    `awk "{ for (i = 1; i <= NF; i++) if (\\$i ~ /${versionPattern}/) { print \\$i; exit } }"`,
+    `node -e "const fs = require('node:fs'); const input = fs.readFileSync(0, 'utf8').replace(/\\r/g, '').replace(/\\u001b\\[[0-9;]*[A-Za-z]/g, ''); const match = input.match(/(?:^|\\s)(${versionPattern})(?=\\s|$)/m); if (!match) process.exit(1); process.stdout.write(match[1]);"`,
   ].join(' | ')
   return [
     `SDKMAN_JAVA_VERSION="$(${candidateStream})"`,
