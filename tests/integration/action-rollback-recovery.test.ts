@@ -1,3 +1,7 @@
+/**
+ * Integration coverage for rollback recovery when cleanup or restore operations fail mid-flight.
+ */
+
 import { constants } from 'node:fs'
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

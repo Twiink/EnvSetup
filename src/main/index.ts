@@ -1,3 +1,7 @@
+/**
+ * Bootstraps the Electron main process and wires application lifecycle events to EnvSetup services.
+ */
+
 import { app, BrowserWindow, nativeImage } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

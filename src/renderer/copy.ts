@@ -1,3 +1,7 @@
+/**
+ * Provides localized renderer copy helpers and UI label lookups.
+ */
+
 import type {
   DetectedEnvironment,
   ErrorCode,

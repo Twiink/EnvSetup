@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the network check module.
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 
 import type { NetworkCheckTarget, ResolvedTemplate } from '../../src/main/core/contracts'

@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the precheck panel view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'

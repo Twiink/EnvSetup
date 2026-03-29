@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the task panel view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -108,7 +112,13 @@ describe('TaskPanel', () => {
 
   it('shows cancel button when task status is running', () => {
     const onCancelTask = vi.fn()
-    render(<TaskPanel {...baseProps} task={makeTask({ status: 'running' })} onCancelTask={onCancelTask} />)
+    render(
+      <TaskPanel
+        {...baseProps}
+        task={makeTask({ status: 'running' })}
+        onCancelTask={onCancelTask}
+      />,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '取消任务' }))
     expect(onCancelTask).toHaveBeenCalledOnce()

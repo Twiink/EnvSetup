@@ -1,3 +1,7 @@
+/**
+ * Fetches and normalizes installable Git versions for template defaults and overrides.
+ */
+
 const GIT_FOR_WINDOWS_RELEASE_URL =
   'https://api.github.com/repos/git-for-windows/git/releases/latest'
 

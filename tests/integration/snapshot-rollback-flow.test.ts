@@ -1,3 +1,7 @@
+/**
+ * Integration coverage for snapshot creation and rollback restoration across multi-step workflows.
+ */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

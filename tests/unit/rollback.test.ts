@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the rollback module.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { SnapshotMeta, FailureAnalysis, Snapshot } from '../../src/main/core/contracts'
 import { suggestRollbackSnapshots, executeRollback } from '../../src/main/core/rollback'

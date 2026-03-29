@@ -1,3 +1,7 @@
+/**
+ * Validates template field definitions and resolved values shared across the application.
+ */
+
 import type { Primitive, ResolvedTemplate, ResolvedTemplateField } from '../main/core/contracts'
 import type { AppLocale } from './locale'
 import { DEFAULT_LOCALE } from './locale'

@@ -1,3 +1,7 @@
+/**
+ * Performs reachability probes for official download endpoints before real installations.
+ */
+
 import type {
   AppPlatform,
   DownloadArtifact,
@@ -190,10 +194,8 @@ export async function runNetworkChecks(
 
   return Promise.all(
     targets.map((target) =>
-      networkResultCache.getOrLoad(
-        `${target.id}:${timeoutMs}`,
-        NETWORK_RESULT_CACHE_TTL_MS,
-        () => probeTarget(target, { fetchImpl, timeoutMs }),
+      networkResultCache.getOrLoad(`${target.id}:${timeoutMs}`, NETWORK_RESULT_CACHE_TTL_MS, () =>
+        probeTarget(target, { fetchImpl, timeoutMs }),
       ),
     ),
   )

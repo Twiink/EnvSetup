@@ -1,3 +1,7 @@
+/**
+ * Wraps platform detection and platform-specific path or command helpers.
+ */
+
 import { posix, win32 } from 'node:path'
 
 import type {

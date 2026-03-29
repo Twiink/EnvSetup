@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the environment module.
+ */
+
 import { access, chmod, mkdtemp, mkdir, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'

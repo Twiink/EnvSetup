@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the preload module.
+ */
+
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const invoke = vi.fn()

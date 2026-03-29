@@ -1,3 +1,7 @@
+/**
+ * Displays active task progress, logs, and high-level execution controls.
+ */
+
 import { useMemo, useState } from 'react'
 
 import type { InstallTask, TaskProgressEvent } from '../../main/core/contracts'

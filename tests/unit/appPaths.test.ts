@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the app paths module.
+ */
+
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

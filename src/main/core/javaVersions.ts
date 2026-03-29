@@ -1,3 +1,7 @@
+/**
+ * Fetches and normalizes installable Java distributions and LTS selections.
+ */
+
 const ADOPTIUM_RELEASES_URL = 'https://api.adoptium.net/v3/info/available_releases'
 const ADOPTIUM_LATEST_ASSETS_URL = 'https://api.adoptium.net/v3/assets/latest'
 

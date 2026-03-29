@@ -1,3 +1,7 @@
+/**
+ * Fetches and normalizes installable Python versions for templates and overrides.
+ */
+
 const PYTHON_EOL_API_URL = 'https://endoflife.date/api/python.json'
 
 export const DEFAULT_PYTHON_VERSIONS = ['3.13.4', '3.12.10'] as const

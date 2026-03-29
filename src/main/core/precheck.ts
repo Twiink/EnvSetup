@@ -1,3 +1,7 @@
+/**
+ * Runs baseline readiness checks before installation or cleanup tasks begin.
+ */
+
 import { constants } from 'node:fs'
 import { access } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'

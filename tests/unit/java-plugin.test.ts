@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the java plugin module.
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import { execFile } from 'node:child_process'
 

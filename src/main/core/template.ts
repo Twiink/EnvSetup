@@ -1,3 +1,7 @@
+/**
+ * Loads built-in templates and resolves them into executable installation plans.
+ */
+
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 

@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the override form view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -6,9 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ResolvedTemplate } from '../../src/main/core/contracts'
 import { OverrideForm } from '../../src/renderer/components/OverrideForm'
 
-const makeTemplate = (
-  overrides: Partial<ResolvedTemplate> = {},
-): ResolvedTemplate => ({
+const makeTemplate = (overrides: Partial<ResolvedTemplate> = {}): ResolvedTemplate => ({
   id: 'tpl-node',
   name: { 'zh-CN': 'Node.js 开发环境', en: 'Node.js Environment' },
   version: '1.0.0',

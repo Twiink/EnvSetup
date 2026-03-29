@@ -1,3 +1,7 @@
+/**
+ * Mounts the React renderer and starts the desktop UI.
+ */
+
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import App from './App'

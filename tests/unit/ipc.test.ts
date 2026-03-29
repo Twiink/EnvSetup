@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the ipc module.
+ */
+
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstallTask, Primitive, Snapshot } from '../../src/main/core/contracts'
 import type { CreateTaskInput } from '../../src/main/core/task'

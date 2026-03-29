@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the python plugin module.
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:child_process', () => ({

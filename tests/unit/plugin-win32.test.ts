@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the plugin win32 module.
+ */
+
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -78,7 +82,9 @@ describe('plugin import on win32', () => {
     expect(args[2]).toContain('& {')
     expect(args[2]).toContain('Get-Item -LiteralPath $archivePathArg')
     expect(args[2]).toContain('Get-Item -LiteralPath $destinationPathArg')
-    expect(args[2]).toContain('Expand-Archive -LiteralPath $archivePath -DestinationPath $destinationPath -Force')
+    expect(args[2]).toContain(
+      'Expand-Archive -LiteralPath $archivePath -DestinationPath $destinationPath -Force',
+    )
     expect(args[3]).toBe(zipPath)
     expect(String(args[4])).toContain(join(stagingDir, 'node-env-'))
   })

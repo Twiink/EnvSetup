@@ -1,3 +1,5 @@
+# Runs the CI workflow that builds EnvSetup and exercises real install, cleanup, and rollback scenarios.
+
 name: E2E Real Install
 
 on:

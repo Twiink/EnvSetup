@@ -1,3 +1,7 @@
+/**
+ * Captures and restores file-system and shell-environment snapshots around real cleanup flows.
+ */
+
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
@@ -206,17 +210,14 @@ async function saveSnapshotManifest(baseDir: string, manifest: SnapshotManifest)
 }
 
 function matchesManifestEntry(
-  entry:
-    | SnapshotManifest['files'][string]
-    | SnapshotManifest['shellConfigs'][string]
-    | undefined,
+  entry: SnapshotManifest['files'][string] | SnapshotManifest['shellConfigs'][string] | undefined,
   target: { mode: number; mtimeMs: number; size: number },
 ): boolean {
   return Boolean(
     entry &&
-      entry.mode === target.mode &&
-      entry.mtimeMs === target.mtimeMs &&
-      entry.size === target.size,
+    entry.mode === target.mode &&
+    entry.mtimeMs === target.mtimeMs &&
+    entry.size === target.size,
   )
 }
 
@@ -325,7 +326,11 @@ export async function createSnapshot(options: {
       const cachedEntry = snapshotManifest.files[targetPath]
       if (matchesManifestEntry(cachedEntry, targetStat) && cachedEntry) {
         if (await hasStoredObject(objectsDir, cachedEntry.hash)) {
-          files[targetPath] = { hash: cachedEntry.hash, mode: targetStat.mode, size: targetStat.size }
+          files[targetPath] = {
+            hash: cachedEntry.hash,
+            mode: targetStat.mode,
+            size: targetStat.size,
+          }
           nextSnapshotManifest.files[targetPath] = {
             hash: cachedEntry.hash,
             mode: targetStat.mode,

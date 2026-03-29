@@ -1,3 +1,7 @@
+/**
+ * Creates structured task logs that are reused across install, cleanup, and rollback flows.
+ */
+
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 

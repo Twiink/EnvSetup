@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the snapshot panel view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -35,9 +39,7 @@ afterEach(() => {
 
 describe('SnapshotPanel', () => {
   it('renders empty state when no snapshots', () => {
-    render(
-      <SnapshotPanel locale="zh-CN" onCreateSnapshot={vi.fn()} onDeleteSnapshot={vi.fn()} />,
-    )
+    render(<SnapshotPanel locale="zh-CN" onCreateSnapshot={vi.fn()} onDeleteSnapshot={vi.fn()} />)
 
     expect(screen.getByText('No snapshots yet.')).toBeInTheDocument()
   })
@@ -63,7 +65,11 @@ describe('SnapshotPanel', () => {
   it('calls onCreateSnapshot when create button clicked', () => {
     const onCreateSnapshot = vi.fn()
     render(
-      <SnapshotPanel locale="zh-CN" onCreateSnapshot={onCreateSnapshot} onDeleteSnapshot={vi.fn()} />,
+      <SnapshotPanel
+        locale="zh-CN"
+        onCreateSnapshot={onCreateSnapshot}
+        onDeleteSnapshot={vi.fn()}
+      />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Snapshot' }))

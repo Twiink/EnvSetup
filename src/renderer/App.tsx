@@ -1,3 +1,7 @@
+/**
+ * Coordinates template selection, localization, prechecks, and task state for the desktop application.
+ */
+
 import { useEffect, useState } from 'react'
 
 import type {

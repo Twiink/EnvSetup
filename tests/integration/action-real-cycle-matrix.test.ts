@@ -1,3 +1,7 @@
+/**
+ * Integration coverage for the GitHub Actions real install, cleanup, reinstall, and rollback matrix.
+ */
+
 import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
 import { access, mkdir, rm } from 'node:fs/promises'

@@ -1,3 +1,7 @@
+/**
+ * Collects rollback decisions when a task fails or cleanup restoration is required.
+ */
+
 import { useState } from 'react'
 
 import type { FailureAnalysis, RollbackResult, RollbackSuggestion } from '../../main/core/contracts'

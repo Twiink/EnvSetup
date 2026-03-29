@@ -1,3 +1,7 @@
+/**
+ * Restores environment state from snapshots when cleanup or install flows must be reverted.
+ */
+
 import type { AppPlatform, FailureAnalysis, RollbackResult, RollbackSuggestion } from './contracts'
 import { executePlatformCommandWithElevationFallback } from './elevation'
 import {

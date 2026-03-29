@@ -1,3 +1,7 @@
+/**
+ * Lets the user choose a template and review the tools included in that setup.
+ */
+
 import type { ResolvedTemplate } from '../../main/core/contracts'
 import type { AppLocale } from '../../shared/locale'
 import { resolveLocalizedText } from '../../shared/locale'

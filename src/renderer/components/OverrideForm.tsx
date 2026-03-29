@@ -1,3 +1,7 @@
+/**
+ * Renders editable template overrides for tool versions and advanced install options.
+ */
+
 import type { ChangeEvent } from 'react'
 
 import type { Primitive, ResolvedTemplate } from '../../main/core/contracts'

@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the template panel view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -86,9 +90,7 @@ describe('TemplatePanel', () => {
   })
 
   it('renders empty grid when templates array is empty', () => {
-    render(
-      <TemplatePanel locale="zh-CN" templates={[]} selectedTemplateId="" onSelect={vi.fn()} />,
-    )
+    render(<TemplatePanel locale="zh-CN" templates={[]} selectedTemplateId="" onSelect={vi.fn()} />)
 
     // Section header text should still render
     expect(screen.getByText('团队标准模板')).toBeInTheDocument()

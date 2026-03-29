@@ -1,3 +1,7 @@
+/**
+ * Loads localized strings and shared copy used by main-process workflows.
+ */
+
 import type { ErrorCode } from './contracts'
 import type { AppLocale, LocalizedTextInput } from '../../shared/locale'
 import { resolveLocalizedText } from '../../shared/locale'

@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the rollback dialog view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'

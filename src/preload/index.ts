@@ -1,3 +1,7 @@
+/**
+ * Exposes the safe EnvSetup preload bridge that the renderer uses to call main-process APIs.
+ */
+
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { EnvSetupApi, TaskProgressEvent } from '../main/core/contracts'

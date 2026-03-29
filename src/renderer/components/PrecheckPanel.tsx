@@ -1,3 +1,7 @@
+/**
+ * Displays precheck findings and download or network readiness before a task starts.
+ */
+
 import type {
   DetectedEnvironment,
   EnhancedPrecheckResult,

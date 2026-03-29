@@ -1,3 +1,7 @@
+/**
+ * Builds richer precheck diagnostics by combining environment state with plugin requirements.
+ */
+
 import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 

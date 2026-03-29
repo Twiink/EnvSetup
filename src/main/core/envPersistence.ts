@@ -1,3 +1,7 @@
+/**
+ * Reads and writes persisted environment selections and user overrides.
+ */
+
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'

@@ -1,3 +1,7 @@
+/**
+ * Provides lightweight in-memory caching for expensive runtime lookups inside the main process.
+ */
+
 type CacheEntry<T> = {
   expiresAt: number
   value: T

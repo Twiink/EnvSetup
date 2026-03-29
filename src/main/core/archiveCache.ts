@@ -1,3 +1,7 @@
+/**
+ * Caches extracted archives so repeated install flows can reuse unpacked payloads.
+ */
+
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'

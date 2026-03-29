@@ -1,3 +1,7 @@
+/**
+ * Validates official download sources, fetches artifacts, and persists them in the local download cache.
+ */
+
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -47,7 +51,9 @@ function makeError(code: ErrorCode, message: string): DownloadError {
 }
 
 function getDownloadableArtifacts(downloads: DownloadArtifact[]): DownloadArtifact[] {
-  return downloads.filter((download) => download.kind === 'archive' || download.kind === 'installer')
+  return downloads.filter(
+    (download) => download.kind === 'archive' || download.kind === 'installer',
+  )
 }
 
 function ensureOfficialHost(download: DownloadArtifact): void {

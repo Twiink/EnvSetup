@@ -1,3 +1,7 @@
+/**
+ * Renderer tests for the app view and its user interactions.
+ */
+
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -304,7 +308,12 @@ beforeEach(() => {
 
   const api: EnvSetupApi = {
     loadBootstrap: vi.fn().mockResolvedValue({
-      templates: [nodeTemplateFixture, javaTemplateFixture, pythonTemplateFixture, gitTemplateFixture],
+      templates: [
+        nodeTemplateFixture,
+        javaTemplateFixture,
+        pythonTemplateFixture,
+        gitTemplateFixture,
+      ],
       nodeLtsVersions: ['24.13.1', '22.22.1', '20.20.1'],
       javaLtsVersions: ['21.0.6', '17.0.14', '11.0.26'],
       pythonVersions: ['3.12.10', '3.11.10', '3.10.15'],

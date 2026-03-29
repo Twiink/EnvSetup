@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the enhanced precheck module.
+ */
+
 import { existsSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {

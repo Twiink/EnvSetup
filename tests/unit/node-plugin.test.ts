@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the node plugin module.
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({

@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the precheck runtime module.
+ */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { NetworkCheckResult, ResolvedTemplate } from '../../src/main/core/contracts'

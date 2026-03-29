@@ -1,3 +1,7 @@
+/**
+ * Centralizes user-scoped directories used for downloads, caches, snapshots, and plugin state.
+ */
+
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 

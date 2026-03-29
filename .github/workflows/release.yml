@@ -1,3 +1,5 @@
+# Builds release artifacts and packaged-app verification flows for supported EnvSetup platforms.
+
 name: Release
 
 on:

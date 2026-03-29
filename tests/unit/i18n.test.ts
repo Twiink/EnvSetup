@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the i18n module.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import { getPrecheckMessage } from '../../src/main/core/i18n'

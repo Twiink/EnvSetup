@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the snapshot module.
+ */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
@@ -324,35 +328,39 @@ describe('Snapshot - Metadata Management', () => {
     expect(meta.snapshots[0].canDelete).toBe(true)
   })
 
-  it('should enforce max snapshots limit by deleting oldest deletable', { timeout: 10000 }, async () => {
-    // 创建 5 个可删除快照
-    const snapshots = []
-    for (let i = 0; i < 5; i++) {
-      const s = await createSnapshot({
+  it(
+    'should enforce max snapshots limit by deleting oldest deletable',
+    { timeout: 10000 },
+    async () => {
+      // 创建 5 个可删除快照
+      const snapshots = []
+      for (let i = 0; i < 5; i++) {
+        const s = await createSnapshot({
+          baseDir: testDir,
+          taskId: `task-${i}`,
+          type: 'auto',
+          trackedPaths: [],
+        })
+        await updateSnapshotMeta(testDir, s)
+        await markSnapshotDeletable(testDir, s.id)
+        snapshots.push(s)
+      }
+
+      // 添加第 6 个，应触发清理
+      const newest = await createSnapshot({
         baseDir: testDir,
-        taskId: `task-${i}`,
+        taskId: 'task-5',
         type: 'auto',
         trackedPaths: [],
       })
-      await updateSnapshotMeta(testDir, s)
-      await markSnapshotDeletable(testDir, s.id)
-      snapshots.push(s)
-    }
+      await updateSnapshotMeta(testDir, newest)
 
-    // 添加第 6 个，应触发清理
-    const newest = await createSnapshot({
-      baseDir: testDir,
-      taskId: 'task-5',
-      type: 'auto',
-      trackedPaths: [],
-    })
-    await updateSnapshotMeta(testDir, newest)
-
-    const meta = await loadSnapshotMeta(testDir)
-    expect(meta.snapshots.length).toBeLessThanOrEqual(5)
-    // 最新快照应该保留
-    expect(meta.snapshots.some((s) => s.id === newest.id)).toBe(true)
-  })
+      const meta = await loadSnapshotMeta(testDir)
+      expect(meta.snapshots.length).toBeLessThanOrEqual(5)
+      // 最新快照应该保留
+      expect(meta.snapshots.some((s) => s.id === newest.id)).toBe(true)
+    },
+  )
 
   it('should not exceed limit when no deletable snapshots exist', async () => {
     // 创建 6 个不可删除快照

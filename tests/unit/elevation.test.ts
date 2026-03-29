@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the elevation module.
+ */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({

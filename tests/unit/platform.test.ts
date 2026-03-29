@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the platform module.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -227,7 +231,10 @@ describe('buildGitEnvChanges', () => {
     const changes = buildGitEnvChanges({ ...darwinGit, gitManager: 'homebrew' as const })
     expect(changes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: 'PATH', value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin' }),
+        expect.objectContaining({
+          key: 'PATH',
+          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+        }),
       ]),
     )
   })

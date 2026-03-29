@@ -1,3 +1,7 @@
+/**
+ * Registers IPC handlers that expose templates, bootstrap data, task actions, and rollback flows to the renderer.
+ */
+
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { stat } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'

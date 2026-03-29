@@ -1,3 +1,7 @@
+/**
+ * Integration coverage for environment restoration after install, cleanup, and rollback tasks.
+ */
+
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

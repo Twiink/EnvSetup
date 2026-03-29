@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the env persistence module.
+ */
+
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'

@@ -1,3 +1,7 @@
+/**
+ * Fetches and normalizes installable Node.js versions for templates and overrides.
+ */
+
 const NODE_DIST_INDEX_URL = 'https://nodejs.org/dist/index.json'
 
 export const DEFAULT_NODE_LTS_VERSIONS = ['24.13.1', '22.22.1', '20.20.1'] as const

@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the execution mode module.
+ */
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { resolveDryRun } from '../../src/main/core/executionMode'

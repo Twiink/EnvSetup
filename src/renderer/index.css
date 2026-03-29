@@ -1,3 +1,5 @@
+/* Defines the renderer-wide typography, layout, and component styling for the desktop window. */
+
 @font-face {
   font-family: 'FZSJ-ZHUZAYTE';
   src: url('../assets/font/FZSJ-ZHUZAYTE.ttf') format('truetype');

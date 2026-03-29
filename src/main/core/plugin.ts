@@ -1,3 +1,7 @@
+/**
+ * Loads built-in or imported plugins, validates manifests, and prepares plugin execution state.
+ */
+
 import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
 import { access, cp, mkdir, mkdtemp, readFile, readdir, stat } from 'node:fs/promises'

@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the restore environment module.
+ */
+
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 
 import type { Snapshot } from '../../src/main/core/contracts'

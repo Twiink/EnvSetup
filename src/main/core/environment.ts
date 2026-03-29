@@ -1,3 +1,7 @@
+/**
+ * Discovers installed toolchains and normalizes them into renderer-friendly environment snapshots.
+ */
+
 import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
 import { access, readFile, realpath, rm, writeFile } from 'node:fs/promises'

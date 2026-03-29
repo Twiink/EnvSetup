@@ -1,3 +1,7 @@
+/**
+ * Implements Node.js installation, cleanup, and rollback strategies across supported platforms.
+ */
+
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 

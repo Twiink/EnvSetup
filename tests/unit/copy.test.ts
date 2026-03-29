@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the copy module.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import {

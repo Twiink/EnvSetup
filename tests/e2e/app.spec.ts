@@ -1,3 +1,7 @@
+/**
+ * End-to-end coverage for the main desktop workflow from bootstrap to task execution.
+ */
+
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'

@@ -1,3 +1,7 @@
+/**
+ * Defines the shared EnvSetup contracts, task payloads, plugin types, and IPC-facing schemas.
+ */
+
 import type { AppLocale, LocalizedTextInput } from '../../shared/locale'
 
 export const SUPPORTED_PLATFORMS = ['darwin', 'win32'] as const

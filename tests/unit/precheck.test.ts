@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the precheck module.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import { runPrecheck } from '../../src/main/core/precheck'

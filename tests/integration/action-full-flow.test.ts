@@ -1,3 +1,7 @@
+/**
+ * Integration coverage for the full install, cleanup, and rollback flow exercised in CI-oriented scenarios.
+ */
+
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

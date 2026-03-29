@@ -1,3 +1,7 @@
+/**
+ * Detects and formats privilege-elevation commands for platform-specific install steps.
+ */
+
 import { execFile } from 'node:child_process'
 import { dirname } from 'node:path'
 import { promisify } from 'node:util'

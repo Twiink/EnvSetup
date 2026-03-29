@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the logger module.
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import { sanitizeLog } from '../../src/main/core/logger'

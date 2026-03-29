@@ -1,3 +1,7 @@
+/**
+ * Defines supported locales plus normalization helpers shared across the main and renderer processes.
+ */
+
 export const SUPPORTED_LOCALES = ['zh-CN', 'en'] as const
 export const DEFAULT_LOCALE = 'zh-CN' as const
 

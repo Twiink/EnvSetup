@@ -1,3 +1,7 @@
+/**
+ * Implements Git installation, cleanup, and rollback strategies across supported platforms.
+ */
+
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -108,7 +112,7 @@ function buildScoopGitUninstallCommand(): string {
     `if ($shimDir -and (Test-Path $shimDir)) { foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } } }`,
     // Final verification: check the same paths isScoopGitInstalled checks
     '$remainingPrefix = Get-ScoopGitPrefix $scoop',
-    "if ($remainingPrefix) { throw \"Scoop git uninstall did not remove the installed prefix: $remainingPrefix\" }",
+    'if ($remainingPrefix) { throw "Scoop git uninstall did not remove the installed prefix: $remainingPrefix" }',
     '}',
   ].join('; ')
 }

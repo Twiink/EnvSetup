@@ -1,3 +1,7 @@
+/**
+ * Shows snapshot details used to explain cleanup and rollback state to the user.
+ */
+
 import { useState } from 'react'
 
 import type { SnapshotMeta } from '../../main/core/contracts'
