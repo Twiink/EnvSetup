@@ -211,12 +211,9 @@ function buildDarwinPackageCommands(
     resolveDownloadedArtifactPath(resolvedDownloads, 'homebrew') ??
     `${input.installRootDir}/homebrew-install.sh`
 
+  const resolveBrewCmd = buildResolveHomebrewCommand()
   return [
-    buildResolveHomebrewCommand(),
-    `if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; fi`,
-    buildResolveHomebrewCommand(),
-    'if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi',
-    'HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install redis',
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install redis`,
   ]
 }
 
@@ -245,10 +242,9 @@ function buildWin32PackageCommands(
     resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
     `${input.installRootDir}\\install.ps1`
 
+  const resolveScoopCmd = buildResolveScoopCommand()
   return [
-    buildResolveScoopCommand(),
-    `if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }`,
-    '& $scoop install redis',
+    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install redis`,
   ]
 }
 

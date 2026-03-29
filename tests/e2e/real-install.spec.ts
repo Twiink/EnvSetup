@@ -261,9 +261,9 @@ async function runNodeInstallFlow(page: Page, managerLabel: string) {
   await page.locator('select[id="node.nodeManager"]').selectOption({ label: managerLabel })
   await page.locator('select[id="node.nodeVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
     timeout: 150_000,
@@ -276,9 +276,9 @@ async function runJavaInstallFlow(page: Page, managerLabel: string) {
   await page.locator('select[id="java.javaManager"]').selectOption({ label: managerLabel })
   await page.locator('select[id="java.javaVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
     timeout: 300_000,
@@ -293,9 +293,9 @@ async function runPythonInstallFlow(page: Page, managerLabel: string, timeout = 
   await page.locator('select[id="python.pythonManager"]').selectOption({ label: managerLabel })
   await page.locator('select[id="python.pythonVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({ timeout })
 }
@@ -305,9 +305,9 @@ async function runGitInstallFlow(page: Page, managerLabel: string) {
   await page.getByRole('button', { name: 'Git 版本控制' }).click()
   await page.locator('select[id="git.gitManager"]').selectOption({ label: managerLabel })
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
     timeout: 300_000,
@@ -323,9 +323,9 @@ async function runMysqlInstallFlow(page: Page, managerLabel?: string) {
     await page.locator('select[id="mysql.mysqlManager"]').selectOption({ label: managerLabel })
   }
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
     timeout: 300_000,
@@ -341,9 +341,9 @@ async function runRedisInstallFlow(page: Page, managerLabel?: string) {
     await page.locator('select[id="redis.redisManager"]').selectOption({ label: managerLabel })
   }
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
     timeout: 300_000,
@@ -362,9 +362,9 @@ async function runMavenInstallFlow(page: Page, managerLabel?: string, selectVers
     await page.locator('select[id="maven.mavenVersion"]').selectOption({ index: 0 })
   }
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/草稿|就绪|执行中/).first()).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: '开始执行' }).click()
   await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
     timeout: 300_000,
