@@ -260,9 +260,7 @@ function buildDarwinVerifyCommands(input: MysqlPluginParams): string[] {
   }
 
   return [
-    buildResolveHomebrewCommand(),
-    'if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi',
-    'MYSQL_BIN="$("$BREW_BIN" --prefix mysql 2>/dev/null)/bin/mysql"; if [ -x "$MYSQL_BIN" ]; then "$MYSQL_BIN" --version; else mysql --version; fi',
+    `${buildResolveHomebrewCommand()}; if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi; MYSQL_BIN="$("$BREW_BIN" --prefix mysql 2>/dev/null)/bin/mysql"; if [ -x "$MYSQL_BIN" ]; then "$MYSQL_BIN" --version; else mysql --version; fi`,
   ]
 }
 

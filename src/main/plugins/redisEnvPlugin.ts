@@ -273,9 +273,7 @@ function buildDarwinVerifyCommands(input: RedisPluginParams): string[] {
   }
 
   return [
-    buildResolveHomebrewCommand(),
-    'if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi',
-    'REDIS_BIN="$("$BREW_BIN" --prefix redis 2>/dev/null)/bin/redis-server"; if [ -x "$REDIS_BIN" ]; then "$REDIS_BIN" --version; else redis-server --version; fi',
+    `${buildResolveHomebrewCommand()}; if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi; REDIS_BIN="$("$BREW_BIN" --prefix redis 2>/dev/null)/bin/redis-server"; if [ -x "$REDIS_BIN" ]; then "$REDIS_BIN" --version; else redis-server --version; fi`,
   ]
 }
 
