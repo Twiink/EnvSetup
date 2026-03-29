@@ -2,6 +2,8 @@
  * 在安装或清理失败后根据快照恢复环境状态。
  */
 
+import { lstat, rm } from 'node:fs/promises'
+
 import type { AppPlatform, FailureAnalysis, RollbackResult, RollbackSuggestion } from './contracts'
 import { executePlatformCommandWithElevationFallback } from './elevation'
 import {
@@ -201,12 +203,11 @@ export async function executeRollback(
       })
     }
 
-    // 第 3 步：把受追踪目录恢复为快照中的精确内容，补回缺失文件并清理新增文件。
-    const reconcileRoots = [
-      ...(trackedPaths.length > 0 ? trackedPaths : snapshot.trackedPaths),
-      ...(installPaths ?? []),
-    ]
-    const protectedPathErrors = reconcileRoots
+    // 第 3 步：把受追踪路径恢复为快照中的精确内容，补回缺失文件并清理新增文件。
+    // installPaths 语义是「必须彻底删除」，不参与快照协调，避免被 snapshotHasDescendant 保护。
+    const trackedRoots = trackedPaths.length > 0 ? trackedPaths : snapshot.trackedPaths
+    const allRoots = [...trackedRoots, ...(installPaths ?? [])]
+    const protectedPathErrors = allRoots
       .filter((dirPath) => !isCleanupAllowedPath(dirPath))
       .map((dirPath) => ({
         path: dirPath,
@@ -215,16 +216,37 @@ export async function executeRollback(
     result.errors.push(...protectedPathErrors)
 
     let directoriesRemoved = 0
-    const allowedRoots = reconcileRoots.filter((dirPath) => isCleanupAllowedPath(dirPath))
-    if (allowedRoots.length > 0) {
+    const allowedTrackedRoots = trackedRoots.filter((dirPath) => isCleanupAllowedPath(dirPath))
+    if (allowedTrackedRoots.length > 0) {
       const reconcileResult = await reconcileSnapshotState({
         baseDir,
         snapshotId,
-        paths: allowedRoots,
+        paths: allowedTrackedRoots,
         allowElevation: true,
       })
       directoriesRemoved = reconcileResult.directoriesRemoved
       result.errors.push(...reconcileResult.errors)
+    }
+
+    // installPaths 强制删除：reconcile 不处理它们，这里单独 rm。
+    const allowedInstallPaths = (installPaths ?? []).filter((dirPath) =>
+      isCleanupAllowedPath(dirPath),
+    )
+    for (const installPath of allowedInstallPaths) {
+      try {
+        const st = await lstat(installPath).catch(() => null)
+        if (st !== null) {
+          await rm(installPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
+          if (st.isDirectory()) {
+            directoriesRemoved++
+          }
+        }
+      } catch (error) {
+        result.errors.push({
+          path: installPath,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     // 第 4 步：补跑插件级回滚命令，处理快照机制无法覆盖的外部副作用。
