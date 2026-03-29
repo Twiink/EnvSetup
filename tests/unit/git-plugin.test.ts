@@ -135,6 +135,12 @@ describe('git env plugin', () => {
 
     expect(result.executionMode).toBe('real_run')
     expect(result.logs).toContain('preexisting_scoop_root=absent')
+    expect(result.logs).toContain('fresh_scoop_bootstrap_retry=enabled')
+    expect(result.commands.join('\n')).toContain('$maxAttempts = 2')
+    expect(result.commands.join('\n')).toContain(
+      'Retrying fresh Scoop bootstrap after incomplete git install.',
+    )
+    expect(result.commands.join('\n')).toContain('$attemptDiagnostics += $diag')
     expect(result.rollbackCommands?.join('\n')).toContain(
       'Remove-Item -LiteralPath $r -Recurse -Force',
     )
@@ -142,6 +148,40 @@ describe('git env plugin', () => {
       'Scoop rollback did not remove the bootstrap root',
     )
     expect(result.rollbackCommands?.join('\n')).not.toContain(
+      "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1'))",
+    )
+  })
+
+  it('keeps Scoop retry reset disabled when Scoop already existed before install', async () => {
+    vi.mocked(execFile).mockClear()
+    vi.mocked(execFile)
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: 'C:\\Users\\runneradmin\\scoop\n', stderr: '' })
+      })
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: 'Installed.', stderr: '' })
+      })
+
+    const result = await gitPlugin.install({
+      gitManager: 'scoop',
+      installRootDir: 'C:\\toolchain',
+      downloadCacheDir: 'C:\\download-cache',
+      dryRun: false,
+      platform: 'win32',
+      onProgress: vi.fn(),
+    })
+
+    expect(result.executionMode).toBe('real_run')
+    expect(result.logs).toContain('preexisting_scoop_root=C:\\Users\\runneradmin\\scoop')
+    expect(result.logs).toContain('fresh_scoop_bootstrap_retry=disabled')
+    expect(result.commands.join('\n')).toContain('$maxAttempts = 1')
+    expect(result.commands.join('\n')).not.toContain(
+      'Retrying fresh Scoop bootstrap after incomplete git install.',
+    )
+    expect(result.rollbackCommands?.join('\n')).not.toContain(
+      'Remove-Item -LiteralPath $r -Recurse -Force',
+    )
+    expect(result.rollbackCommands?.join('\n')).toContain(
       "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1'))",
     )
   })

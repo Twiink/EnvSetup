@@ -341,37 +341,86 @@ function buildWindowsDirectCommands(
   return commands
 }
 
-function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[]): string[] {
+function buildScoopBootstrapCommands(resolvedDownloads?: DownloadResolvedArtifact[]): string[] {
+  const installerPath = resolveDownloadedArtifactPath(resolvedDownloads, 'scoop')
+
+  if (installerPath) {
+    return [`$installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)})`]
+  }
+
+  return [
+    `$installer = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-scoop-install.ps1'`,
+    'Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer',
+  ]
+}
+
+function buildWindowsScoopCommands(
+  resolvedDownloads?: DownloadResolvedArtifact[],
+  options: { allowBootstrapReset?: boolean } = {},
+): string[] {
   const resolveScoopCommand = buildResolveScoopCommand()
   const setScoopEnvFallback =
     "if (-not $env:SCOOP) { $env:SCOOP = Join-Path $env:USERPROFILE 'scoop' }"
-  const postInstallVerify = [
-    '$scoopRoots = @()',
-    '$scoopRoots += Split-Path (Split-Path $scoop -Parent) -Parent',
-    'if ($env:SCOOP) { $scoopRoots += $env:SCOOP }',
-    "$scoopRoots += Join-Path $env:USERPROFILE 'scoop'",
-    '$scoopRoots = $scoopRoots | Select-Object -Unique',
-    '$foundAppsGit = $false',
-    "foreach ($r in $scoopRoots) { if (Test-Path (Join-Path $r 'apps\\git')) { $foundAppsGit = $true; break } }",
-    'if (-not $foundAppsGit) {',
-    '$listOutput = & $scoop list *>&1 | Out-String',
-    "$diag = 'scoopRoots=' + ($scoopRoots -join ',') + ' SCOOP=' + $env:SCOOP + ' USERPROFILE=' + $env:USERPROFILE + ' scoopList=' + $listOutput",
-    'throw ("Scoop git install did not create apps\\git. " + $diag)',
-    '}',
-  ].join('; ')
-  const installerPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
-    '$installer = Join-Path ([System.IO.Path]::GetTempPath()) \'envsetup-scoop-install.ps1\'; Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer'
+  const allowBootstrapReset = options.allowBootstrapReset === true
+  const bootstrapInstallerCommands = buildScoopBootstrapCommands(resolvedDownloads)
+  const cleanupInstallerCommands = resolvedDownloads
+    ? []
+    : ['Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue']
+
   return [
-    resolvedDownloads
-      ? `${resolveScoopCommand}; ${setScoopEnvFallback}; if (-not $scoop) { $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }; ${postInstallVerify}`
-      : `${resolveScoopCommand}; ${setScoopEnvFallback}; if (-not $scoop) { ${installerPath}; function Get-ExecutionPolicy { 'ByPass' }; & $installer; $installerExitCode = $LASTEXITCODE; Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue; Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue; if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }; ${resolveScoopCommand} }; if (-not $scoop) { throw 'Failed to locate Scoop.' }; & $scoop install git; if ($LASTEXITCODE -ne 0) { throw "Scoop git install failed with exit code $LASTEXITCODE." }; ${postInstallVerify}`,
+    [
+      resolveScoopCommand,
+      setScoopEnvFallback,
+      `$maxAttempts = ${allowBootstrapReset ? 2 : 1}`,
+      '$attempt = 1',
+      '$attemptDiagnostics = @()',
+      'while ($true) {',
+      '  if (-not $scoop) {',
+      ...bootstrapInstallerCommands.map((command) => `    ${command}`),
+      "    function Get-ExecutionPolicy { 'ByPass' }",
+      '    & $installer',
+      '    $installerExitCode = $LASTEXITCODE',
+      '    Remove-Item Function:\\Get-ExecutionPolicy -ErrorAction SilentlyContinue',
+      ...cleanupInstallerCommands.map((command) => `    ${command}`),
+      '    if ($installerExitCode -ne 0) { throw "Scoop installer failed with exit code $installerExitCode." }',
+      `    ${resolveScoopCommand}`,
+      '  }',
+      "  if (-not $scoop) { throw 'Failed to locate Scoop.' }",
+      '  & $scoop install git',
+      '  $installExitCode = $LASTEXITCODE',
+      `  ${buildScoopGitRootCleanupCommand()}`,
+      '  $foundAppsGit = $false',
+      "  foreach ($r in $scoopRoots) { if (Test-Path (Join-Path $r 'apps\\git')) { $foundAppsGit = $true; break } }",
+      "  $listOutput = if ($scoop) { & $scoop list *>&1 | Out-String } else { 'SCOOP_UNAVAILABLE' }",
+      "  $diag = 'attempt=' + $attempt + ' scoopRoots=' + ($scoopRoots -join ',') + ' SCOOP=' + $env:SCOOP + ' USERPROFILE=' + $env:USERPROFILE + ' scoopList=' + $listOutput",
+      '  $attemptDiagnostics += $diag',
+      '  if ($installExitCode -eq 0 -and $foundAppsGit) {',
+      '    break',
+      '  }',
+      ...(allowBootstrapReset
+        ? [
+            '  if ($attempt -lt $maxAttempts) {',
+            '    Write-Output "Retrying fresh Scoop bootstrap after incomplete git install."',
+            '    foreach ($r in $scoopRoots) { if ($r -and (Test-Path $r)) { Remove-Item -LiteralPath $r -Recurse -Force -ErrorAction SilentlyContinue } }',
+            '    $scoop = $null',
+            '    $attempt += 1',
+            '    continue',
+            '  }',
+          ]
+        : []),
+      '  if ($installExitCode -ne 0) {',
+      '    throw ("Scoop git install failed with exit code " + $installExitCode + ". " + ($attemptDiagnostics -join " || "))',
+      '  }',
+      '  throw ("Scoop git install did not create apps\\git. " + ($attemptDiagnostics -join " || "))',
+      '}',
+    ].join('\n'),
   ]
 }
 
 function buildInstallCommands(
   input: GitPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
+  options: { allowScoopBootstrapReset?: boolean } = {},
 ): string[] {
   if (input.gitManager === 'git') {
     return input.platform === 'darwin'
@@ -383,7 +432,9 @@ function buildInstallCommands(
     return buildDarwinHomebrewCommands(resolvedDownloads)
   }
 
-  return buildWindowsScoopCommands(resolvedDownloads)
+  return buildWindowsScoopCommands(resolvedDownloads, {
+    allowBootstrapReset: options.allowScoopBootstrapReset,
+  })
 }
 
 function buildRollbackCommands(input: GitPluginParams): string[] {
@@ -501,6 +552,7 @@ const gitEnvPlugin = {
     const envChanges = buildGitEnvChanges(params)
     let commands = buildInstallCommands(params)
     let preExistingScoopRoot: string | undefined
+    let allowFreshScoopBootstrapReset = false
 
     validateOfficialDownloads(downloads)
 
@@ -518,6 +570,10 @@ const gitEnvPlugin = {
           preExistingScoopRoot
             ? `preexisting_scoop_root=${preExistingScoopRoot}`
             : 'preexisting_scoop_root=absent',
+        )
+        allowFreshScoopBootstrapReset = !preExistingScoopRoot
+        logs.push(
+          `fresh_scoop_bootstrap_retry=${allowFreshScoopBootstrapReset ? 'enabled' : 'disabled'}`,
         )
         rollbackCommands = [
           buildScoopGitUninstallCommand({ removeScoopRoots: !preExistingScoopRoot }),
@@ -543,7 +599,9 @@ const gitEnvPlugin = {
       )
       appendPhaseLog(logs, 'download', downloadStartedAt, `artifacts=${resolvedDownloads.length}`)
 
-      commands = buildInstallCommands(params, resolvedDownloads)
+      commands = buildInstallCommands(params, resolvedDownloads, {
+        allowScoopBootstrapReset: allowFreshScoopBootstrapReset,
+      })
       const commandStartedAt = Date.now()
       logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
