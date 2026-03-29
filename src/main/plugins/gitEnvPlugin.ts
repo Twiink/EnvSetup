@@ -101,10 +101,23 @@ function buildScoopGitRootCleanupCommand(): string {
   ].join('; ')
 }
 
+function buildForceRemoveScoopRootsCommand(): string {
+  return [
+    'foreach ($r in $scoopRoots) {',
+    'if (-not $r -or -not (Test-Path $r)) { continue }',
+    'Remove-Item -LiteralPath $r -Recurse -Force -ErrorAction SilentlyContinue',
+    'if (Test-Path $r) {',
+    "& cmd.exe /d /c ('rd /s /q \"' + $r + '\"') *> $null",
+    '}',
+    '}',
+  ].join('; ')
+}
+
 function buildScoopGitUninstallCommand(options: { removeScoopRoots?: boolean } = {}): string {
   const setScoopEnvFallback =
     "if (-not $env:SCOOP) { $env:SCOOP = Join-Path $env:USERPROFILE 'scoop' }"
   const scoopRootCleanup = buildScoopGitRootCleanupCommand()
+  const scoopRootForceRemoval = buildForceRemoveScoopRootsCommand()
 
   return [
     buildResolveScoopGitPrefixFunction(),
@@ -113,9 +126,10 @@ function buildScoopGitUninstallCommand(options: { removeScoopRoots?: boolean } =
     'if ($scoop) {',
     '$prefix = Get-ScoopGitPrefix $scoop',
     'if ($prefix) { & $scoop uninstall git *> $null; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." } }',
+    'Start-Sleep -Milliseconds 250',
     scoopRootCleanup,
     options.removeScoopRoots
-      ? 'foreach ($r in $scoopRoots) { if ($r -and (Test-Path $r)) { Remove-Item -LiteralPath $r -Recurse -Force } }'
+      ? scoopRootForceRemoval
       : "foreach ($r in $scoopRoots) { $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { Remove-Item -LiteralPath $gd -Recurse -Force } }",
     options.removeScoopRoots
       ? 'foreach ($r in $scoopRoots) { if ($r -and (Test-Path $r)) { throw "Scoop rollback did not remove the bootstrap root: $r" } }'

@@ -145,6 +145,10 @@ describe('git env plugin', () => {
       'Remove-Item -LiteralPath $r -Recurse -Force',
     )
     expect(result.rollbackCommands?.join('\n')).toContain(
+      `& cmd.exe /d /c ('rd /s /q "' + $r + '"') *> $null`,
+    )
+    expect(result.rollbackCommands?.join('\n')).toContain('Start-Sleep -Milliseconds 250')
+    expect(result.rollbackCommands?.join('\n')).toContain(
       'Scoop rollback did not remove the bootstrap root',
     )
     expect(result.rollbackCommands?.join('\n')).not.toContain(

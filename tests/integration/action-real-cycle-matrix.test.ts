@@ -377,6 +377,16 @@ async function assertRealRollbackSucceeded(
     rollbackCommands,
   })
 
+  if (!rollbackResult.success) {
+    console.error(
+      [
+        `[${testCase.name}] rollback failed`,
+        rollbackResult.message,
+        ...rollbackResult.errors.map((error) => `${error.path}: ${error.error}`),
+      ].join('\n'),
+    )
+  }
+
   expect(rollbackResult.success).toBe(true)
   expect(rollbackResult.executionMode).toBe('real_run')
   if (testCase.expectInstallRootAfterInstall !== false) {
