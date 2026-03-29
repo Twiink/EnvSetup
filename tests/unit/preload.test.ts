@@ -55,6 +55,13 @@ describe('preload', () => {
     expect(invoke).toHaveBeenCalledWith('bootstrap:load')
   })
 
+  it('maps listMavenVersions to maven:list-versions invoke', async () => {
+    const api = await getApi()
+
+    api.listMavenVersions()
+    expect(invoke).toHaveBeenCalledWith('maven:list-versions')
+  })
+
   it('maps task cancel and cleanup actions to IPC invokes', async () => {
     const api = await getApi()
     const detection = { id: 'node:1', tool: 'node' }

@@ -180,6 +180,10 @@ async function createAndStartTask(
         values['git.gitVersion'] = bootstrap.gitVersions[0]
       }
 
+      if ('maven.mavenVersion' in values && bootstrap.mavenVersions[0]) {
+        values['maven.mavenVersion'] = bootstrap.mavenVersions[0]
+      }
+
       Object.assign(values, overrides)
 
       const task = await window.envSetup.createTask({
@@ -215,10 +219,14 @@ async function executeRollbackViaApp(page: Page, snapshotId: string, installRoot
 }
 
 async function isHomebrewGitInstalled(): Promise<boolean> {
+  return isHomebrewFormulaInstalled('git')
+}
+
+async function isHomebrewFormulaInstalled(formula: string): Promise<boolean> {
   try {
     await execFileAsync('sh', [
       '-c',
-      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; [ -n "$BREW_BIN" ] && "$BREW_BIN" list --versions git >/dev/null 2>&1`,
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; [ -n "$BREW_BIN" ] && "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1`,
     ])
     return true
   } catch {
@@ -227,13 +235,17 @@ async function isHomebrewGitInstalled(): Promise<boolean> {
 }
 
 async function isScoopGitInstalled(): Promise<boolean> {
+  return isScoopPackageInstalled('git')
+}
+
+async function isScoopPackageInstalled(packageName: string): Promise<boolean> {
   try {
     await execFileAsync('powershell', [
       '-NoProfile',
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; if (-not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }; $rawPrefix = & $scoop prefix git 2>$null | Select-Object -First 1; if ($rawPrefix) { $prefix = $rawPrefix.ToString().Trim(); if ($prefix -and [System.IO.Path]::IsPathRooted($prefix) -and (Test-Path $prefix)) { exit 0 } }; $roots = @($env:SCOOP); $roots += Join-Path $env:USERPROFILE 'scoop'; $roots = $roots | Select-Object -Unique; foreach ($r in $roots) { $gc = Join-Path $r 'apps\\git\\current'; if (Test-Path $gc) { exit 0 }; $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { $vd = Get-ChildItem -Path $gd -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'current' } | Select-Object -First 1; if ($vd) { exit 0 } } }; exit 1`,
+      `$pkg = '${packageName}'; $scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; if (-not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }; $rawPrefix = & $scoop prefix $pkg 2>$null | Select-Object -First 1; if ($rawPrefix) { $prefix = $rawPrefix.ToString().Trim(); if ($prefix -and [System.IO.Path]::IsPathRooted($prefix) -and (Test-Path $prefix)) { exit 0 } }; $roots = @($env:SCOOP); $roots += Join-Path $env:USERPROFILE 'scoop'; $roots = $roots | Select-Object -Unique; foreach ($r in $roots) { $current = Join-Path $r ('apps\\' + $pkg + '\\current'); if (Test-Path $current) { exit 0 }; $dir = Join-Path $r ('apps\\' + $pkg); if (Test-Path $dir) { $vd = Get-ChildItem -Path $dir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'current' } | Select-Object -First 1; if ($vd) { exit 0 } } }; exit 1`,
     ])
     return true
   } catch {
@@ -292,6 +304,52 @@ async function runGitInstallFlow(page: Page, managerLabel: string) {
   await expect(page.getByRole('button', { name: 'Git 版本控制' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Git 版本控制' }).click()
   await page.locator('select[id="git.gitManager"]').selectOption({ label: managerLabel })
+  await page.getByRole('button', { name: '运行预检' }).click()
+  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: '创建任务' }).click()
+  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: '开始执行' }).click()
+  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
+    timeout: 300_000,
+  })
+}
+
+async function runMysqlInstallFlow(page: Page) {
+  await expect(page.getByRole('button', { name: 'MySQL 数据库环境' })).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.getByRole('button', { name: 'MySQL 数据库环境' }).click()
+  await page.getByRole('button', { name: '运行预检' }).click()
+  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: '创建任务' }).click()
+  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: '开始执行' }).click()
+  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
+    timeout: 300_000,
+  })
+}
+
+async function runRedisInstallFlow(page: Page) {
+  await expect(page.getByRole('button', { name: 'Redis 缓存环境' })).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.getByRole('button', { name: 'Redis 缓存环境' }).click()
+  await page.getByRole('button', { name: '运行预检' }).click()
+  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: '创建任务' }).click()
+  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: '开始执行' }).click()
+  await expect(page.getByText(/成功|失败|部分成功|校验成功/).first()).toBeVisible({
+    timeout: 300_000,
+  })
+}
+
+async function runMavenInstallFlow(page: Page) {
+  await expect(page.getByRole('button', { name: 'Maven 构建环境' })).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.getByRole('button', { name: 'Maven 构建环境' }).click()
+  await page.locator('select[id="maven.mavenVersion"]').selectOption({ index: 0 })
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
@@ -365,6 +423,47 @@ const realRollbackCases = [
       'git.installRootDir': installRoot,
     }),
   },
+  {
+    name: 'maven direct',
+    templateId: 'maven-template',
+    buildOverrides: (installRoot: string) => ({
+      'maven.mavenManager': 'maven',
+      'maven.mavenVersion': '3.9.11',
+      'maven.installRootDir': installRoot,
+    }),
+  },
+  ...(isMac
+    ? [
+        {
+          name: 'mysql package',
+          templateId: 'mysql-template',
+          buildOverrides: (installRoot: string) => ({
+            'mysql.mysqlManager': 'package',
+            'mysql.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isHomebrewFormulaInstalled('mysql')).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isHomebrewFormulaInstalled('mysql')).toBe(false)
+          },
+        },
+        {
+          name: 'redis package',
+          templateId: 'redis-template',
+          buildOverrides: (installRoot: string) => ({
+            'redis.redisManager': 'package',
+            'redis.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isHomebrewFormulaInstalled('redis')).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isHomebrewFormulaInstalled('redis')).toBe(false)
+          },
+        },
+      ]
+    : []),
   ...(isMac
     ? [
         {
@@ -397,6 +496,34 @@ const realRollbackCases = [
           },
           verifyRolledBackState: async () => {
             expect(await isScoopGitInstalled()).toBe(false)
+          },
+        },
+        {
+          name: 'mysql package',
+          templateId: 'mysql-template',
+          buildOverrides: (installRoot: string) => ({
+            'mysql.mysqlManager': 'package',
+            'mysql.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isScoopPackageInstalled('mysql')).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isScoopPackageInstalled('mysql')).toBe(false)
+          },
+        },
+        {
+          name: 'redis package',
+          templateId: 'redis-template',
+          buildOverrides: (installRoot: string) => ({
+            'redis.redisManager': 'package',
+            'redis.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isScoopPackageInstalled('redis')).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isScoopPackageInstalled('redis')).toBe(false)
           },
         },
       ]
@@ -536,6 +663,49 @@ test.describe('real install', () => {
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('git-scoop'))
     try {
       await runGitInstallFlow(page, '使用 Scoop 安装 Git')
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
+  // ============================================================
+  // MySQL / Redis / Maven
+  // ============================================================
+
+  test.skip('mysql package install reaches terminal success path', async () => {
+    test.setTimeout(300_000)
+    const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('mysql-package'))
+    try {
+      await runMysqlInstallFlow(page)
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
+  test.skip('redis package install reaches terminal success path', async () => {
+    test.setTimeout(300_000)
+    const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('redis-package'))
+    try {
+      await runRedisInstallFlow(page)
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
+  test.skip('maven direct install reaches terminal success path', async () => {
+    test.setTimeout(300_000)
+    const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('maven-direct'))
+    try {
+      await runMavenInstallFlow(page)
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
     } finally {

@@ -1,0 +1,24 @@
+{
+  "id": "redis-env",
+  "name": {
+    "zh-CN": "Redis 缓存环境",
+    "en": "Redis Cache Environment"
+  },
+  "version": "0.1.0",
+  "mainAppVersion": "^0.1.0",
+  "platforms": ["darwin", "win32"],
+  "permissions": ["download", "write_path", "modify_env"],
+  "parameters": {
+    "redisManager": {
+      "type": "enum",
+      "values": ["package"],
+      "required": true
+    },
+    "installRootDir": {
+      "type": "path",
+      "required": true
+    }
+  },
+  "dependencies": [],
+  "entry": "index.ts"
+}

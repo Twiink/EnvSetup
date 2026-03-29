@@ -315,6 +315,34 @@ const templateFieldLabelMap: Record<string, LocalizedTextInput> = {
     'zh-CN': '工具安装根目录',
     en: 'Tool Install Root',
   },
+  'mysql.mysqlManager': {
+    'zh-CN': 'MySQL 安装方式',
+    en: 'MySQL Installation Mode',
+  },
+  'mysql.installRootDir': {
+    'zh-CN': '工具安装根目录',
+    en: 'Tool Install Root',
+  },
+  'redis.redisManager': {
+    'zh-CN': 'Redis 安装方式',
+    en: 'Redis Installation Mode',
+  },
+  'redis.installRootDir': {
+    'zh-CN': '工具安装根目录',
+    en: 'Tool Install Root',
+  },
+  'maven.mavenManager': {
+    'zh-CN': 'Maven 安装方式',
+    en: 'Maven Installation Mode',
+  },
+  'maven.mavenVersion': {
+    'zh-CN': 'Maven 版本',
+    en: 'Maven Version',
+  },
+  'maven.installRootDir': {
+    'zh-CN': '工具安装根目录',
+    en: 'Tool Install Root',
+  },
 }
 
 const templateOptionLabelMap: Record<string, LocalizedTextInput> = {
@@ -358,6 +386,14 @@ const templateOptionLabelMap: Record<string, LocalizedTextInput> = {
     'zh-CN': '使用 Scoop 安装 Git',
     en: 'Install Git with Scoop',
   },
+  package: {
+    'zh-CN': '使用平台包管理器安装',
+    en: 'Install with the Platform Package Manager',
+  },
+  maven: {
+    'zh-CN': '直接安装 Maven',
+    en: 'Install Maven Directly',
+  },
 }
 
 const pluginSummaryMap: Record<string, LocalizedTextInput> = {
@@ -377,6 +413,30 @@ const pluginSummaryMap: Record<string, LocalizedTextInput> = {
     'zh-CN': 'Git 环境安装命令已执行完成。',
     en: 'Completed Git environment install commands.',
   },
+  'mysql-env.dry_run': {
+    'zh-CN': '已生成 MySQL 环境安装的演练计划。',
+    en: 'Prepared a dry-run plan for the MySQL environment.',
+  },
+  'mysql-env.real_run': {
+    'zh-CN': 'MySQL 环境安装命令已执行完成。',
+    en: 'Completed MySQL environment install commands.',
+  },
+  'redis-env.dry_run': {
+    'zh-CN': '已生成 Redis 环境安装的演练计划。',
+    en: 'Prepared a dry-run plan for the Redis environment.',
+  },
+  'redis-env.real_run': {
+    'zh-CN': 'Redis 环境安装命令已执行完成。',
+    en: 'Completed Redis environment install commands.',
+  },
+  'maven-env.dry_run': {
+    'zh-CN': '已生成 Maven 环境安装的演练计划。',
+    en: 'Prepared a dry-run plan for the Maven environment.',
+  },
+  'maven-env.real_run': {
+    'zh-CN': 'Maven 环境安装命令已执行完成。',
+    en: 'Completed Maven environment install commands.',
+  },
 }
 
 const detectedEnvironmentKindMap: Record<
@@ -392,6 +452,18 @@ const detectedEnvironmentKindMap: Record<
       'zh-CN': 'Git 管理目录',
       en: 'Git Managed Directory',
     },
+    mysql: {
+      'zh-CN': 'MySQL 管理目录',
+      en: 'MySQL Managed Directory',
+    },
+    redis: {
+      'zh-CN': 'Redis 管理目录',
+      en: 'Redis Managed Directory',
+    },
+    maven: {
+      'zh-CN': 'Maven 管理目录',
+      en: 'Maven Managed Directory',
+    },
   },
   manager_root: {
     node: {
@@ -405,6 +477,14 @@ const detectedEnvironmentKindMap: Record<
     git: {
       'zh-CN': 'Git 管理器目录',
       en: 'Git Manager Directory',
+    },
+    mysql: {
+      'zh-CN': 'MySQL 管理器目录',
+      en: 'MySQL Manager Directory',
+    },
+    redis: {
+      'zh-CN': 'Redis 管理器目录',
+      en: 'Redis Manager Directory',
     },
   },
   runtime_executable: {
@@ -424,11 +504,35 @@ const detectedEnvironmentKindMap: Record<
       'zh-CN': 'Git 可执行文件',
       en: 'Git Executable',
     },
+    mysql: {
+      'zh-CN': 'MySQL 可执行文件',
+      en: 'MySQL Executable',
+    },
+    redis: {
+      'zh-CN': 'Redis 可执行文件',
+      en: 'Redis Executable',
+    },
+    maven: {
+      'zh-CN': 'Maven 可执行文件',
+      en: 'Maven Executable',
+    },
   },
   runtime_home: {
     java: {
       'zh-CN': 'JAVA_HOME',
       en: 'JAVA_HOME',
+    },
+    mysql: {
+      'zh-CN': 'MYSQL_HOME',
+      en: 'MYSQL_HOME',
+    },
+    redis: {
+      'zh-CN': 'REDIS_HOME',
+      en: 'REDIS_HOME',
+    },
+    maven: {
+      'zh-CN': 'MAVEN_HOME',
+      en: 'MAVEN_HOME',
     },
   },
   global_prefix: {
@@ -481,6 +585,10 @@ const networkCheckToolLabelMap: Record<NetworkCheckTarget['tool'], LocalizedText
   'git-for-windows': {
     'zh-CN': 'Git for Windows 官方源',
     en: 'Git for Windows Official Source',
+  },
+  maven: {
+    'zh-CN': 'Maven 官方源',
+    en: 'Maven Official Source',
   },
   homebrew: {
     'zh-CN': 'Homebrew 官方源',

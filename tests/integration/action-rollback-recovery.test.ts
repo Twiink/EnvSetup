@@ -26,6 +26,9 @@ import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
 import javaEnvPlugin from '../../src/main/plugins/javaEnvPlugin'
 import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
 import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
+import mysqlEnvPlugin from '../../src/main/plugins/mysqlEnvPlugin'
+import redisEnvPlugin from '../../src/main/plugins/redisEnvPlugin'
+import mavenEnvPlugin from '../../src/main/plugins/mavenEnvPlugin'
 
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
 const platform: AppPlatform = process.platform as AppPlatform
@@ -93,10 +96,10 @@ function expectRemovedPath(actualPath: string | undefined, expectedPath: string)
 // ============================================================
 
 type ToolCase = {
-  tool: 'node' | 'java' | 'python' | 'git'
+  tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
   managerKey: string
   manager: string
-  versionKey: string
+  versionKey?: string
   pluginId: string
   templateId: string
 }
@@ -174,6 +177,28 @@ const allCases: ToolCase[] = [
     pluginId: 'git-env',
     templateId: 'git-template',
   },
+  {
+    tool: 'mysql',
+    managerKey: 'mysqlManager',
+    manager: 'package',
+    pluginId: 'mysql-env',
+    templateId: 'mysql-template',
+  },
+  {
+    tool: 'redis',
+    managerKey: 'redisManager',
+    manager: 'package',
+    pluginId: 'redis-env',
+    templateId: 'redis-template',
+  },
+  {
+    tool: 'maven',
+    managerKey: 'mavenManager',
+    manager: 'maven',
+    versionKey: 'mavenVersion',
+    pluginId: 'maven-env',
+    templateId: 'maven-template',
+  },
 ].filter((c) => {
   if (c.manager === 'homebrew' && process.platform !== 'darwin') return false
   if (c.manager === 'scoop' && process.platform !== 'win32') return false
@@ -233,6 +258,7 @@ function makeSuccessPlugin(tool: string, manager: string): PluginLifecycle {
             input.javaVersion ??
             input.pythonVersion ??
             input.gitVersion ??
+            input.mavenVersion ??
             '1.0.0',
         ),
         paths: { installRootDir, markerPath },
@@ -337,7 +363,7 @@ describe('action rollback recovery integration', () => {
           params: {
             installRootDir,
             [managerKey]: manager,
-            [versionKey]: '1.0.0',
+            ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
           },
           plugins: [
             {
@@ -346,7 +372,7 @@ describe('action rollback recovery integration', () => {
               params: {
                 installRootDir,
                 [managerKey]: manager,
-                [versionKey]: '1.0.0',
+                ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
               },
             },
           ],
@@ -424,7 +450,7 @@ describe('action rollback recovery integration', () => {
           params: {
             installRootDir,
             [managerKey]: manager,
-            [versionKey]: '1.0.0',
+            ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
           },
           plugins: [
             {
@@ -433,7 +459,7 @@ describe('action rollback recovery integration', () => {
               params: {
                 installRootDir,
                 [managerKey]: manager,
-                [versionKey]: '1.0.0',
+                ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
               },
             },
           ],
@@ -501,7 +527,7 @@ describe('action rollback recovery integration', () => {
           params: {
             installRootDir,
             [managerKey]: manager,
-            [versionKey]: '1.0.0',
+            ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
           },
           plugins: [
             {
@@ -510,7 +536,7 @@ describe('action rollback recovery integration', () => {
               params: {
                 installRootDir,
                 [managerKey]: manager,
-                [versionKey]: '1.0.0',
+                ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
               },
             },
           ],
@@ -551,7 +577,7 @@ describe('action rollback recovery integration', () => {
           params: {
             installRootDir,
             [managerKey]: manager,
-            [versionKey]: '1.0.0',
+            ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
           },
           plugins: [
             {
@@ -560,7 +586,7 @@ describe('action rollback recovery integration', () => {
               params: {
                 installRootDir,
                 [managerKey]: manager,
-                [versionKey]: '1.0.0',
+                ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
               },
             },
           ],
@@ -620,7 +646,7 @@ describe('action rollback recovery integration', () => {
           params: {
             installRootDir,
             [managerKey]: manager,
-            [versionKey]: '1.0.0',
+            ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
           },
           plugins: [
             {
@@ -629,7 +655,7 @@ describe('action rollback recovery integration', () => {
               params: {
                 installRootDir,
                 [managerKey]: manager,
-                [versionKey]: '1.0.0',
+                ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
               },
             },
           ],
@@ -899,7 +925,7 @@ describe('action rollback recovery integration', () => {
 
 type RealRollbackCase = {
   label: string
-  tool: 'node' | 'java' | 'python' | 'git'
+  tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
   pluginId: string
   plugin: PluginLifecycle
   templateId: string
@@ -998,6 +1024,43 @@ const realRollbackCases: RealRollbackCase[] = [
     buildParams: (t, d) => ({
       installRootDir: join(t, 'git-rb'),
       gitManager: 'git',
+      downloadCacheDir: d,
+    }),
+  },
+  {
+    label: 'MySQL package',
+    tool: 'mysql',
+    pluginId: 'mysql-env',
+    plugin: mysqlEnvPlugin,
+    templateId: 'mysql-template',
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'mysql-rb'),
+      mysqlManager: 'package',
+      downloadCacheDir: d,
+    }),
+  },
+  {
+    label: 'Redis package',
+    tool: 'redis',
+    pluginId: 'redis-env',
+    plugin: redisEnvPlugin,
+    templateId: 'redis-template',
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'redis-rb'),
+      redisManager: 'package',
+      downloadCacheDir: d,
+    }),
+  },
+  {
+    label: 'Maven direct',
+    tool: 'maven',
+    pluginId: 'maven-env',
+    plugin: mavenEnvPlugin,
+    templateId: 'maven-template',
+    buildParams: (t, d) => ({
+      installRootDir: join(t, 'maven-rb'),
+      mavenManager: 'maven',
+      mavenVersion: '3.9.11',
       downloadCacheDir: d,
     }),
   },

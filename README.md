@@ -1,6 +1,6 @@
 # EnvSetup
 
-开发环境一键配置桌面应用，基于 Electron + React 构建。支持 Node.js、Java、Python、Git 四种开发工具的自动化安装、清理与回滚，覆盖 macOS 和 Windows 双平台。
+开发环境一键配置桌面应用，基于 Electron + React 构建。支持 Node.js、Java、Python、Git、MySQL、Redis、Maven 七种开发/构建工具的自动化安装、清理与回滚，覆盖 macOS 和 Windows 双平台。
 
 ## 技术栈
 
@@ -53,7 +53,12 @@
 
 ## 支持的工具与安装方式
 
-内置 4 套模板，每种工具支持**直接安装**和**管理器安装**两种方式：
+内置 7 套模板，安装流分为两类：
+
+- **官方直装流**: Node.js、Java、Python、Git、Maven
+- **管理器流**: Node.js（nvm / nvm-windows）、Java（SDKMAN）、Python（Conda）、Git（Homebrew / Scoop）、MySQL（Homebrew / Scoop）、Redis（Homebrew / Scoop）
+
+其中 **MySQL / Redis 当前仅提供平台包管理器安装**，**Maven 当前仅提供 Apache 官方归档直装**。
 
 ### Node.js
 
@@ -83,14 +88,32 @@
 | **直接安装** | 从 `sourceforge.net/git-osx-installer` 下载 `.dmg`，`hdiutil attach` → `pkgutil --expand-full` 解包（跳过 `.Trashes`）                 | 从 GitHub `git-for-windows` 下载 `Git-2.47.1-64-bit.tar.bz2`（非 exe 安装器），`tar -xjf` 解压                                           |
 | **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install git`；回滚用 `brew uninstall --formula git` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，shadow `Get-ExecutionPolicy` 后执行，`scoop install git`；回滚用 `scoop uninstall git` |
 
-> **设计原则**: 全部避免系统级安装器（不用 `.msi`/`.exe` 安装向导），所有工具解压到用户目录；管理器均离线引导，不依赖 curl 管道脚本。
+### MySQL
+
+|            | macOS                                                                                                                                      | Windows                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| **管理器** | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install mysql`；回滚用 `brew uninstall --formula mysql` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install mysql`；回滚用 `scoop uninstall mysql` |
+
+### Redis
+
+|            | macOS                                                                                                                                      | Windows                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| **管理器** | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install redis`；回滚用 `brew uninstall --formula redis` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install redis`；回滚用 `scoop uninstall redis` |
+
+### Maven
+
+|              | macOS                                                                                                                                          | Windows                                                                                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.tar.gz`，解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn -version` | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.zip`，`Expand-Archive` 解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn.cmd -version` |
+
+> **设计原则**: 直装流优先使用官方归档或便携包并落到用户目录；管理器流复用官方 Homebrew / Scoop / SDKMAN / Conda / nvm 生态，并在真实清理时优先调用官方卸载命令。
 
 ## 功能概览
 
-- 内置 `Node.js / Java / Python / Git` 四套模板，支持直接安装和管理器安装两种方式
-- 版本通过官方源动态获取（Node LTS、Java Adoptium、Python、Git）
+- 内置 `Node.js / Java / Python / Git / MySQL / Redis / Maven` 七套模板
+- 版本通过官方源动态获取（Node LTS、Java Adoptium、Python、Git、Maven）；MySQL / Redis 当前走平台包管理器安装，不提供版本选择
 - 安装目录支持文件夹选择器自定义
-- 预检阶段检测已安装的 Node / Java / Python / Git 环境，提供一键清理入口
+- 预检阶段检测已安装的 Node / Java / Python / Git / MySQL / Redis / Maven 环境，提供一键清理入口
 - 清理前自动创建快照，清理失败可一键回滚
 - 命令级实时进度日志，可展开查看终端输出
 - 本地插件 manifest 校验，支持目录和 zip 导入
@@ -125,13 +148,17 @@ src/
 │   │   ├── javaVersions.ts   # Java LTS 版本列表
 │   │   ├── pythonVersions.ts # Python 版本列表
 │   │   ├── gitVersions.ts    # Git 版本列表
+│   │   ├── mavenVersions.ts  # Maven 版本列表
 │   │   └── ...
 │   ├── ipc/            # IPC 通信层
 │   └── plugins/        # 内置插件
 │       ├── nodeEnvPlugin.ts   # Node.js 安装插件
 │       ├── javaEnvPlugin.ts   # Java 安装插件
 │       ├── pythonEnvPlugin.ts # Python 安装插件
-│       └── gitEnvPlugin.ts    # Git 安装插件
+│       ├── gitEnvPlugin.ts    # Git 安装插件
+│       ├── mysqlEnvPlugin.ts  # MySQL 安装插件
+│       ├── redisEnvPlugin.ts  # Redis 安装插件
+│       └── mavenEnvPlugin.ts  # Maven 安装插件
 ├── preload/            # Electron preload 桥接
 ├── renderer/           # React UI
 │   ├── App.tsx
@@ -145,8 +172,8 @@ src/
 │       └── RollbackDialog.tsx   # 回滚对话框
 └── shared/             # 主进程/渲染进程共享
 fixtures/
-├── templates/          # 内置模板定义（node/java/python/git）
-└── plugins/            # 外部插件（node-env/git-env）
+├── templates/          # 内置模板定义（node/java/python/git/mysql/redis/maven）
+└── plugins/            # 外部插件与内置示例 manifest
 ```
 
 ## 开发
@@ -178,19 +205,20 @@ npm run dist             # 构建 + 生成安装包
 
 ```bash
 npm test                 # 单元测试 + 集成测试（Vitest，mock 模式）
+npm run test:integration:real  # 真实安装矩阵（仅 CI / 打包验证启用）
 npm run test:e2e         # E2E 测试（需先构建，Playwright）
 ```
 
 ### 测试体系
 
-项目采用四层测试体系，共 **49 个测试文件**（28 单元 + 6 集成 + 7 渲染 + 2 E2E + 6 真实安装集成）：
+项目采用四层测试体系，共 **55 个测试文件**（39 单元 + 7 集成 + 7 渲染 + 2 E2E）：
 
-| 层级             | 文件数 | 说明                                                                                                                                                    |
-| ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **单元测试**     | 28     | 核心逻辑全覆盖：任务状态机、预检、4 个插件、快照、回滚、故障分析、执行模式、下载安全、提权、环境变量持久化、跨平台策略、版本列表、网络探测、IPC、国际化 |
-| **集成测试**     | 6      | 快照-回滚完整流程、环境变量还原、全工具×管理器组合的安装/清理/回滚流程、真实安装+回滚矩阵                                                               |
-| **渲染进程测试** | 7      | React 组件交互（模板/参数/预检/任务/快照/回滚面板）、全应用流程、国际化切换                                                                             |
-| **E2E 测试**     | 2      | Electron 应用启动、模板选择→预检→创建→执行完整路径、dry-run 回滚、真实安装+回滚                                                                         |
+| 层级             | 文件数 | 说明                                                                                                                                              |
+| ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **单元测试**     | 39     | 核心逻辑全覆盖：任务状态机、预检、7 个插件、快照、回滚、故障分析、执行模式、下载安全、环境变量持久化、跨平台策略、版本列表、网络探测、IPC、国际化 |
+| **集成测试**     | 7      | 快照-回滚完整流程、环境变量还原、全工具安装/清理/回滚流程，以及 7 工具真实安装+回滚矩阵                                                           |
+| **渲染进程测试** | 7      | React 组件交互（模板/参数/预检/任务/快照/回滚面板）、全应用流程、国际化切换                                                                       |
+| **E2E 测试**     | 2      | Electron 应用启动、模板选择→预检→创建→执行完整路径、dry-run 回滚、打包应用真实安装+回滚烟雾测试                                                   |
 
 ### 执行模式隔离
 
@@ -202,7 +230,7 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 ### 工具×平台×场景覆盖矩阵
 
-对每种工具的每种安装方式（直接/管理器），在 macOS 和 Windows 上覆盖三大核心场景：
+对每个支持的工具流，在 macOS 和 Windows 上覆盖三大核心场景。MySQL / Redis 当前只覆盖平台包管理器流，Maven 当前只覆盖 Apache 官方归档直装流：
 
 | 场景                     | 说明                                                       |
 | ------------------------ | ---------------------------------------------------------- |
@@ -212,17 +240,22 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 完整覆盖矩阵（✅ = 真实安装测试通过）：
 
-| 工具    | 管理器            | macOS | Windows |
-| ------- | ----------------- | ----- | ------- |
-| Node.js | 直接安装          | ✅    | ✅      |
-| Node.js | nvm / nvm-windows | ✅    | ✅      |
-| Java    | JDK 直接安装      | ✅    | ✅      |
-| Java    | SDKMAN            | ✅    | ✅      |
-| Python  | 直接安装          | ✅    | ✅      |
-| Python  | Conda             | ✅    | ✅      |
-| Git     | 直接安装          | ✅    | ✅      |
-| Git     | Homebrew          | ✅    | —       |
-| Git     | Scoop             | —     | ✅      |
+| 工具    | 安装流              | macOS | Windows |
+| ------- | ------------------- | ----- | ------- |
+| Node.js | 直接安装            | ✅    | ✅      |
+| Node.js | nvm / nvm-windows   | ✅    | ✅      |
+| Java    | JDK 直接安装        | ✅    | ✅      |
+| Java    | SDKMAN              | ✅    | ✅      |
+| Python  | 直接安装            | ✅    | ✅      |
+| Python  | Conda               | ✅    | ✅      |
+| Git     | 直接安装            | ✅    | ✅      |
+| Git     | Homebrew            | ✅    | —       |
+| Git     | Scoop               | —     | ✅      |
+| MySQL   | Homebrew            | ✅    | —       |
+| MySQL   | Scoop               | —     | ✅      |
+| Redis   | Homebrew            | ✅    | —       |
+| Redis   | Scoop               | —     | ✅      |
+| Maven   | Apache 官方归档直装 | ✅    | ✅      |
 
 ### 清理与回滚验证
 
@@ -233,11 +266,11 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 GitHub Actions 工作流 `e2e-real-install.yml`，push 到 `master` 或 PR 时触发：
 
-| Job              | 平台                     | 说明                                                           |
-| ---------------- | ------------------------ | -------------------------------------------------------------- |
-| **unit**         | macOS + Windows          | 运行全部单元和集成测试（mock 模式）                            |
-| **real-install** | macOS + Windows × 4 工具 | 真实安装+回滚集成测试矩阵（`ENVSETUP_REAL_RUN=1`），含下载缓存 |
-| **e2e**          | macOS + Windows          | 打包应用后通过 Playwright 执行真实安装+回滚烟雾测试            |
+| Job              | 平台                     | 说明                                                                |
+| ---------------- | ------------------------ | ------------------------------------------------------------------- |
+| **unit**         | macOS + Windows          | 运行全部单元和集成测试（mock 模式）                                 |
+| **real-install** | macOS + Windows × 7 工具 | 真实安装+回滚集成测试矩阵（`ENVSETUP_REAL_RUN=1`），含下载/解包缓存 |
+| **e2e**          | macOS + Windows          | 打包应用后通过 Playwright 执行代表性真实安装+回滚烟雾测试           |
 
 Release 工作流：推送 `v*` 标签时自动构建并发布 GitHub Release（macOS + Windows 产物）。
 
@@ -259,7 +292,7 @@ npm run format:check     # 格式检查
 
 ## 使用流程
 
-1. 启动应用，选择模板（Node.js / Java / Python / Git）
+1. 启动应用，选择模板（Node.js / Java / Python / Git / MySQL / Redis / Maven）
 2. 调整参数：版本、管理器类型（直接安装/管理器安装）、安装目录等
 3. 运行预检，查看通过 / 警告 / 阻塞结果、已发现环境及网络可达性
 4. 创建任务并启动执行

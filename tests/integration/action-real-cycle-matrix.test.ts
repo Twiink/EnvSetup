@@ -32,8 +32,11 @@ import { createTask, executeTask } from '../../src/main/core/task'
 import { inferTemplateFieldPrefix, loadTemplatesFromDirectory } from '../../src/main/core/template'
 import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
 import javaEnvPlugin from '../../src/main/plugins/javaEnvPlugin'
+import mavenEnvPlugin from '../../src/main/plugins/mavenEnvPlugin'
+import mysqlEnvPlugin from '../../src/main/plugins/mysqlEnvPlugin'
 import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
 import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
+import redisEnvPlugin from '../../src/main/plugins/redisEnvPlugin'
 import { resolvePythonInstallPaths, resolveJavaInstallPaths } from '../../src/main/core/platform'
 
 const execFileAsync = promisify(execFile)
@@ -56,8 +59,15 @@ const cleanupHookTimeout = isWindows ? 300_000 : 30_000
 
 type RealCycleCase = {
   name: string
-  tool: 'node' | 'java' | 'python' | 'git'
-  pluginId: 'node-env' | 'java-env' | 'python-env' | 'git-env'
+  tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
+  pluginId:
+    | 'node-env'
+    | 'java-env'
+    | 'python-env'
+    | 'git-env'
+    | 'mysql-env'
+    | 'redis-env'
+    | 'maven-env'
   plugin: PluginLifecycle
   templateId: string
   buildParams: (installRootDir: string) => Record<string, string>
@@ -166,6 +176,20 @@ const allRealCycleCases: RealCycleCase[] = [
     verifyPattern: /Python\s+\d+\.\d+\.\d+/,
   },
   {
+    name: 'Maven direct',
+    tool: 'maven',
+    pluginId: 'maven-env',
+    plugin: mavenEnvPlugin,
+    templateId: 'maven-template',
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        mavenManager: 'maven',
+        mavenVersion: '3.9.11',
+      }),
+    verifyPattern: /Apache Maven\s+3\.9\.11/i,
+  },
+  {
     name: 'Git direct',
     tool: 'git',
     pluginId: 'git-env',
@@ -177,6 +201,66 @@ const allRealCycleCases: RealCycleCase[] = [
         gitManager: 'git',
       }),
     verifyPattern: /git version/i,
+  },
+  {
+    name: 'MySQL package',
+    tool: 'mysql',
+    pluginId: 'mysql-env',
+    plugin: mysqlEnvPlugin,
+    templateId: 'mysql-template',
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        mysqlManager: 'package',
+      }),
+    verifyPattern: /(mysql|ver)/i,
+    expectInstallRootAfterInstall: false,
+    verifyInstalledState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('mysql')).toBe(true)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('mysql')).toBe(true)
+      }
+    },
+    verifyRolledBackState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('mysql')).toBe(false)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('mysql')).toBe(false)
+      }
+    },
+  },
+  {
+    name: 'Redis package',
+    tool: 'redis',
+    pluginId: 'redis-env',
+    plugin: redisEnvPlugin,
+    templateId: 'redis-template',
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        redisManager: 'package',
+      }),
+    verifyPattern: /redis/i,
+    expectInstallRootAfterInstall: false,
+    verifyInstalledState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('redis')).toBe(true)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('redis')).toBe(true)
+      }
+    },
+    verifyRolledBackState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('redis')).toBe(false)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('redis')).toBe(false)
+      }
+    },
   },
   ...(isMac
     ? [
@@ -405,21 +489,29 @@ async function commandSucceeds(file: string, args: string[]): Promise<boolean> {
   }
 }
 
-async function isHomebrewGitInstalled(): Promise<boolean> {
+async function isHomebrewFormulaInstalled(formula: string): Promise<boolean> {
   return commandSucceeds('sh', [
     '-c',
-    `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; [ -n "$BREW_BIN" ] && "$BREW_BIN" list --versions git >/dev/null 2>&1`,
+    `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; [ -n "$BREW_BIN" ] && "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1`,
   ])
 }
 
-async function isScoopGitInstalled(): Promise<boolean> {
+async function isHomebrewGitInstalled(): Promise<boolean> {
+  return isHomebrewFormulaInstalled('git')
+}
+
+async function isScoopPackageInstalled(packageName: string): Promise<boolean> {
   return commandSucceeds('powershell', [
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
     '-Command',
-    `$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; if (-not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }; $rawPrefix = & $scoop prefix git 2>$null | Select-Object -First 1; if ($rawPrefix) { $prefix = $rawPrefix.ToString().Trim(); if ($prefix -and [System.IO.Path]::IsPathRooted($prefix) -and (Test-Path $prefix)) { exit 0 } }; $roots = @($env:SCOOP); $roots += Join-Path $env:USERPROFILE 'scoop'; $roots = $roots | Select-Object -Unique; foreach ($r in $roots) { $gc = Join-Path $r 'apps\\git\\current'; if (Test-Path $gc) { exit 0 }; $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { $vd = Get-ChildItem -Path $gd -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'current' } | Select-Object -First 1; if ($vd) { exit 0 } } }; exit 1`,
+    `$pkg = '${packageName}'; $scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; if (-not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }; $rawPrefix = & $scoop prefix $pkg 2>$null | Select-Object -First 1; if ($rawPrefix) { $prefix = $rawPrefix.ToString().Trim(); if ($prefix -and [System.IO.Path]::IsPathRooted($prefix) -and (Test-Path $prefix)) { exit 0 } }; $roots = @($env:SCOOP); $roots += Join-Path $env:USERPROFILE 'scoop'; $roots = $roots | Select-Object -Unique; foreach ($r in $roots) { $current = Join-Path $r ('apps\\' + $pkg + '\\current'); if (Test-Path $current) { exit 0 }; $dir = Join-Path $r ('apps\\' + $pkg); if (Test-Path $dir) { $vd = Get-ChildItem -Path $dir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'current' } | Select-Object -First 1; if ($vd) { exit 0 } } }; exit 1`,
   ])
+}
+
+async function isScoopGitInstalled(): Promise<boolean> {
+  return isScoopPackageInstalled('git')
 }
 
 function toTemplateValues(
@@ -506,7 +598,29 @@ async function hydrateDetectionEnvironment(
     }
   }
 
+  if (isMac && (testCase.tool === 'mysql' || testCase.tool === 'redis')) {
+    const formula = testCase.tool
+    try {
+      const { stdout } = await execFileAsync('sh', [
+        '-c',
+        `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" --prefix ${formula}; fi`,
+      ])
+      const prefix = stdout.trim()
+      if (prefix.length > 0) {
+        prependProcessPath(join(prefix, 'bin'))
+      }
+    } catch {
+      // noop
+    }
+  }
+
   if (testCase.name === 'Git Scoop') {
+    const scoopRoot = join(process.env.USERPROFILE ?? homeDir, 'scoop')
+    process.env.SCOOP = scoopRoot
+    prependProcessPath(join(scoopRoot, 'shims'))
+  }
+
+  if (isWindows && (testCase.tool === 'mysql' || testCase.tool === 'redis')) {
     const scoopRoot = join(process.env.USERPROFILE ?? homeDir, 'scoop')
     process.env.SCOOP = scoopRoot
     prependProcessPath(join(scoopRoot, 'shims'))
@@ -531,23 +645,42 @@ function pathBelongsToInstallRoot(
   )
 }
 
-function isHomebrewGitPath(candidatePath: string | undefined): boolean {
+function isHomebrewFormulaPath(
+  candidatePath: string | undefined,
+  formula: string,
+  binaries: string[],
+): boolean {
   if (!candidatePath) {
     return false
   }
 
   const normalizedPath = resolve(candidatePath)
   return (
-    normalizedPath === '/opt/homebrew/bin/git' ||
-    normalizedPath === '/usr/local/bin/git' ||
-    normalizedPath.includes('/Cellar/git/') ||
-    normalizedPath.includes('/Homebrew/Cellar/git/') ||
-    normalizedPath.includes('/homebrew/opt/git/') ||
-    normalizedPath.includes('/usr/local/opt/git/')
+    binaries.some(
+      (binary) =>
+        normalizedPath === `/opt/homebrew/bin/${binary}` ||
+        normalizedPath === `/usr/local/bin/${binary}`,
+    ) ||
+    normalizedPath.includes(`/Cellar/${formula}/`) ||
+    normalizedPath.includes(`/Homebrew/Cellar/${formula}/`) ||
+    normalizedPath.includes(`/homebrew/opt/${formula}/`) ||
+    normalizedPath.includes(`/usr/local/opt/${formula}/`)
   )
 }
 
-function isScoopGitPath(candidatePath: string | undefined): boolean {
+function isHomebrewGitPath(candidatePath: string | undefined): boolean {
+  return isHomebrewFormulaPath(candidatePath, 'git', ['git'])
+}
+
+function isHomebrewMysqlPath(candidatePath: string | undefined): boolean {
+  return isHomebrewFormulaPath(candidatePath, 'mysql', ['mysql', 'mysqld'])
+}
+
+function isHomebrewRedisPath(candidatePath: string | undefined): boolean {
+  return isHomebrewFormulaPath(candidatePath, 'redis', ['redis-server', 'redis-cli'])
+}
+
+function isScoopManagedToolPath(candidatePath: string | undefined): boolean {
   return Boolean(candidatePath && resolve(candidatePath).toLowerCase().includes('\\scoop\\'))
 }
 
@@ -574,9 +707,21 @@ function isRelevantCleanupDetection(
   if (testCase.name === 'Git Scoop') {
     return (
       detection.source === 'SCOOP' ||
-      isScoopGitPath(detection.path) ||
-      isScoopGitPath(detection.cleanupPath)
+      isScoopManagedToolPath(detection.path) ||
+      isScoopManagedToolPath(detection.cleanupPath)
     )
+  }
+
+  if (testCase.tool === 'mysql') {
+    return isMac
+      ? isHomebrewMysqlPath(detection.path) || isHomebrewMysqlPath(detection.cleanupPath)
+      : isScoopManagedToolPath(detection.path) || isScoopManagedToolPath(detection.cleanupPath)
+  }
+
+  if (testCase.tool === 'redis') {
+    return isMac
+      ? isHomebrewRedisPath(detection.path) || isHomebrewRedisPath(detection.cleanupPath)
+      : isScoopManagedToolPath(detection.path) || isScoopManagedToolPath(detection.cleanupPath)
   }
 
   return false
@@ -593,6 +738,8 @@ function resolveRealCycleTimeout(testCase: RealCycleCase, scenario: 'fresh' | 'c
 
   if (
     testCase.tool === 'python' ||
+    testCase.tool === 'mysql' ||
+    testCase.tool === 'redis' ||
     testCase.name.includes('SDKMAN') ||
     testCase.name.includes('Homebrew')
   ) {

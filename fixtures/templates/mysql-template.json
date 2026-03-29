@@ -1,0 +1,44 @@
+{
+  "id": "mysql-template",
+  "name": {
+    "zh-CN": "MySQL 数据库环境",
+    "en": "MySQL Database Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "通过平台包管理器安装 MySQL，macOS 使用 Homebrew，Windows 使用 Scoop。",
+    "en": "Install MySQL through the platform package manager: Homebrew on macOS and Scoop on Windows."
+  },
+  "plugins": [
+    {
+      "pluginId": "mysql-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "mysql.mysqlManager": "package",
+    "mysql.installRootDir": "./.envsetup-data/toolchain"
+  },
+  "overrides": {
+    "mysql.mysqlManager": {
+      "type": "enum",
+      "editable": true,
+      "required": true,
+      "enum": ["package"],
+      "affects": ["mysql-env"]
+    },
+    "mysql.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["mysql-env"]
+    }
+  },
+  "checks": ["mysql"],
+  "maintainer": {
+    "zh-CN": "环境配置团队",
+    "en": "Environment Setup Team"
+  },
+  "recommended": true
+}

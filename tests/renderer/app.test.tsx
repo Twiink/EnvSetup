@@ -179,6 +179,118 @@ const gitTemplateFixture = {
   },
 }
 
+const mysqlTemplateFixture = {
+  id: 'mysql-template',
+  name: {
+    'zh-CN': 'MySQL 数据库环境',
+    en: 'MySQL Database Environment',
+  },
+  version: '0.1.0',
+  platforms: ['darwin'],
+  description: {
+    'zh-CN': 'MySQL 数据库环境模板',
+    en: 'MySQL database template',
+  },
+  plugins: [{ pluginId: 'mysql-env', version: '0.1.0' }],
+  defaults: {},
+  overrides: {},
+  checks: ['mysql'],
+  fields: {
+    'mysql.mysqlManager': {
+      key: 'mysql.mysqlManager',
+      type: 'enum',
+      value: 'package',
+      editable: true,
+      required: true,
+      enum: ['package'],
+    },
+    'mysql.installRootDir': {
+      key: 'mysql.installRootDir',
+      type: 'path',
+      value: '/tmp/mysql-toolchain',
+      editable: true,
+      required: true,
+    },
+  },
+}
+
+const redisTemplateFixture = {
+  id: 'redis-template',
+  name: {
+    'zh-CN': 'Redis 缓存环境',
+    en: 'Redis Cache Environment',
+  },
+  version: '0.1.0',
+  platforms: ['darwin'],
+  description: {
+    'zh-CN': 'Redis 缓存环境模板',
+    en: 'Redis cache template',
+  },
+  plugins: [{ pluginId: 'redis-env', version: '0.1.0' }],
+  defaults: {},
+  overrides: {},
+  checks: ['redis'],
+  fields: {
+    'redis.redisManager': {
+      key: 'redis.redisManager',
+      type: 'enum',
+      value: 'package',
+      editable: true,
+      required: true,
+      enum: ['package'],
+    },
+    'redis.installRootDir': {
+      key: 'redis.installRootDir',
+      type: 'path',
+      value: '/tmp/redis-toolchain',
+      editable: true,
+      required: true,
+    },
+  },
+}
+
+const mavenTemplateFixture = {
+  id: 'maven-template',
+  name: {
+    'zh-CN': 'Maven 构建环境',
+    en: 'Maven Build Environment',
+  },
+  version: '0.1.0',
+  platforms: ['darwin'],
+  description: {
+    'zh-CN': 'Maven 构建环境模板',
+    en: 'Maven build template',
+  },
+  plugins: [{ pluginId: 'maven-env', version: '0.1.0' }],
+  defaults: {},
+  overrides: {},
+  checks: ['maven'],
+  fields: {
+    'maven.mavenManager': {
+      key: 'maven.mavenManager',
+      type: 'enum',
+      value: 'maven',
+      editable: true,
+      required: true,
+      enum: ['maven'],
+    },
+    'maven.mavenVersion': {
+      key: 'maven.mavenVersion',
+      type: 'version',
+      value: '3.9.11',
+      editable: true,
+      required: true,
+    },
+    'maven.installRootDir': {
+      key: 'maven.installRootDir',
+      type: 'path',
+      value: '/tmp/maven-toolchain',
+      editable: true,
+      required: true,
+    },
+  },
+}
+
 const pickDirectory = vi.fn()
 const runPrecheck = vi.fn()
 const onTaskProgress = vi.fn()
@@ -313,11 +425,15 @@ beforeEach(() => {
         javaTemplateFixture,
         pythonTemplateFixture,
         gitTemplateFixture,
+        mysqlTemplateFixture,
+        redisTemplateFixture,
+        mavenTemplateFixture,
       ],
       nodeLtsVersions: ['24.13.1', '22.22.1', '20.20.1'],
       javaLtsVersions: ['21.0.6', '17.0.14', '11.0.26'],
       pythonVersions: ['3.12.10', '3.11.10', '3.10.15'],
       gitVersions: ['2.47.1'],
+      mavenVersions: ['3.9.11', '3.9.10'],
       loadedAt: new Date().toISOString(),
     }),
     listTemplates: vi
@@ -327,11 +443,15 @@ beforeEach(() => {
         javaTemplateFixture,
         pythonTemplateFixture,
         gitTemplateFixture,
+        mysqlTemplateFixture,
+        redisTemplateFixture,
+        mavenTemplateFixture,
       ]),
     listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
     listJavaLtsVersions: vi.fn().mockResolvedValue(['21.0.6', '17.0.14', '11.0.26']),
     listPythonVersions: vi.fn().mockResolvedValue(['3.12.10', '3.11.10', '3.10.15']),
     listGitVersions: vi.fn().mockResolvedValue(['2.47.1']),
+    listMavenVersions: vi.fn().mockResolvedValue(['3.9.11', '3.9.10']),
     runPrecheck,
     createTask: vi.fn().mockResolvedValue({
       id: 'task-1',
@@ -429,6 +549,9 @@ describe('App', () => {
     expect(await screen.findByText('Java 开发环境')).toBeInTheDocument()
     expect(await screen.findByText('Python 开发环境')).toBeInTheDocument()
     expect(await screen.findByText('Git 开发环境')).toBeInTheDocument()
+    expect(await screen.findByText('MySQL 数据库环境')).toBeInTheDocument()
+    expect(await screen.findByText('Redis 缓存环境')).toBeInTheDocument()
+    expect(await screen.findByText('Maven 构建环境')).toBeInTheDocument()
   })
 
   it('creates a task after precheck', async () => {
@@ -486,6 +609,15 @@ describe('App', () => {
 
     expect(await screen.findByDisplayValue('2.47.1')).toBeInTheDocument()
     expect(screen.getByDisplayValue('直接安装 Git')).toBeInTheDocument()
+  })
+
+  it('renders maven version as selectable option after switching template', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Maven 构建环境'))
+
+    expect(await screen.findByDisplayValue('3.9.11')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('直接安装 Maven')).toBeInTheDocument()
   })
 
   it('switches visible copy to english', async () => {

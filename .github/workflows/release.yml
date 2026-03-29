@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
-        tool: [node, java, python, git]
+        tool: [node, java, python, git, mysql, redis, maven]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     env:
@@ -32,7 +32,7 @@ jobs:
           path: |
             ${{ env.ENVSETUP_DOWNLOAD_CACHE_DIR }}
             ${{ env.ENVSETUP_EXTRACTED_CACHE_DIR }}
-          key: envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'tests/integration/action-real-cycle-matrix.test.ts', '.github/workflows/release.yml') }}
+          key: envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'src/main/plugins/mysqlEnvPlugin.ts', 'src/main/plugins/redisEnvPlugin.ts', 'src/main/plugins/mavenEnvPlugin.ts', 'tests/integration/action-real-cycle-matrix.test.ts', '.github/workflows/release.yml') }}
           restore-keys: |
             envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-
             envsetup-artifacts-${{ matrix.os }}-
@@ -81,7 +81,7 @@ jobs:
           path: |
             ${{ env.ENVSETUP_DOWNLOAD_CACHE_DIR }}
             ${{ env.ENVSETUP_EXTRACTED_CACHE_DIR }}
-          key: envsetup-packaged-artifacts-${{ matrix.os }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'tests/e2e/real-install.spec.ts', '.github/workflows/release.yml') }}
+          key: envsetup-packaged-artifacts-${{ matrix.os }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'src/main/plugins/mysqlEnvPlugin.ts', 'src/main/plugins/redisEnvPlugin.ts', 'src/main/plugins/mavenEnvPlugin.ts', 'tests/e2e/real-install.spec.ts', '.github/workflows/release.yml') }}
           restore-keys: |
             envsetup-packaged-artifacts-${{ matrix.os }}-
             envsetup-artifacts-${{ matrix.os }}-

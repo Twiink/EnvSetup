@@ -16,6 +16,9 @@ import { planGitDownloads } from '../plugins/gitEnvPlugin'
 import { planJavaDownloads } from '../plugins/javaEnvPlugin'
 import { planNodeDownloads } from '../plugins/nodeEnvPlugin'
 import { planPythonDownloads } from '../plugins/pythonEnvPlugin'
+import { planMysqlDownloads } from '../plugins/mysqlEnvPlugin'
+import { planRedisDownloads } from '../plugins/redisEnvPlugin'
+import { planMavenDownloads } from '../plugins/mavenEnvPlugin'
 import { createRuntimeCache } from './runtimeCache'
 
 const DEFAULT_NETWORK_CHECK_TIMEOUT_MS = 5000
@@ -71,6 +74,12 @@ function planPluginDownloads(
       return planPythonDownloads(input)
     case 'git-env':
       return planGitDownloads(input)
+    case 'mysql-env':
+      return planMysqlDownloads(input)
+    case 'redis-env':
+      return planRedisDownloads(input)
+    case 'maven-env':
+      return planMavenDownloads(input)
     default:
       return []
   }

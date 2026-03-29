@@ -16,6 +16,7 @@ const api: EnvSetupApi = {
   listJavaLtsVersions: () => ipcRenderer.invoke('java:list-lts-versions'),
   listPythonVersions: () => ipcRenderer.invoke('python:list-versions'),
   listGitVersions: () => ipcRenderer.invoke('git:list-versions'),
+  listMavenVersions: () => ipcRenderer.invoke('maven:list-versions'),
   runPrecheck: (payload) => ipcRenderer.invoke('task:precheck', payload),
   createTask: (payload) => ipcRenderer.invoke('task:create', payload),
   startTask: (taskId) => ipcRenderer.invoke('task:start', taskId),

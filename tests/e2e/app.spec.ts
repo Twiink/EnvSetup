@@ -79,6 +79,10 @@ async function createAndStartTask(
         values['git.gitVersion'] = bootstrap.gitVersions[0]
       }
 
+      if ('maven.mavenVersion' in values && bootstrap.mavenVersions[0]) {
+        values['maven.mavenVersion'] = bootstrap.mavenVersions[0]
+      }
+
       Object.assign(values, overrides)
 
       const task = await window.envSetup.createTask({
@@ -140,6 +144,28 @@ async function selectGitTemplate(page: Page) {
   await page.getByRole('button', { name: 'Git 版本控制' }).click()
 }
 
+async function selectMysqlTemplate(page: Page) {
+  await expect(page.getByRole('button', { name: 'MySQL 数据库环境' })).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.getByRole('button', { name: 'MySQL 数据库环境' }).click()
+}
+
+async function selectRedisTemplate(page: Page) {
+  await expect(page.getByRole('button', { name: 'Redis 缓存环境' })).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.getByRole('button', { name: 'Redis 缓存环境' }).click()
+}
+
+async function selectMavenTemplate(page: Page) {
+  await expect(page.getByRole('button', { name: 'Maven 构建环境' })).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.getByRole('button', { name: 'Maven 构建环境' }).click()
+  await page.locator('select[id="maven.mavenVersion"]').selectOption({ index: 0 })
+}
+
 async function runDryRunFlow(page: Page) {
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
@@ -195,6 +221,31 @@ const dryRunRollbackCases = [
       'git.installRootDir': installRoot,
     }),
   },
+  {
+    name: 'MySQL',
+    templateId: 'mysql-template',
+    buildOverrides: (installRoot: string) => ({
+      'mysql.mysqlManager': 'package',
+      'mysql.installRootDir': installRoot,
+    }),
+  },
+  {
+    name: 'Redis',
+    templateId: 'redis-template',
+    buildOverrides: (installRoot: string) => ({
+      'redis.redisManager': 'package',
+      'redis.installRootDir': installRoot,
+    }),
+  },
+  {
+    name: 'Maven',
+    templateId: 'maven-template',
+    buildOverrides: (installRoot: string) => ({
+      'maven.mavenManager': 'maven',
+      'maven.mavenVersion': '3.9.11',
+      'maven.installRootDir': installRoot,
+    }),
+  },
 ] as const
 
 test('app launches and shows envsetup shell', async () => {
@@ -246,6 +297,27 @@ test('user can run Python action flow in dev dry-run mode', async () => {
 test('user can run Git action flow in dev dry-run mode', async () => {
   const { app, page } = await launchZhApp({ ENVSETUP_REAL_RUN: undefined as never })
   await selectGitTemplate(page)
+  await runDryRunFlow(page)
+  await app.close()
+})
+
+test('user can run MySQL action flow in dev dry-run mode', async () => {
+  const { app, page } = await launchZhApp({ ENVSETUP_REAL_RUN: undefined as never })
+  await selectMysqlTemplate(page)
+  await runDryRunFlow(page)
+  await app.close()
+})
+
+test('user can run Redis action flow in dev dry-run mode', async () => {
+  const { app, page } = await launchZhApp({ ENVSETUP_REAL_RUN: undefined as never })
+  await selectRedisTemplate(page)
+  await runDryRunFlow(page)
+  await app.close()
+})
+
+test('user can run Maven action flow in dev dry-run mode', async () => {
+  const { app, page } = await launchZhApp({ ENVSETUP_REAL_RUN: undefined as never })
+  await selectMavenTemplate(page)
   await runDryRunFlow(page)
   await app.close()
 })

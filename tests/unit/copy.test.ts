@@ -156,6 +156,8 @@ describe('getTemplateFieldLabel', () => {
   it('returns localized label for known field keys', () => {
     expect(getTemplateFieldLabel('zh-CN', 'node.nodeVersion')).toBe('Node 版本')
     expect(getTemplateFieldLabel('en', 'node.nodeVersion')).toBe('Node Version')
+    expect(getTemplateFieldLabel('zh-CN', 'mysql.mysqlManager')).toBe('MySQL 安装方式')
+    expect(getTemplateFieldLabel('en', 'maven.mavenVersion')).toBe('Maven Version')
   })
 
   it('falls back to key itself for unknown field keys', () => {
@@ -171,6 +173,8 @@ describe('getTemplateOptionLabel', () => {
   it('returns localized label for known option keys', () => {
     expect(getTemplateOptionLabel('zh-CN', 'nvm')).toBe('使用 nvm 管理 Node.js')
     expect(getTemplateOptionLabel('en', 'nvm')).toBe('Use nvm to Manage Node.js')
+    expect(getTemplateOptionLabel('zh-CN', 'package')).toBe('使用平台包管理器安装')
+    expect(getTemplateOptionLabel('en', 'maven')).toBe('Install Maven Directly')
   })
 
   it('falls back to key itself for unknown option keys', () => {
@@ -191,6 +195,12 @@ describe('getPluginSummary', () => {
   it('returns localized summary for git-env plugin', () => {
     expect(getPluginSummary('zh-CN', 'git-env', 'dry_run', 'fb')).toContain('Git')
     expect(getPluginSummary('en', 'git-env', 'real_run', 'fb')).toContain('Git')
+  })
+
+  it('returns localized summaries for mysql/redis/maven plugins', () => {
+    expect(getPluginSummary('zh-CN', 'mysql-env', 'dry_run', 'fb')).toContain('MySQL')
+    expect(getPluginSummary('en', 'redis-env', 'real_run', 'fb')).toContain('Redis')
+    expect(getPluginSummary('en', 'maven-env', 'dry_run', 'fb')).toContain('Maven')
   })
 
   it('returns fallback for unknown plugin', () => {
@@ -227,6 +237,19 @@ describe('getDetectedEnvironmentKindLabel', () => {
     }
     expect(getDetectedEnvironmentKindLabel('zh-CN', detection)).toBe('JAVA_HOME')
     expect(getDetectedEnvironmentKindLabel('en', detection)).toBe('JAVA_HOME')
+  })
+
+  it('returns localized label for maven runtime_home', () => {
+    const detection: DetectedEnvironment = {
+      id: 'maven:runtime_home:MAVEN_HOME:/tmp/maven',
+      tool: 'maven',
+      kind: 'runtime_home',
+      path: '/tmp/maven',
+      source: 'MAVEN_HOME',
+      cleanupSupported: false,
+    }
+    expect(getDetectedEnvironmentKindLabel('zh-CN', detection)).toBe('MAVEN_HOME')
+    expect(getDetectedEnvironmentKindLabel('en', detection)).toBe('MAVEN_HOME')
   })
 
   it('returns localized label for python virtual_env', () => {

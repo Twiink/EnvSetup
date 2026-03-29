@@ -1,0 +1,44 @@
+{
+  "id": "redis-template",
+  "name": {
+    "zh-CN": "Redis 缓存环境",
+    "en": "Redis Cache Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "通过平台包管理器安装 Redis，macOS 使用 Homebrew，Windows 使用 Scoop。",
+    "en": "Install Redis through the platform package manager: Homebrew on macOS and Scoop on Windows."
+  },
+  "plugins": [
+    {
+      "pluginId": "redis-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "redis.redisManager": "package",
+    "redis.installRootDir": "./.envsetup-data/toolchain"
+  },
+  "overrides": {
+    "redis.redisManager": {
+      "type": "enum",
+      "editable": true,
+      "required": true,
+      "enum": ["package"],
+      "affects": ["redis-env"]
+    },
+    "redis.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["redis-env"]
+    }
+  },
+  "checks": ["redis"],
+  "maintainer": {
+    "zh-CN": "环境配置团队",
+    "en": "Environment Setup Team"
+  },
+  "recommended": true
+}

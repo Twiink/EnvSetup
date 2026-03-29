@@ -28,6 +28,9 @@ import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
 import javaEnvPlugin from '../../src/main/plugins/javaEnvPlugin'
 import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
 import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
+import mysqlEnvPlugin from '../../src/main/plugins/mysqlEnvPlugin'
+import redisEnvPlugin from '../../src/main/plugins/redisEnvPlugin'
+import mavenEnvPlugin from '../../src/main/plugins/mavenEnvPlugin'
 
 const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
 const isMac = process.platform === 'darwin'
@@ -94,10 +97,10 @@ function expectRemovedPath(actualPath: string | undefined, expectedPath: string)
 }
 
 type Case = {
-  tool: 'node' | 'java' | 'python' | 'git'
+  tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
   managerKey: string
   manager: string
-  versionKey: string
+  versionKey?: string
 }
 
 const cases: Case[] = [
@@ -110,6 +113,9 @@ const cases: Case[] = [
   { tool: 'git', managerKey: 'gitManager', manager: 'git', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'homebrew', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'scoop', versionKey: 'gitVersion' },
+  { tool: 'mysql', managerKey: 'mysqlManager', manager: 'package' },
+  { tool: 'redis', managerKey: 'redisManager', manager: 'package' },
+  { tool: 'maven', managerKey: 'mavenManager', manager: 'maven', versionKey: 'mavenVersion' },
 ].filter((c) => {
   if (c.manager === 'homebrew' && process.platform !== 'darwin') return false
   if (c.manager === 'scoop' && process.platform !== 'win32') return false
@@ -133,6 +139,7 @@ function makePlugin(tool: string, manager: string): PluginLifecycle {
             input.javaVersion ??
             input.pythonVersion ??
             input.gitVersion ??
+            input.mavenVersion ??
             '1.0.0',
         ),
         paths: { installRootDir, markerPath },
@@ -203,7 +210,7 @@ describe('action full flow integration', () => {
         params: {
           installRootDir,
           [managerKey]: manager,
-          [versionKey]: '1.0.0',
+          ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
         },
         plugins: [
           {
@@ -212,7 +219,7 @@ describe('action full flow integration', () => {
             params: {
               installRootDir,
               [managerKey]: manager,
-              [versionKey]: '1.0.0',
+              ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
             },
           },
         ],
@@ -254,7 +261,7 @@ describe('action full flow integration', () => {
         params: {
           installRootDir,
           [managerKey]: manager,
-          [versionKey]: '1.0.0',
+          ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
         },
         plugins: [
           {
@@ -263,7 +270,7 @@ describe('action full flow integration', () => {
             params: {
               installRootDir,
               [managerKey]: manager,
-              [versionKey]: '1.0.0',
+              ...(versionKey ? { [versionKey]: '1.0.0' } : {}),
             },
           },
         ],
@@ -300,7 +307,7 @@ describe('action full flow integration', () => {
 // ============================================================
 
 type RealCase = {
-  tool: 'node' | 'java' | 'python' | 'git'
+  tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
   pluginId: string
   plugin: PluginLifecycle
   templateId: string
@@ -391,6 +398,40 @@ function buildRealCases(tmpBase: string, downloadCacheDir: string): RealCase[] {
       plugin: gitEnvPlugin,
       templateId: 'git-template',
       params: { installRootDir: join(tmpBase, 'git-direct'), gitManager: 'git', downloadCacheDir },
+    },
+    {
+      tool: 'mysql',
+      pluginId: 'mysql-env',
+      plugin: mysqlEnvPlugin,
+      templateId: 'mysql-template',
+      params: {
+        installRootDir: join(tmpBase, 'mysql-package'),
+        mysqlManager: 'package',
+        downloadCacheDir,
+      },
+    },
+    {
+      tool: 'redis',
+      pluginId: 'redis-env',
+      plugin: redisEnvPlugin,
+      templateId: 'redis-template',
+      params: {
+        installRootDir: join(tmpBase, 'redis-package'),
+        redisManager: 'package',
+        downloadCacheDir,
+      },
+    },
+    {
+      tool: 'maven',
+      pluginId: 'maven-env',
+      plugin: mavenEnvPlugin,
+      templateId: 'maven-template',
+      params: {
+        installRootDir: join(tmpBase, 'maven-direct'),
+        mavenManager: 'maven',
+        mavenVersion: '3.9.11',
+        downloadCacheDir,
+      },
     },
   ]
 

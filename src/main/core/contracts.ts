@@ -58,7 +58,7 @@ export type ParameterType = 'string' | 'boolean' | 'enum' | 'path' | 'version' |
 export type EnvChangeKind = 'env' | 'path' | 'profile'
 export type TaskResultLevel = 'success' | 'partial' | 'failure'
 export type DownloadArtifactKind = 'archive' | 'mirror' | 'installer'
-export type EnvironmentTool = 'node' | 'java' | 'python' | 'git'
+export type EnvironmentTool = 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
 export type DetectedEnvironmentKind =
   | 'managed_root'
   | 'manager_root'
@@ -227,6 +227,7 @@ export type DownloadArtifact = {
     | 'miniconda'
     | 'git'
     | 'git-for-windows'
+    | 'maven'
     | 'homebrew'
     | 'scoop'
   url: string
@@ -333,6 +334,25 @@ export type GitPluginParams = PluginExecutionInput & {
   installRootDir: string
   downloadCacheDir?: string
   extractedCacheDir?: string
+}
+
+export type MysqlPluginParams = PluginExecutionInput & {
+  mysqlManager: 'package'
+  installRootDir: string
+  downloadCacheDir?: string
+}
+
+export type RedisPluginParams = PluginExecutionInput & {
+  redisManager: 'package'
+  installRootDir: string
+  downloadCacheDir?: string
+}
+
+export type MavenPluginParams = PluginExecutionInput & {
+  mavenManager: 'maven'
+  mavenVersion: string
+  installRootDir: string
+  downloadCacheDir?: string
 }
 
 export type PluginCheckResult = {
@@ -545,6 +565,7 @@ export type BootstrapData = {
   javaLtsVersions: string[]
   pythonVersions: string[]
   gitVersions: string[]
+  mavenVersions: string[]
   loadedAt: string
 }
 
@@ -562,6 +583,7 @@ export type EnvSetupApi = {
   listJavaLtsVersions: () => Promise<string[]>
   listPythonVersions: () => Promise<string[]>
   listGitVersions: () => Promise<string[]>
+  listMavenVersions: () => Promise<string[]>
   runPrecheck: (payload: {
     templateId: string
     values: Record<string, Primitive>

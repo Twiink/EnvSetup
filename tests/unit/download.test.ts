@@ -32,6 +32,19 @@ describe('downloadArtifacts', () => {
     expect(() => validateOfficialDownloads(downloads)).toThrow('Unofficial download host')
   })
 
+  it('accepts official Maven archive hosts during validation', () => {
+    const downloads: DownloadArtifact[] = [
+      {
+        kind: 'archive',
+        tool: 'maven',
+        url: 'https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz',
+        official: true,
+      },
+    ]
+
+    expect(() => validateOfficialDownloads(downloads)).not.toThrow()
+  })
+
   it('rejects untrusted download host', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'envsetup-download-'))
     const downloads: DownloadArtifact[] = [

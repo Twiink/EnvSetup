@@ -40,6 +40,61 @@ describe('networkCheck', () => {
     expect(targets.map((target) => target.host)).toEqual(['github.com', 'nodejs.org'])
   })
 
+  it('collects the MySQL package-manager probe target on macOS', () => {
+    const targets = collectTemplateNetworkTargets(
+      makeTemplate('mysql-env'),
+      {
+        'mysql.mysqlManager': 'package',
+        'mysql.installRootDir': '/tmp/mysql-toolchain',
+      },
+      { platform: 'darwin' },
+    )
+
+    expect(targets).toEqual([
+      expect.objectContaining({
+        tool: 'homebrew',
+        host: 'raw.githubusercontent.com',
+      }),
+    ])
+  })
+
+  it('collects the Redis package-manager probe target on Windows', () => {
+    const targets = collectTemplateNetworkTargets(
+      makeTemplate('redis-env'),
+      {
+        'redis.redisManager': 'package',
+        'redis.installRootDir': 'C:\\envsetup\\redis',
+      },
+      { platform: 'win32' },
+    )
+
+    expect(targets).toEqual([
+      expect.objectContaining({
+        tool: 'scoop',
+        host: 'get.scoop.sh',
+      }),
+    ])
+  })
+
+  it('collects the Maven archive probe target from the official Apache host', () => {
+    const targets = collectTemplateNetworkTargets(
+      makeTemplate('maven-env'),
+      {
+        'maven.mavenManager': 'maven',
+        'maven.mavenVersion': '3.9.11',
+        'maven.installRootDir': '/tmp/maven-toolchain',
+      },
+      { platform: 'darwin' },
+    )
+
+    expect(targets).toEqual([
+      expect.objectContaining({
+        tool: 'maven',
+        host: 'archive.apache.org',
+      }),
+    ])
+  })
+
   it('skips the optional Git for Windows probe when SDKMAN already has Git Bash', () => {
     const targets = collectTemplateNetworkTargets(
       makeTemplate('java-env'),

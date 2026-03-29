@@ -205,6 +205,82 @@ describe('environment detection', () => {
     expect(detections.some((d) => d.tool === 'git' && d.source === 'PATH')).toBe(true)
   })
 
+  it('detects mysql and redis runtime homes from env vars', async () => {
+    process.env.MYSQL_HOME = await mkdtemp(join(tmpdir(), 'envsetup-mysql-'))
+    process.env.REDIS_HOME = await mkdtemp(join(tmpdir(), 'envsetup-redis-'))
+
+    const mysqlTemplate = resolveTemplate({
+      id: 'mysql-template',
+      name: { 'zh-CN': 'MySQL', en: 'MySQL' },
+      version: '0.1.0',
+      platforms: ['darwin', 'win32'],
+      description: { 'zh-CN': 'MySQL', en: 'MySQL' },
+      plugins: [],
+      defaults: {},
+      overrides: {},
+      checks: ['mysql'],
+    })
+
+    const redisTemplate = resolveTemplate({
+      id: 'redis-template',
+      name: { 'zh-CN': 'Redis', en: 'Redis' },
+      version: '0.1.0',
+      platforms: ['darwin', 'win32'],
+      description: { 'zh-CN': 'Redis', en: 'Redis' },
+      plugins: [],
+      defaults: {},
+      overrides: {},
+      checks: ['redis'],
+    })
+
+    await expect(detectTemplateEnvironments(mysqlTemplate, {})).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ tool: 'mysql', source: 'MYSQL_HOME' })]),
+    )
+    await expect(detectTemplateEnvironments(redisTemplate, {})).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ tool: 'redis', source: 'REDIS_HOME' })]),
+    )
+  })
+
+  it('detects maven executable on PATH and marks it cleanup-supported', async () => {
+    const fakeBinDir = await mkdtemp(join(tmpdir(), 'envsetup-maven-bin-'))
+    const fakeMvn = join(fakeBinDir, process.platform === 'win32' ? 'mvn.cmd' : 'mvn')
+    await writeFile(
+      fakeMvn,
+      process.platform === 'win32' ? '@echo off\r\nexit /b 0\r\n' : '#!/bin/sh\nexit 0\n',
+      'utf8',
+    )
+    if (process.platform !== 'win32') {
+      await chmod(fakeMvn, 0o755)
+    }
+
+    process.env.PATH = `${fakeBinDir}${delimiter}${originalEnv.PATH ?? ''}`
+
+    const template = resolveTemplate({
+      id: 'maven-template',
+      name: { 'zh-CN': 'Maven', en: 'Maven' },
+      version: '0.1.0',
+      platforms: ['darwin', 'win32'],
+      description: { 'zh-CN': 'Maven', en: 'Maven' },
+      plugins: [],
+      defaults: {},
+      overrides: {},
+      checks: ['maven'],
+    })
+
+    const detections = await detectTemplateEnvironments(template, {})
+    expect(
+      detections.find(
+        (detection) => detection.kind === 'runtime_executable' && detection.path === fakeMvn,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        tool: 'maven',
+        cleanupSupported: true,
+        cleanupPath: fakeMvn,
+      }),
+    )
+  })
+
   it('narrows SCOOP detection to the git app directory when present', async () => {
     const scoopRoot = await mkdtemp(join(tmpdir(), 'envsetup-scoop-'))
     const gitAppDir = join(scoopRoot, 'apps', 'git')
@@ -419,5 +495,38 @@ describe('environment detection', () => {
     expect(result.results).toHaveLength(1)
     expect(result.errors).toHaveLength(1)
     expect(result.results[0].detectionId).toBe('python:manager_root:PYENV_ROOT:test')
+  })
+
+  it('clears MAVEN_HOME and M2_HOME for maven runtime-home detections', async () => {
+    const mavenHome = await mkdtemp(join(tmpdir(), 'envsetup-maven-home-'))
+    process.env.MAVEN_HOME = mavenHome
+    process.env.M2_HOME = mavenHome
+
+    const mavenHomeResult = await cleanupDetectedEnvironment({
+      id: `maven:runtime_home:MAVEN_HOME:${mavenHome}`,
+      tool: 'maven',
+      kind: 'runtime_home',
+      path: mavenHome,
+      source: 'MAVEN_HOME',
+      cleanupSupported: true,
+      cleanupPath: mavenHome,
+      cleanupEnvKey: 'MAVEN_HOME',
+    })
+
+    const m2HomeResult = await cleanupDetectedEnvironment({
+      id: `maven:runtime_home:M2_HOME:${mavenHome}`,
+      tool: 'maven',
+      kind: 'runtime_home',
+      path: mavenHome,
+      source: 'M2_HOME',
+      cleanupSupported: true,
+      cleanupPath: mavenHome,
+      cleanupEnvKey: 'M2_HOME',
+    })
+
+    expect(mavenHomeResult.clearedEnvKey).toBe('MAVEN_HOME')
+    expect(m2HomeResult.clearedEnvKey).toBe('M2_HOME')
+    expect(process.env.MAVEN_HOME).toBeUndefined()
+    expect(process.env.M2_HOME).toBeUndefined()
   })
 })

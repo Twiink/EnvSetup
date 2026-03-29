@@ -8,9 +8,12 @@ import type {
   AppPlatform,
   EnvChange,
   GitPluginParams,
+  MavenPluginParams,
+  MysqlPluginParams,
   NodePluginParams,
   JavaPluginParams,
   PythonPluginParams,
+  RedisPluginParams,
 } from './contracts'
 
 export type PlatformStrategy = {
@@ -49,6 +52,10 @@ export function buildPlatformStrategy(platform: AppPlatform): PlatformStrategy {
 
 function getPathApi(platform: AppPlatform) {
   return platform === 'win32' ? win32 : posix
+}
+
+function resolveScoopShimsDir(platform: AppPlatform): string {
+  return platform === 'win32' ? '%USERPROFILE%\\scoop\\shims' : ''
 }
 
 export function resolveNodeInstallPaths(input: NodePluginParams): NodeInstallPaths {
@@ -189,7 +196,7 @@ export function resolveGitInstallPaths(input: GitPluginParams): GitInstallPaths 
     gitBinDir:
       input.platform === 'win32' ? pathApi.join(gitDir, 'cmd') : pathApi.join(gitDir, 'bin'),
     homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
-    scoopDir: pathApi.join(input.installRootDir, 'scoop', 'shims'),
+    scoopDir: resolveScoopShimsDir(input.platform),
   }
 }
 
@@ -400,4 +407,123 @@ export function buildCondaInitSnippet(condaDir: string): string {
     `eval "$(${condaDir}/bin/conda shell.bash hook 2> /dev/null)"`,
     '# envsetup: python-env:end',
   ].join('\n')
+}
+
+// ============================================================
+// MySQL 环境路径与环境变量
+// ============================================================
+
+export type MysqlInstallPaths = {
+  installRootDir: string
+  homebrewDir: string
+  scoopDir: string
+}
+
+export function resolveMysqlInstallPaths(input: MysqlPluginParams): MysqlInstallPaths {
+  return {
+    installRootDir: input.installRootDir,
+    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    scoopDir: resolveScoopShimsDir(input.platform),
+  }
+}
+
+export function buildMysqlEnvChanges(input: MysqlPluginParams): EnvChange[] {
+  const installPaths = resolveMysqlInstallPaths(input)
+
+  return [
+    {
+      kind: 'path',
+      key: 'PATH',
+      value: input.platform === 'darwin' ? installPaths.homebrewDir : installPaths.scoopDir,
+      scope: 'user',
+      description:
+        input.platform === 'darwin'
+          ? 'Expose the Homebrew bin directory for MySQL in PATH.'
+          : 'Expose the Scoop shims directory for MySQL in PATH.',
+    },
+  ]
+}
+
+// ============================================================
+// Redis 环境路径与环境变量
+// ============================================================
+
+export type RedisInstallPaths = {
+  installRootDir: string
+  homebrewDir: string
+  scoopDir: string
+}
+
+export function resolveRedisInstallPaths(input: RedisPluginParams): RedisInstallPaths {
+  return {
+    installRootDir: input.installRootDir,
+    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    scoopDir: resolveScoopShimsDir(input.platform),
+  }
+}
+
+export function buildRedisEnvChanges(input: RedisPluginParams): EnvChange[] {
+  const installPaths = resolveRedisInstallPaths(input)
+
+  return [
+    {
+      kind: 'path',
+      key: 'PATH',
+      value: input.platform === 'darwin' ? installPaths.homebrewDir : installPaths.scoopDir,
+      scope: 'user',
+      description:
+        input.platform === 'darwin'
+          ? 'Expose the Homebrew bin directory for Redis in PATH.'
+          : 'Expose the Scoop shims directory for Redis in PATH.',
+    },
+  ]
+}
+
+// ============================================================
+// Maven 环境路径与环境变量
+// ============================================================
+
+export type MavenInstallPaths = {
+  installRootDir: string
+  standaloneMavenDir: string
+  standaloneMavenBinDir: string
+}
+
+export function resolveMavenInstallPaths(input: MavenPluginParams): MavenInstallPaths {
+  const pathApi = getPathApi(input.platform)
+  const standaloneMavenDir = pathApi.join(input.installRootDir, `maven-${input.mavenVersion}`)
+
+  return {
+    installRootDir: input.installRootDir,
+    standaloneMavenDir,
+    standaloneMavenBinDir: pathApi.join(standaloneMavenDir, 'bin'),
+  }
+}
+
+export function buildMavenEnvChanges(input: MavenPluginParams): EnvChange[] {
+  const installPaths = resolveMavenInstallPaths(input)
+
+  return [
+    {
+      kind: 'env',
+      key: 'MAVEN_HOME',
+      value: installPaths.standaloneMavenDir,
+      scope: 'user',
+      description: 'Set MAVEN_HOME to the standalone Maven directory.',
+    },
+    {
+      kind: 'env',
+      key: 'M2_HOME',
+      value: installPaths.standaloneMavenDir,
+      scope: 'user',
+      description: 'Set M2_HOME to the standalone Maven directory.',
+    },
+    {
+      kind: 'path',
+      key: 'PATH',
+      value: installPaths.standaloneMavenBinDir,
+      scope: 'user',
+      description: 'Expose the standalone Maven bin directory in PATH.',
+    },
+  ]
 }

@@ -21,6 +21,7 @@ import { listNodeLtsVersions as fetchNodeLtsVersions } from '../core/nodeVersion
 import { listJavaLtsVersions as fetchJavaLtsVersions } from '../core/javaVersions'
 import { listPythonVersions as fetchPythonVersions } from '../core/pythonVersions'
 import { listGitVersions as fetchGitVersions } from '../core/gitVersions'
+import { listMavenVersions as fetchMavenVersions } from '../core/mavenVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
 import { buildRuntimePrecheckInput, runPrecheck } from '../core/precheck'
 import { executeRollback, suggestRollbackSnapshots } from '../core/rollback'
@@ -59,6 +60,9 @@ import nodeEnvPlugin from '../plugins/nodeEnvPlugin'
 import javaEnvPlugin from '../plugins/javaEnvPlugin'
 import pythonEnvPlugin from '../plugins/pythonEnvPlugin'
 import gitEnvPlugin from '../plugins/gitEnvPlugin'
+import mysqlEnvPlugin from '../plugins/mysqlEnvPlugin'
+import redisEnvPlugin from '../plugins/redisEnvPlugin'
+import mavenEnvPlugin from '../plugins/mavenEnvPlugin'
 import { normalizeLocale } from '../../shared/locale'
 
 const BUILTIN_TEMPLATE_DIR = join(
@@ -70,6 +74,9 @@ const BUILTIN_PLUGINS: PluginRegistry = {
   'java-env': javaEnvPlugin,
   'python-env': pythonEnvPlugin,
   'git-env': gitEnvPlugin,
+  'mysql-env': mysqlEnvPlugin,
+  'redis-env': redisEnvPlugin,
+  'maven-env': mavenEnvPlugin,
 }
 
 const TEMPLATE_CACHE_TTL_MS = 60_000
@@ -91,6 +98,10 @@ const PRECHECK_ENV_KEYS = [
   'npm_config_prefix',
   'GIT_HOME',
   'SCOOP',
+  'MYSQL_HOME',
+  'REDIS_HOME',
+  'MAVEN_HOME',
+  'M2_HOME',
 ] as const
 
 const templatesCache = createRuntimeCache<ResolvedTemplate[]>()
@@ -132,16 +143,21 @@ async function listGitVersionsCached(): Promise<string[]> {
   return versionsCache.getOrLoad('git', VERSION_CACHE_TTL_MS, () => fetchGitVersions())
 }
 
+async function listMavenVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('maven', VERSION_CACHE_TTL_MS, () => fetchMavenVersions())
+}
+
 async function loadBootstrap(): Promise<BootstrapData> {
   return bootstrapCache.getOrLoad('bootstrap', BOOTSTRAP_CACHE_TTL_MS, async () => {
     // 首屏把模板和版本列表一次性并发拉齐，减少 renderer 多次 IPC 往返。
-    const [templates, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions] =
+    const [templates, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions, mavenVersions] =
       await Promise.all([
         listTemplates(),
         listNodeLtsVersionsCached(),
         listJavaLtsVersionsCached(),
         listPythonVersionsCached(),
         listGitVersionsCached(),
+        listMavenVersionsCached(),
       ])
 
     return {
@@ -150,6 +166,7 @@ async function loadBootstrap(): Promise<BootstrapData> {
       javaLtsVersions,
       pythonVersions,
       gitVersions,
+      mavenVersions,
       loadedAt: new Date().toISOString(),
     }
   })
@@ -205,6 +222,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('java:list-lts-versions', async () => listJavaLtsVersionsCached())
   ipcMain.handle('python:list-versions', async () => listPythonVersionsCached())
   ipcMain.handle('git:list-versions', async () => listGitVersionsCached())
+  ipcMain.handle('maven:list-versions', async () => listMavenVersionsCached())
   ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) => {
     const result = await cleanupDetectedEnvironment(detection)
     clearRuntimeDerivedCaches()

@@ -1,0 +1,24 @@
+{
+  "id": "mysql-env",
+  "name": {
+    "zh-CN": "MySQL 数据库环境",
+    "en": "MySQL Database Environment"
+  },
+  "version": "0.1.0",
+  "mainAppVersion": "^0.1.0",
+  "platforms": ["darwin", "win32"],
+  "permissions": ["download", "write_path", "modify_env"],
+  "parameters": {
+    "mysqlManager": {
+      "type": "enum",
+      "values": ["package"],
+      "required": true
+    },
+    "installRootDir": {
+      "type": "path",
+      "required": true
+    }
+  },
+  "dependencies": [],
+  "entry": "index.ts"
+}

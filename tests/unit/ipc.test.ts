@@ -127,6 +127,9 @@ vi.mock('../../src/main/core/pythonVersions', () => ({
 vi.mock('../../src/main/core/gitVersions', () => ({
   listGitVersions: vi.fn(async () => ['2.47.1']),
 }))
+vi.mock('../../src/main/core/mavenVersions', () => ({
+  listMavenVersions: vi.fn(async () => ['3.9.11']),
+}))
 vi.mock('../../src/main/core/plugin', () => ({
   importPluginFromDirectory: vi.fn(),
   importPluginFromZip: vi.fn(),
@@ -271,6 +274,9 @@ vi.mock('../../src/main/plugins/nodeEnvPlugin', () => ({ default: {} }))
 vi.mock('../../src/main/plugins/javaEnvPlugin', () => ({ default: {} }))
 vi.mock('../../src/main/plugins/pythonEnvPlugin', () => ({ default: {} }))
 vi.mock('../../src/main/plugins/gitEnvPlugin', () => ({ default: {} }))
+vi.mock('../../src/main/plugins/mysqlEnvPlugin', () => ({ default: {} }))
+vi.mock('../../src/main/plugins/redisEnvPlugin', () => ({ default: {} }))
+vi.mock('../../src/main/plugins/mavenEnvPlugin', () => ({ default: {} }))
 
 beforeAll(async () => {
   const mod = await import('../../src/main/ipc/index')
@@ -745,6 +751,9 @@ describe('registerIpcHandlers', () => {
     ['python', 'conda'],
     ['git', 'git'],
     ['git', 'homebrew'],
+    ['mysql', 'package'],
+    ['redis', 'package'],
+    ['maven', 'maven'],
   ])('task:create action matrix for %s via %s', (tool, manager) => {
     it('passes manager-specific values through mapping and task creation', async () => {
       const taskMod = await import('../../src/main/core/task')
@@ -752,8 +761,8 @@ describe('registerIpcHandlers', () => {
         templateId: 'tpl-1',
         values: {
           [`${tool}.${tool}Manager`]: manager,
-          [`${tool}.${tool}Version`]: '1.0.0',
           installRootDir: `/tmp/${tool}`,
+          ...(!['mysql', 'redis'].includes(tool) ? { [`${tool}.${tool}Version`]: '1.0.0' } : {}),
         },
         locale: 'zh-CN',
       }

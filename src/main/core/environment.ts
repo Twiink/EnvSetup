@@ -25,7 +25,15 @@ import {
 import { clearPersistedEnvKey } from './envPersistence'
 import { mapTemplateValuesToPluginParams } from './template'
 
-const SUPPORTED_ENVIRONMENT_CHECKS = new Set<EnvironmentTool>(['node', 'java', 'python', 'git'])
+const SUPPORTED_ENVIRONMENT_CHECKS = new Set<EnvironmentTool>([
+  'node',
+  'java',
+  'python',
+  'git',
+  'mysql',
+  'redis',
+  'maven',
+])
 const execFileAsync = promisify(execFile)
 
 type CleanupPlan = {
@@ -222,6 +230,65 @@ function inferGitInstallRootFromExecutable(executablePath: string): string | und
   return undefined
 }
 
+function inferMysqlInstallRootFromExecutable(executablePath: string): string | undefined {
+  const normalizedPath = resolve(executablePath)
+
+  if (normalizedPath.endsWith('/bin/mysql') || normalizedPath.endsWith('/bin/mysqld')) {
+    return dirname(dirname(normalizedPath))
+  }
+
+  if (
+    normalizedPath.toLowerCase().endsWith('\\bin\\mysql.exe') ||
+    normalizedPath.toLowerCase().endsWith('\\bin\\mysqld.exe')
+  ) {
+    return dirname(dirname(normalizedPath))
+  }
+
+  return undefined
+}
+
+function inferRedisInstallRootFromExecutable(executablePath: string): string | undefined {
+  const normalizedPath = resolve(executablePath)
+
+  if (
+    normalizedPath.endsWith('/bin/redis-server') ||
+    normalizedPath.endsWith('/bin/redis-cli') ||
+    normalizedPath.endsWith('/src/redis-server') ||
+    normalizedPath.endsWith('/src/redis-cli')
+  ) {
+    return dirname(dirname(normalizedPath))
+  }
+
+  if (
+    normalizedPath.toLowerCase().endsWith('\\bin\\redis-server.exe') ||
+    normalizedPath.toLowerCase().endsWith('\\bin\\redis-cli.exe')
+  ) {
+    return dirname(dirname(normalizedPath))
+  }
+
+  const parentDir = dirname(normalizedPath)
+  const fileName = normalizedPath.split(/[/\\]/).pop()?.toLowerCase() ?? ''
+  if (fileName === 'redis-server.exe' || fileName === 'redis-cli.exe') {
+    return parentDir
+  }
+
+  return undefined
+}
+
+function inferMavenInstallRootFromExecutable(executablePath: string): string | undefined {
+  const normalizedPath = resolve(executablePath)
+
+  if (normalizedPath.endsWith('/bin/mvn') || normalizedPath.endsWith('/bin/mvn.cmd')) {
+    return dirname(dirname(normalizedPath))
+  }
+
+  if (normalizedPath.toLowerCase().endsWith('\\bin\\mvn.cmd')) {
+    return dirname(dirname(normalizedPath))
+  }
+
+  return undefined
+}
+
 function buildJenvRootCandidate(): string {
   return join(homedir(), '.jenv')
 }
@@ -234,20 +301,40 @@ function buildNvmRootCandidate(): string {
   return join(homedir(), '.nvm')
 }
 
-function isHomebrewGitExecutable(targetPath: string): boolean {
+function isHomebrewFormulaExecutable(targetPath: string, binaryNames: string[]): boolean {
   if (process.platform !== 'darwin') {
     return false
   }
 
   const normalizedPath = resolve(targetPath)
-  return (
-    normalizedPath === '/opt/homebrew/bin/git' ||
-    normalizedPath === '/usr/local/bin/git' ||
-    normalizedPath.includes('/Cellar/git/') ||
-    normalizedPath.includes('/Homebrew/Cellar/git/') ||
-    normalizedPath.includes('/homebrew/opt/git/') ||
-    normalizedPath.includes('/usr/local/opt/git/')
-  )
+  return binaryNames.some((binaryName) => {
+    const binarySuffix = `/bin/${binaryName}`
+    return (
+      normalizedPath === `/opt/homebrew/bin/${binaryName}` ||
+      normalizedPath === `/usr/local/bin/${binaryName}` ||
+      normalizedPath.endsWith(binarySuffix) ||
+      normalizedPath.includes(`/Cellar/`) ||
+      normalizedPath.includes('/Homebrew/Cellar/') ||
+      normalizedPath.includes('/homebrew/opt/') ||
+      normalizedPath.includes('/usr/local/opt/')
+    )
+  })
+}
+
+function isHomebrewGitExecutable(targetPath: string): boolean {
+  return isHomebrewFormulaExecutable(targetPath, ['git'])
+}
+
+function isHomebrewMysqlExecutable(targetPath: string): boolean {
+  return isHomebrewFormulaExecutable(targetPath, ['mysql', 'mysqld'])
+}
+
+function isHomebrewRedisExecutable(targetPath: string): boolean {
+  return isHomebrewFormulaExecutable(targetPath, ['redis-server', 'redis-cli'])
+}
+
+function isHomebrewMavenExecutable(targetPath: string): boolean {
+  return isHomebrewFormulaExecutable(targetPath, ['mvn'])
 }
 
 function isScoopManagedPath(targetPath: string): boolean {
@@ -266,12 +353,34 @@ function isNestedCondaEnv(targetPath: string): boolean {
 }
 
 async function resolveHomebrewGitPrefix(executablePath: string): Promise<string | undefined> {
+  return resolveHomebrewFormulaPrefix('git', executablePath, ['git'])
+}
+
+async function resolveHomebrewMysqlPrefix(executablePath: string): Promise<string | undefined> {
+  return resolveHomebrewFormulaPrefix('mysql', executablePath, ['mysql', 'mysqld'])
+}
+
+async function resolveHomebrewRedisPrefix(executablePath: string): Promise<string | undefined> {
+  return resolveHomebrewFormulaPrefix('redis', executablePath, ['redis-server', 'redis-cli'])
+}
+
+async function resolveHomebrewMavenPrefix(executablePath: string): Promise<string | undefined> {
+  return resolveHomebrewFormulaPrefix('maven', executablePath, ['mvn'])
+}
+
+async function resolveHomebrewFormulaPrefix(
+  formula: string,
+  executablePath: string,
+  binaryNames: string[],
+): Promise<string | undefined> {
   try {
-    const realGitPath = await realpath(executablePath)
-    const normalizedPath = resolve(realGitPath)
-    const binSuffix = `${process.platform === 'win32' ? '\\' : '/'}bin${process.platform === 'win32' ? '\\' : '/'}git`
-    if (normalizedPath.endsWith(binSuffix)) {
-      return normalizedPath.slice(0, -binSuffix.length)
+    const realExecutablePath = await realpath(executablePath)
+    const normalizedPath = resolve(realExecutablePath)
+    for (const binaryName of binaryNames) {
+      const binSuffix = `${process.platform === 'win32' ? '\\' : '/'}bin${process.platform === 'win32' ? '\\' : '/'}${binaryName}`
+      if (normalizedPath.endsWith(binSuffix)) {
+        return normalizedPath.slice(0, -binSuffix.length)
+      }
     }
   } catch {
     // 回退到 brew 查询
@@ -280,7 +389,7 @@ async function resolveHomebrewGitPrefix(executablePath: string): Promise<string 
   try {
     const { stdout } = await execFileAsync('/bin/sh', [
       '-c',
-      'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions git >/dev/null 2>&1 && "$BREW_BIN" --prefix git; fi',
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1 && "$BREW_BIN" --prefix ${formula}; fi`,
     ])
     const prefix = stdout.trim()
     return prefix.length > 0 ? prefix : undefined
@@ -289,12 +398,16 @@ async function resolveHomebrewGitPrefix(executablePath: string): Promise<string 
   }
 }
 
-function resolveScoopGitPath(scoopRoot: string): string {
+function resolveScoopPackagePath(scoopRoot: string, packageName: string): string {
   const normalizedPath = resolve(scoopRoot)
   const lowerPath = normalizedPath.toLowerCase()
-  return lowerPath.endsWith('\\apps\\git') || lowerPath.endsWith('/apps/git')
+  return lowerPath.endsWith(`\\apps\\${packageName}`) || lowerPath.endsWith(`/apps/${packageName}`)
     ? normalizedPath
-    : join(normalizedPath, 'apps', 'git')
+    : join(normalizedPath, 'apps', packageName)
+}
+
+function resolveScoopGitPath(scoopRoot: string): string {
+  return resolveScoopPackagePath(scoopRoot, 'git')
 }
 
 function resolveSdkmanJavaPath(sdkmanPath: string): string {
@@ -306,7 +419,23 @@ function resolveSdkmanJavaPath(sdkmanPath: string): string {
 }
 
 function buildHomebrewGitCleanupCommand(): string {
-  return 'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions git >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula git || true; fi'
+  return buildHomebrewFormulaCleanupCommand('git')
+}
+
+function buildHomebrewMysqlCleanupCommand(): string {
+  return buildHomebrewFormulaCleanupCommand('mysql')
+}
+
+function buildHomebrewRedisCleanupCommand(): string {
+  return buildHomebrewFormulaCleanupCommand('redis')
+}
+
+function buildHomebrewMavenCleanupCommand(): string {
+  return buildHomebrewFormulaCleanupCommand('maven')
+}
+
+function buildHomebrewFormulaCleanupCommand(formula: string): string {
+  return `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula ${formula} || true; fi`
 }
 
 function buildResolveScoopCommand(): string {
@@ -362,6 +491,41 @@ function buildScoopGitCleanupCommand(): string {
     "if ($remainingPrefix) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
     '}',
   ].join('; ')
+}
+
+function buildScoopPackageCleanupCommand(packageName: string, shimNames: string[]): string {
+  return [
+    buildResolveScoopCommand(),
+    'if ($scoop) {',
+    `& $scoop uninstall ${packageName} *> $null`,
+    '$shimDir = Split-Path $scoop -Parent',
+    `foreach ($shimName in @(${shimNames.map((shimName) => `'${shimName}'`).join(', ')})) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } }`,
+    '$scoopRoot = Split-Path $shimDir -Parent',
+    `if ($scoopRoot) { $packageDir = Join-Path $scoopRoot 'apps\\${packageName}'; if (Test-Path $packageDir) { Remove-Item -LiteralPath $packageDir -Recurse -Force -ErrorAction SilentlyContinue } }`,
+    '}',
+  ].join('; ')
+}
+
+function buildScoopMysqlCleanupCommand(): string {
+  return buildScoopPackageCleanupCommand('mysql', [
+    'mysql.exe',
+    'mysql.cmd',
+    'mysqld.exe',
+    'mysqld.cmd',
+  ])
+}
+
+function buildScoopRedisCleanupCommand(): string {
+  return buildScoopPackageCleanupCommand('redis', [
+    'redis-server.exe',
+    'redis-server.cmd',
+    'redis-cli.exe',
+    'redis-cli.cmd',
+  ])
+}
+
+function buildScoopMavenCleanupCommand(): string {
+  return buildScoopPackageCleanupCommand('maven', ['mvn.cmd'])
 }
 
 function buildCondaEnvCleanupCommand(cleanupPath: string): string {
@@ -558,6 +722,102 @@ async function buildCleanupPlan(detection: DetectedEnvironment): Promise<Cleanup
       addRemovePaths(gitRoot ?? resolvedCleanupPath)
       addEnvKeys('GIT_HOME')
       addProfileSubstrings(gitRoot, resolvedCleanupPath)
+    }
+  }
+
+  if (detection.tool === 'mysql') {
+    if (detection.source === 'MYSQL_HOME') {
+      addRemovePaths(resolvedCleanupPath)
+      addEnvKeys('MYSQL_HOME')
+      addProfileSubstrings(resolvedCleanupPath)
+    } else if (isScoopManagedPath(resolvedCleanupPath)) {
+      const scoopRoot = await firstExistingPath(
+        process.env.SCOOP,
+        await resolvePersistedEnvValue('SCOOP'),
+        detection.cleanupPath,
+      )
+      const scoopMysqlPath = scoopRoot
+        ? resolveScoopPackagePath(scoopRoot, 'mysql')
+        : resolvedCleanupPath
+      addTrackedPaths(scoopMysqlPath)
+      addRemovePaths(scoopMysqlPath, resolvedCleanupPath)
+      addCommands(buildScoopMysqlCleanupCommand())
+      addProfileSubstrings(scoopRoot, scoopMysqlPath)
+    } else if (isHomebrewMysqlExecutable(resolvedCleanupPath)) {
+      const mysqlPrefix = await resolveHomebrewMysqlPrefix(resolvedCleanupPath)
+      addTrackedPaths(mysqlPrefix)
+      addRemovePaths(mysqlPrefix, resolvedCleanupPath)
+      addCommands(buildHomebrewMysqlCleanupCommand())
+    } else {
+      const mysqlRoot = inferMysqlInstallRootFromExecutable(resolvedCleanupPath)
+      addTrackedPaths(mysqlRoot)
+      addRemovePaths(mysqlRoot ?? resolvedCleanupPath)
+      addEnvKeys('MYSQL_HOME')
+      addProfileSubstrings(mysqlRoot, resolvedCleanupPath)
+    }
+  }
+
+  if (detection.tool === 'redis') {
+    if (detection.source === 'REDIS_HOME') {
+      addRemovePaths(resolvedCleanupPath)
+      addEnvKeys('REDIS_HOME')
+      addProfileSubstrings(resolvedCleanupPath)
+    } else if (isScoopManagedPath(resolvedCleanupPath)) {
+      const scoopRoot = await firstExistingPath(
+        process.env.SCOOP,
+        await resolvePersistedEnvValue('SCOOP'),
+        detection.cleanupPath,
+      )
+      const scoopRedisPath = scoopRoot
+        ? resolveScoopPackagePath(scoopRoot, 'redis')
+        : resolvedCleanupPath
+      addTrackedPaths(scoopRedisPath)
+      addRemovePaths(scoopRedisPath, resolvedCleanupPath)
+      addCommands(buildScoopRedisCleanupCommand())
+      addProfileSubstrings(scoopRoot, scoopRedisPath)
+    } else if (isHomebrewRedisExecutable(resolvedCleanupPath)) {
+      const redisPrefix = await resolveHomebrewRedisPrefix(resolvedCleanupPath)
+      addTrackedPaths(redisPrefix)
+      addRemovePaths(redisPrefix, resolvedCleanupPath)
+      addCommands(buildHomebrewRedisCleanupCommand())
+    } else {
+      const redisRoot = inferRedisInstallRootFromExecutable(resolvedCleanupPath)
+      addTrackedPaths(redisRoot)
+      addRemovePaths(redisRoot ?? resolvedCleanupPath)
+      addEnvKeys('REDIS_HOME')
+      addProfileSubstrings(redisRoot, resolvedCleanupPath)
+    }
+  }
+
+  if (detection.tool === 'maven') {
+    if (detection.source === 'MAVEN_HOME' || detection.source === 'M2_HOME') {
+      addRemovePaths(resolvedCleanupPath)
+      addEnvKeys('MAVEN_HOME', 'M2_HOME')
+      addProfileSubstrings(resolvedCleanupPath)
+    } else if (isScoopManagedPath(resolvedCleanupPath)) {
+      const scoopRoot = await firstExistingPath(
+        process.env.SCOOP,
+        await resolvePersistedEnvValue('SCOOP'),
+        detection.cleanupPath,
+      )
+      const scoopMavenPath = scoopRoot
+        ? resolveScoopPackagePath(scoopRoot, 'maven')
+        : resolvedCleanupPath
+      addTrackedPaths(scoopMavenPath)
+      addRemovePaths(scoopMavenPath, resolvedCleanupPath)
+      addCommands(buildScoopMavenCleanupCommand())
+      addProfileSubstrings(scoopRoot, scoopMavenPath)
+    } else if (isHomebrewMavenExecutable(resolvedCleanupPath)) {
+      const mavenPrefix = await resolveHomebrewMavenPrefix(resolvedCleanupPath)
+      addTrackedPaths(mavenPrefix)
+      addRemovePaths(mavenPrefix, resolvedCleanupPath)
+      addCommands(buildHomebrewMavenCleanupCommand())
+    } else {
+      const mavenRoot = inferMavenInstallRootFromExecutable(resolvedCleanupPath)
+      addTrackedPaths(mavenRoot)
+      addRemovePaths(mavenRoot ?? resolvedCleanupPath)
+      addEnvKeys('MAVEN_HOME', 'M2_HOME')
+      addProfileSubstrings(mavenRoot, resolvedCleanupPath)
     }
   }
 
@@ -1033,6 +1293,179 @@ async function detectGitEnvironment(
   return detections
 }
 
+async function detectMysqlEnvironment(
+  values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
+): Promise<DetectedEnvironment[]> {
+  const detections: DetectedEnvironment[] = []
+  const installRootDir =
+    typeof values.installRootDir === 'string'
+      ? values.installRootDir
+      : typeof values['mysql.installRootDir'] === 'string'
+        ? values['mysql.installRootDir']
+        : undefined
+
+  if (installRootDir && (await pathExists(installRootDir))) {
+    detections.push(
+      buildDetection({
+        tool: 'mysql',
+        kind: 'managed_root',
+        path: installRootDir,
+        source: 'mysql.installRootDir',
+        cleanupSupported: isCleanupAllowedPath(installRootDir),
+        cleanupPath: installRootDir,
+      }),
+    )
+  }
+
+  if (process.env.MYSQL_HOME) {
+    detections.push(
+      buildDetection({
+        tool: 'mysql',
+        kind: 'runtime_home',
+        path: process.env.MYSQL_HOME,
+        source: 'MYSQL_HOME',
+        cleanupSupported: canCleanupDetection(process.env.MYSQL_HOME, 'MYSQL_HOME'),
+        cleanupPath: process.env.MYSQL_HOME,
+        cleanupEnvKey: 'MYSQL_HOME',
+      }),
+    )
+  }
+
+  const mysqlExecutable = await findExecutable(['mysql', 'mysqld'], executableLookupCache)
+  if (mysqlExecutable) {
+    detections.push(
+      buildDetection({
+        tool: 'mysql',
+        kind: 'runtime_executable',
+        path: mysqlExecutable,
+        source: 'PATH',
+        cleanupSupported: canCleanupDetection(mysqlExecutable),
+        cleanupPath: mysqlExecutable,
+      }),
+    )
+  }
+
+  return detections
+}
+
+async function detectRedisEnvironment(
+  values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
+): Promise<DetectedEnvironment[]> {
+  const detections: DetectedEnvironment[] = []
+  const installRootDir =
+    typeof values.installRootDir === 'string'
+      ? values.installRootDir
+      : typeof values['redis.installRootDir'] === 'string'
+        ? values['redis.installRootDir']
+        : undefined
+
+  if (installRootDir && (await pathExists(installRootDir))) {
+    detections.push(
+      buildDetection({
+        tool: 'redis',
+        kind: 'managed_root',
+        path: installRootDir,
+        source: 'redis.installRootDir',
+        cleanupSupported: isCleanupAllowedPath(installRootDir),
+        cleanupPath: installRootDir,
+      }),
+    )
+  }
+
+  if (process.env.REDIS_HOME) {
+    detections.push(
+      buildDetection({
+        tool: 'redis',
+        kind: 'runtime_home',
+        path: process.env.REDIS_HOME,
+        source: 'REDIS_HOME',
+        cleanupSupported: canCleanupDetection(process.env.REDIS_HOME, 'REDIS_HOME'),
+        cleanupPath: process.env.REDIS_HOME,
+        cleanupEnvKey: 'REDIS_HOME',
+      }),
+    )
+  }
+
+  const redisExecutable = await findExecutable(['redis-server', 'redis-cli'], executableLookupCache)
+  if (redisExecutable) {
+    detections.push(
+      buildDetection({
+        tool: 'redis',
+        kind: 'runtime_executable',
+        path: redisExecutable,
+        source: 'PATH',
+        cleanupSupported: canCleanupDetection(redisExecutable),
+        cleanupPath: redisExecutable,
+      }),
+    )
+  }
+
+  return detections
+}
+
+async function detectMavenEnvironment(
+  values: Record<string, Primitive>,
+  executableLookupCache?: Map<string, string | undefined>,
+): Promise<DetectedEnvironment[]> {
+  const detections: DetectedEnvironment[] = []
+  const installRootDir =
+    typeof values.installRootDir === 'string'
+      ? values.installRootDir
+      : typeof values['maven.installRootDir'] === 'string'
+        ? values['maven.installRootDir']
+        : undefined
+
+  if (installRootDir && (await pathExists(installRootDir))) {
+    detections.push(
+      buildDetection({
+        tool: 'maven',
+        kind: 'managed_root',
+        path: installRootDir,
+        source: 'maven.installRootDir',
+        cleanupSupported: isCleanupAllowedPath(installRootDir),
+        cleanupPath: installRootDir,
+      }),
+    )
+  }
+
+  for (const envKey of ['MAVEN_HOME', 'M2_HOME'] as const) {
+    const envPath = process.env[envKey]
+    if (!envPath) {
+      continue
+    }
+
+    detections.push(
+      buildDetection({
+        tool: 'maven',
+        kind: 'runtime_home',
+        path: envPath,
+        source: envKey,
+        cleanupSupported: canCleanupDetection(envPath, envKey),
+        cleanupPath: envPath,
+        cleanupEnvKey: envKey,
+      }),
+    )
+  }
+
+  const mavenExecutable = await findExecutable(['mvn'], executableLookupCache)
+  if (mavenExecutable) {
+    detections.push(
+      buildDetection({
+        tool: 'maven',
+        kind: 'runtime_executable',
+        path: mavenExecutable,
+        source: 'PATH',
+        cleanupSupported: canCleanupDetection(mavenExecutable),
+        cleanupPath: mavenExecutable,
+      }),
+    )
+  }
+
+  return detections
+}
+
 function resolveEnvironmentTargets(template: ResolvedTemplate): EnvironmentTool[] {
   const configuredChecks = template.checks.filter((check): check is EnvironmentTool =>
     SUPPORTED_ENVIRONMENT_CHECKS.has(check as EnvironmentTool),
@@ -1058,6 +1491,18 @@ function resolveEnvironmentTargets(template: ResolvedTemplate): EnvironmentTool[
 
   if (template.plugins.some((plugin) => plugin.pluginId === 'git-env')) {
     targets.push('git')
+  }
+
+  if (template.plugins.some((plugin) => plugin.pluginId === 'mysql-env')) {
+    targets.push('mysql')
+  }
+
+  if (template.plugins.some((plugin) => plugin.pluginId === 'redis-env')) {
+    targets.push('redis')
+  }
+
+  if (template.plugins.some((plugin) => plugin.pluginId === 'maven-env')) {
+    targets.push('maven')
   }
 
   return targets
@@ -1092,6 +1537,21 @@ export async function detectTemplateEnvironments(
       if (target === 'git') {
         const detectionValues = mapTemplateValuesToPluginParams('git-env', values)
         return detectGitEnvironment(detectionValues, executableLookupCache)
+      }
+
+      if (target === 'mysql') {
+        const detectionValues = mapTemplateValuesToPluginParams('mysql-env', values)
+        return detectMysqlEnvironment(detectionValues, executableLookupCache)
+      }
+
+      if (target === 'redis') {
+        const detectionValues = mapTemplateValuesToPluginParams('redis-env', values)
+        return detectRedisEnvironment(detectionValues, executableLookupCache)
+      }
+
+      if (target === 'maven') {
+        const detectionValues = mapTemplateValuesToPluginParams('maven-env', values)
+        return detectMavenEnvironment(detectionValues, executableLookupCache)
       }
 
       return []

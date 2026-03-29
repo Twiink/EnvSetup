@@ -8,15 +8,21 @@ import {
   buildCondaInitSnippet,
   buildGitEnvChanges,
   buildJavaEnvChanges,
+  buildMavenEnvChanges,
+  buildMysqlEnvChanges,
   buildNodeEnvChanges,
   buildNvmInitSnippet,
   buildPlatformStrategy,
   buildPythonEnvChanges,
+  buildRedisEnvChanges,
   buildSdkmanInitSnippet,
   resolveGitInstallPaths,
   resolveJavaInstallPaths,
+  resolveMavenInstallPaths,
+  resolveMysqlInstallPaths,
   resolveNodeInstallPaths,
   resolvePythonInstallPaths,
+  resolveRedisInstallPaths,
 } from '../../src/main/core/platform'
 
 // ---------------------------------------------------------------------------
@@ -247,7 +253,7 @@ describe('buildGitEnvChanges', () => {
     })
     expect(changes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: 'PATH', value: '\\tools\\scoop\\shims' }),
+        expect.objectContaining({ key: 'PATH', value: '%USERPROFILE%\\scoop\\shims' }),
       ]),
     )
   })
@@ -492,6 +498,157 @@ describe('buildPythonEnvChanges', () => {
     expect(pathChange?.value).toBe('/tools/python-3.12.1/bin')
     const profileChanges = changes.filter((c) => c.kind === 'profile')
     expect(profileChanges).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveMysqlInstallPaths / buildMysqlEnvChanges
+// ---------------------------------------------------------------------------
+
+describe('resolveMysqlInstallPaths', () => {
+  const darwinMysql = {
+    platform: 'darwin' as const,
+    mysqlManager: 'package' as const,
+    installRootDir: '/tools',
+  }
+
+  it('uses Homebrew bin directory on darwin', () => {
+    const paths = resolveMysqlInstallPaths(darwinMysql)
+    expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
+  })
+
+  it('uses Scoop shims directory on win32', () => {
+    const paths = resolveMysqlInstallPaths({ ...darwinMysql, platform: 'win32' })
+    expect(paths.scoopDir).toBe('%USERPROFILE%\\scoop\\shims')
+  })
+})
+
+describe('buildMysqlEnvChanges', () => {
+  const darwinMysql = {
+    platform: 'darwin' as const,
+    mysqlManager: 'package' as const,
+    installRootDir: '/tools',
+  }
+
+  it('points PATH to Homebrew bin on darwin', () => {
+    const changes = buildMysqlEnvChanges(darwinMysql)
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'PATH',
+          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+        }),
+      ]),
+    )
+  })
+
+  it('points PATH to Scoop shims on win32', () => {
+    const changes = buildMysqlEnvChanges({ ...darwinMysql, platform: 'win32' as const })
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'PATH', value: '%USERPROFILE%\\scoop\\shims' }),
+      ]),
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveRedisInstallPaths / buildRedisEnvChanges
+// ---------------------------------------------------------------------------
+
+describe('resolveRedisInstallPaths', () => {
+  const darwinRedis = {
+    platform: 'darwin' as const,
+    redisManager: 'package' as const,
+    installRootDir: '/tools',
+  }
+
+  it('uses Homebrew bin directory on darwin', () => {
+    const paths = resolveRedisInstallPaths(darwinRedis)
+    expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
+  })
+
+  it('uses Scoop shims directory on win32', () => {
+    const paths = resolveRedisInstallPaths({ ...darwinRedis, platform: 'win32' })
+    expect(paths.scoopDir).toBe('%USERPROFILE%\\scoop\\shims')
+  })
+})
+
+describe('buildRedisEnvChanges', () => {
+  const darwinRedis = {
+    platform: 'darwin' as const,
+    redisManager: 'package' as const,
+    installRootDir: '/tools',
+  }
+
+  it('points PATH to Homebrew bin on darwin', () => {
+    const changes = buildRedisEnvChanges(darwinRedis)
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'PATH',
+          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+        }),
+      ]),
+    )
+  })
+
+  it('points PATH to Scoop shims on win32', () => {
+    const changes = buildRedisEnvChanges({ ...darwinRedis, platform: 'win32' as const })
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'PATH', value: '%USERPROFILE%\\scoop\\shims' }),
+      ]),
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveMavenInstallPaths / buildMavenEnvChanges
+// ---------------------------------------------------------------------------
+
+describe('resolveMavenInstallPaths', () => {
+  const darwinMaven = {
+    platform: 'darwin' as const,
+    mavenManager: 'maven' as const,
+    mavenVersion: '3.9.11',
+    installRootDir: '/tools',
+  }
+
+  it('resolves standaloneMavenDir under installRootDir on darwin', () => {
+    const paths = resolveMavenInstallPaths(darwinMaven)
+    expect(paths.standaloneMavenDir).toBe('/tools/maven-3.9.11')
+  })
+
+  it('places bin/ under standaloneMavenDir on darwin', () => {
+    const paths = resolveMavenInstallPaths(darwinMaven)
+    expect(paths.standaloneMavenBinDir).toBe('/tools/maven-3.9.11/bin')
+  })
+
+  it('uses backslash paths on win32', () => {
+    const paths = resolveMavenInstallPaths({ ...darwinMaven, platform: 'win32' })
+    expect(paths.standaloneMavenDir).toBe('\\tools\\maven-3.9.11')
+    expect(paths.standaloneMavenBinDir).toBe('\\tools\\maven-3.9.11\\bin')
+  })
+})
+
+describe('buildMavenEnvChanges', () => {
+  const darwinMaven = {
+    platform: 'darwin' as const,
+    mavenManager: 'maven' as const,
+    mavenVersion: '3.9.11',
+    installRootDir: '/tools',
+  }
+
+  it('includes MAVEN_HOME and M2_HOME env changes', () => {
+    const changes = buildMavenEnvChanges(darwinMaven)
+    expect(changes.find((change) => change.key === 'MAVEN_HOME')?.value).toBe('/tools/maven-3.9.11')
+    expect(changes.find((change) => change.key === 'M2_HOME')?.value).toBe('/tools/maven-3.9.11')
+  })
+
+  it('includes PATH change for standalone Maven bin', () => {
+    const changes = buildMavenEnvChanges(darwinMaven)
+    expect(changes.find((change) => change.key === 'PATH')?.value).toBe('/tools/maven-3.9.11/bin')
   })
 })
 

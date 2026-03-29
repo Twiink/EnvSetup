@@ -26,6 +26,7 @@ function buildInitialValues(
   javaLtsVersions: string[],
   pythonVersions: string[],
   gitVersions: string[],
+  mavenVersions: string[],
 ): Record<string, Primitive> {
   // 先使用模板默认值，再用当前可用版本列表纠正已经失效的默认版本。
   const values = Object.fromEntries(
@@ -64,6 +65,14 @@ function buildInitialValues(
     values['git.gitVersion'] = gitVersions[0]
   }
 
+  const templateMavenVersion = values['maven.mavenVersion']
+  if (
+    mavenVersions.length > 0 &&
+    (typeof templateMavenVersion !== 'string' || !mavenVersions.includes(templateMavenVersion))
+  ) {
+    values['maven.mavenVersion'] = mavenVersions[0]
+  }
+
   return values
 }
 
@@ -73,6 +82,7 @@ function buildFieldOptions(
   javaLtsVersions: string[],
   pythonVersions: string[],
   gitVersions: string[],
+  mavenVersions: string[],
 ): Record<string, string[]> {
   const currentNodeVersion =
     typeof values['node.nodeVersion'] === 'string' ? values['node.nodeVersion'] : undefined
@@ -94,11 +104,17 @@ function buildFieldOptions(
   const gitVersionsList =
     gitVersions.length > 0 ? gitVersions : currentGitVersion ? [currentGitVersion] : []
 
+  const currentMavenVersion =
+    typeof values['maven.mavenVersion'] === 'string' ? values['maven.mavenVersion'] : undefined
+  const mavenVersionsList =
+    mavenVersions.length > 0 ? mavenVersions : currentMavenVersion ? [currentMavenVersion] : []
+
   return {
     'node.nodeVersion': nodeVersions,
     'java.javaVersion': javaVersionsList,
     'python.pythonVersion': pythonVersionsList,
     'git.gitVersion': gitVersionsList,
+    'maven.mavenVersion': mavenVersionsList,
   }
 }
 
@@ -132,6 +148,7 @@ export default function App() {
   const [javaLtsVersions, setJavaLtsVersions] = useState<string[]>([])
   const [pythonVersions, setPythonVersions] = useState<string[]>([])
   const [gitVersions, setGitVersions] = useState<string[]>([])
+  const [mavenVersions, setMavenVersions] = useState<string[]>([])
   const [values, setValues] = useState<Record<string, Primitive>>({})
   const [precheck, setPrecheck] = useState<PrecheckResult>()
   const [task, setTask] = useState<InstallTask>()
@@ -159,6 +176,7 @@ export default function App() {
           javaLtsVersions: nextJavaLtsVersions,
           pythonVersions: nextPythonVersions,
           gitVersions: nextGitVersions,
+          mavenVersions: nextMavenVersions,
         } = await window.envSetup.loadBootstrap()
         if (!active) {
           return
@@ -174,6 +192,7 @@ export default function App() {
         setJavaLtsVersions(nextJavaLtsVersions)
         setPythonVersions(nextPythonVersions)
         setGitVersions(nextGitVersions)
+        setMavenVersions(nextMavenVersions)
         setSelectedTemplateId(firstTemplate.id)
         setValues(
           buildInitialValues(
@@ -182,6 +201,7 @@ export default function App() {
             nextJavaLtsVersions,
             nextPythonVersions,
             nextGitVersions,
+            nextMavenVersions,
           ),
         )
       } catch (loadError) {
@@ -226,7 +246,14 @@ export default function App() {
     // 切换模板后，预检、任务结果和清理备份都不再可信，需要整体重置。
     setSelectedTemplateId(templateId)
     setValues(
-      buildInitialValues(template, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions),
+      buildInitialValues(
+        template,
+        nodeLtsVersions,
+        javaLtsVersions,
+        pythonVersions,
+        gitVersions,
+        mavenVersions,
+      ),
     )
     setPrecheck(undefined)
     setTask(undefined)
@@ -711,6 +738,7 @@ export default function App() {
               javaLtsVersions,
               pythonVersions,
               gitVersions,
+              mavenVersions,
             )}
             onChange={handleChange}
             onPickDirectory={handlePickDirectory}
