@@ -268,8 +268,40 @@ function inferRedisInstallRootFromExecutable(executablePath: string): string | u
 
   const parentDir = dirname(normalizedPath)
   const fileName = normalizedPath.split(/[/\\]/).pop()?.toLowerCase() ?? ''
-  if (fileName === 'redis-server.exe' || fileName === 'redis-cli.exe') {
+  if (
+    fileName === 'redis-server.exe' ||
+    fileName === 'redis-cli.exe' ||
+    fileName === 'memurai.exe' ||
+    fileName === 'memurai-cli.exe'
+  ) {
     return parentDir
+  }
+
+  return undefined
+}
+
+async function resolveMemuraiRedisRoot(targetPath: string): Promise<string | undefined> {
+  if (process.platform !== 'win32') {
+    return undefined
+  }
+
+  const normalizedPath = resolve(targetPath)
+  const fileName = normalizedPath.split(/[/\\]/).pop()?.toLowerCase() ?? ''
+
+  if (
+    fileName === 'memurai.exe' ||
+    fileName === 'memurai-cli.exe' ||
+    fileName === 'redis-server.exe' ||
+    fileName === 'redis-cli.exe'
+  ) {
+    return dirname(normalizedPath)
+  }
+
+  if (
+    (await pathExists(join(normalizedPath, 'memurai.exe'))) ||
+    (await pathExists(join(normalizedPath, 'memurai-cli.exe')))
+  ) {
+    return normalizedPath
   }
 
   return undefined
@@ -524,6 +556,26 @@ function buildScoopRedisCleanupCommand(): string {
   ])
 }
 
+function buildMemuraiRedisCleanupCommand(installDir?: string): string {
+  const removeInstallDir = installDir
+    ? `if (Test-Path '${installDir.replace(/'/g, "''")}') { Remove-Item -LiteralPath '${installDir.replace(/'/g, "''")}' -Recurse -Force -ErrorAction SilentlyContinue }`
+    : undefined
+
+  return [
+    '$entries = @()',
+    "foreach ($registryPath in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*')) { $entries += Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Memurai*' } }",
+    '$entries = $entries | Sort-Object DisplayName -Unique',
+    'foreach ($entry in $entries) {',
+    '$command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }',
+    'if (-not $command) { continue }',
+    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $process = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/quiet', '/norestart') -Wait -PassThru; if ($process.ExitCode -ne 0) { throw \"Memurai uninstall failed with exit code $($process.ExitCode).\" } }",
+    '}',
+    removeInstallDir,
+  ]
+    .filter(Boolean)
+    .join('; ')
+}
+
 function buildScoopMavenCleanupCommand(): string {
   return buildScoopPackageCleanupCommand('maven', ['mvn.cmd'])
 }
@@ -758,10 +810,24 @@ async function buildCleanupPlan(detection: DetectedEnvironment): Promise<Cleanup
   }
 
   if (detection.tool === 'redis') {
+    const memuraiRoot = await resolveMemuraiRedisRoot(resolvedCleanupPath)
+
     if (detection.source === 'REDIS_HOME') {
-      addRemovePaths(resolvedCleanupPath)
+      if (memuraiRoot) {
+        addTrackedPaths(memuraiRoot)
+        addRemovePaths(memuraiRoot, resolvedCleanupPath)
+        addCommands(buildMemuraiRedisCleanupCommand(memuraiRoot))
+      } else {
+        addRemovePaths(resolvedCleanupPath)
+      }
       addEnvKeys('REDIS_HOME')
-      addProfileSubstrings(resolvedCleanupPath)
+      addProfileSubstrings(memuraiRoot, resolvedCleanupPath)
+    } else if (memuraiRoot) {
+      addTrackedPaths(memuraiRoot)
+      addRemovePaths(memuraiRoot, resolvedCleanupPath)
+      addCommands(buildMemuraiRedisCleanupCommand(memuraiRoot))
+      addEnvKeys('REDIS_HOME')
+      addProfileSubstrings(memuraiRoot, resolvedCleanupPath)
     } else if (isScoopManagedPath(resolvedCleanupPath)) {
       const scoopRoot = await firstExistingPath(
         process.env.SCOOP,
@@ -1388,7 +1454,12 @@ async function detectRedisEnvironment(
     )
   }
 
-  const redisExecutable = await findExecutable(['redis-server', 'redis-cli'], executableLookupCache)
+  const redisExecutable = await findExecutable(
+    process.platform === 'win32'
+      ? ['redis-server', 'redis-cli', 'memurai', 'memurai-cli']
+      : ['redis-server', 'redis-cli'],
+    executableLookupCache,
+  )
   if (redisExecutable) {
     detections.push(
       buildDetection({

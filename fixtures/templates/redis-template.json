@@ -7,8 +7,8 @@
   "version": "0.1.0",
   "platforms": ["darwin", "win32"],
   "description": {
-    "zh-CN": "通过平台包管理器安装 Redis，macOS 使用 Homebrew，Windows 使用 Scoop。",
-    "en": "Install Redis through the platform package manager: Homebrew on macOS and Scoop on Windows."
+    "zh-CN": "支持 Redis 直装，macOS 使用 Redis 官方源码包，Windows 使用 Redis 官方合作方 Memurai 开发版；也支持平台包管理器安装：macOS 使用 Homebrew，Windows 使用 Scoop。",
+    "en": "Install Redis directly using the official Redis source archive on macOS and the Redis partner Memurai Developer installer on Windows, or use the platform package manager: Homebrew on macOS and Scoop on Windows."
   },
   "plugins": [
     {
@@ -25,7 +25,7 @@
       "type": "enum",
       "editable": true,
       "required": true,
-      "enum": ["package"],
+      "enum": ["redis", "package"],
       "affects": ["redis-env"]
     },
     "redis.installRootDir": {

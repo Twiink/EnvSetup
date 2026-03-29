@@ -113,9 +113,12 @@ const cases: Case[] = [
   { tool: 'git', managerKey: 'gitManager', manager: 'git', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'homebrew', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'scoop', versionKey: 'gitVersion' },
+  { tool: 'mysql', managerKey: 'mysqlManager', manager: 'mysql' },
   { tool: 'mysql', managerKey: 'mysqlManager', manager: 'package' },
+  { tool: 'redis', managerKey: 'redisManager', manager: 'redis' },
   { tool: 'redis', managerKey: 'redisManager', manager: 'package' },
   { tool: 'maven', managerKey: 'mavenManager', manager: 'maven', versionKey: 'mavenVersion' },
+  { tool: 'maven', managerKey: 'mavenManager', manager: 'package' },
 ].filter((c) => {
   if (c.manager === 'homebrew' && process.platform !== 'darwin') return false
   if (c.manager === 'scoop' && process.platform !== 'win32') return false
@@ -405,8 +408,30 @@ function buildRealCases(tmpBase: string, downloadCacheDir: string): RealCase[] {
       plugin: mysqlEnvPlugin,
       templateId: 'mysql-template',
       params: {
+        installRootDir: join(tmpBase, 'mysql-direct'),
+        mysqlManager: 'mysql',
+        downloadCacheDir,
+      },
+    },
+    {
+      tool: 'mysql',
+      pluginId: 'mysql-env',
+      plugin: mysqlEnvPlugin,
+      templateId: 'mysql-template',
+      params: {
         installRootDir: join(tmpBase, 'mysql-package'),
         mysqlManager: 'package',
+        downloadCacheDir,
+      },
+    },
+    {
+      tool: 'redis',
+      pluginId: 'redis-env',
+      plugin: redisEnvPlugin,
+      templateId: 'redis-template',
+      params: {
+        installRootDir: join(tmpBase, 'redis-direct'),
+        redisManager: 'redis',
         downloadCacheDir,
       },
     },
@@ -430,6 +455,17 @@ function buildRealCases(tmpBase: string, downloadCacheDir: string): RealCase[] {
         installRootDir: join(tmpBase, 'maven-direct'),
         mavenManager: 'maven',
         mavenVersion: '3.9.11',
+        downloadCacheDir,
+      },
+    },
+    {
+      tool: 'maven',
+      pluginId: 'maven-env',
+      plugin: mavenEnvPlugin,
+      templateId: 'maven-template',
+      params: {
+        installRootDir: join(tmpBase, 'maven-package'),
+        mavenManager: 'package',
         downloadCacheDir,
       },
     },
@@ -518,7 +554,13 @@ describe.skipIf(!isRealRun)('action full flow — real plugins', () => {
         )
         expect(result.status).toBe('succeeded')
         expect(result.plugins[0].status).toBe('verified_success')
-        if (rc.params.gitManager === 'homebrew' || rc.params.gitManager === 'scoop') {
+        if (
+          rc.params.gitManager === 'homebrew' ||
+          rc.params.gitManager === 'scoop' ||
+          rc.params.mysqlManager === 'package' ||
+          rc.params.redisManager === 'package' ||
+          rc.params.mavenManager === 'package'
+        ) {
           expect(persisted.plugins[0].lastResult?.rollbackCommands?.length ?? 0).toBeGreaterThan(0)
         }
       }
@@ -577,7 +619,13 @@ describe.skipIf(!isRealRun)('action full flow — real plugins', () => {
         )
         expect(result.status).toBe('succeeded')
         expect(result.plugins[0].status).toBe('verified_success')
-        if (rc.params.gitManager === 'homebrew' || rc.params.gitManager === 'scoop') {
+        if (
+          rc.params.gitManager === 'homebrew' ||
+          rc.params.gitManager === 'scoop' ||
+          rc.params.mysqlManager === 'package' ||
+          rc.params.redisManager === 'package' ||
+          rc.params.mavenManager === 'package'
+        ) {
           expect(persisted.plugins[0].lastResult?.rollbackCommands?.length ?? 0).toBeGreaterThan(0)
         }
       }

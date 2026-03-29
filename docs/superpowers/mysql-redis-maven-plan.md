@@ -14,10 +14,10 @@
 
 ## Design Decisions
 
-1. `MySQL` 与 `Redis` 采用平台包管理器流，参数分别固定为 `mysqlManager=package` 与 `redisManager=package`。
-2. macOS 上的 `MySQL / Redis` 通过 `Homebrew` 安装与卸载，Windows 上通过 `Scoop` 安装与卸载。
-3. `Maven` 采用 Apache 官方归档直装流，参数固定为 `mavenManager=maven`，保留版本选择。
-4. `Maven` 版本列表来自 `archive.apache.org`，安装后统一设置 `MAVEN_HOME`、`M2_HOME` 与 PATH。
+1. `MySQL` 同时支持官方归档直装与平台包管理器流，参数为 `mysqlManager=mysql|package`。
+2. `Redis` 同时支持直装与平台包管理器流，参数为 `redisManager=redis|package`；macOS 直装使用官方源码包，Windows 直装使用 Redis 官方合作方 `Memurai Developer`。
+3. `Maven` 同时支持 Apache 官方归档直装与平台包管理器流，参数为 `mavenManager=maven|package`；直装保留版本选择。
+4. `Maven` 版本列表来自 `archive.apache.org`；包管理器流使用 Homebrew / Scoop，并在真实清理时优先调用管理器卸载。
 5. 本地开发继续严格使用 `dry-run`；真实安装、真实清理与真实回滚只在 GitHub Actions 和打包应用验证中执行。
 
 ## Implementation Plan
@@ -40,7 +40,7 @@
 - 新增 3 个插件单测与 Maven 版本列表单测。
 - 更新 copy / IPC / preload / environment / platform / network / download 测试，覆盖新增字段与行为。
 - 更新 renderer 与 E2E bootstrap 测试，确保 Maven 版本选择和 3 个新模板可用。
-- 更新 `tests/integration/action-real-cycle-matrix.test.ts`，把真实安装矩阵扩展到 7 工具，并继续覆盖三类场景：
+- 更新 `tests/integration/action-real-cycle-matrix.test.ts` 与 `tests/integration/action-real-rollback-matrix.test.ts`，把真实安装与真实回滚矩阵扩展到 7 工具，并继续覆盖三类场景：
   - 无环境安装后回滚
   - 已有环境处理
   - 清理后重装再回滚
@@ -48,8 +48,9 @@
 ## Rule Updates
 
 - `README.md` 需要从 4 工具说明扩展到 7 工具，并明确：
-  - `MySQL / Redis` 为包管理器流
-  - `Maven` 为 Apache 官方归档直装
+  - `MySQL` 为“官方直装 + Homebrew/Scoop”
+  - `Redis` 为“macOS 官方源码直装 + Windows Memurai 直装 + Homebrew/Scoop”
+  - `Maven` 为“Apache 官方归档直装 + Homebrew/Scoop”
   - 完整真实矩阵由 `action-real-cycle-matrix.test.ts` 与 workflow 负责
 - `AGENTS.md` 需要把测试覆盖策略扩展到 `MySQL / Redis / Maven`，并补充三者的安装规则。
 - `.github/workflows/e2e-real-install.yml` 与 `.github/workflows/release.yml` 需要把 tool matrix 扩到 7 工具，并把缓存 key 绑定到 3 个新插件文件。

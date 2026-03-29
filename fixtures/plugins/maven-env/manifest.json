@@ -11,7 +11,7 @@
   "parameters": {
     "mavenManager": {
       "type": "enum",
-      "values": ["maven"],
+      "values": ["maven", "package"],
       "required": true
     },
     "mavenVersion": {

@@ -55,10 +55,8 @@
 
 内置 7 套模板，安装流分为两类：
 
-- **官方直装流**: Node.js、Java、Python、Git、Maven
-- **管理器流**: Node.js（nvm / nvm-windows）、Java（SDKMAN）、Python（Conda）、Git（Homebrew / Scoop）、MySQL（Homebrew / Scoop）、Redis（Homebrew / Scoop）
-
-其中 **MySQL / Redis 当前仅提供平台包管理器安装**，**Maven 当前仅提供 Apache 官方归档直装**。
+- **官方直装流**: Node.js、Java、Python、Git、MySQL、Redis、Maven
+- **管理器流**: Node.js（nvm / nvm-windows）、Java（SDKMAN）、Python（Conda）、Git（Homebrew / Scoop）、MySQL（Homebrew / Scoop）、Redis（Homebrew / Scoop）、Maven（Homebrew / Scoop）
 
 ### Node.js
 
@@ -90,28 +88,31 @@
 
 ### MySQL
 
-|            | macOS                                                                                                                                      | Windows                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| **管理器** | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install mysql`；回滚用 `brew uninstall --formula mysql` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install mysql`；回滚用 `scoop uninstall mysql` |
+|              | macOS                                                                                                                                      | Windows                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `dev.mysql.com/get/Downloads/MySQL-8.4` 下载 `MySQL Community Server` 官方 `.tar.gz` 归档，解压到用户目录并校验 `mysql --version`       | 从 `dev.mysql.com/get/Downloads/MySQL-8.4` 下载 `MySQL Community Server` 官方 `noinstall` `.zip`，`Expand-Archive` 解压到用户目录并校验 `mysql.exe --version` |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install mysql`；回滚用 `brew uninstall --formula mysql` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install mysql`；回滚用 `scoop uninstall mysql`                                     |
 
 ### Redis
 
-|            | macOS                                                                                                                                      | Windows                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| **管理器** | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install redis`；回滚用 `brew uninstall --formula redis` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install redis`；回滚用 `scoop uninstall redis` |
+|              | macOS                                                                                                                                            | Windows                                                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `download.redis.io/releases` 下载官方源码包 `redis-7.4.7.tar.gz`，解压后执行 `make BUILD_TLS=no MALLOC=libc`，并校验 `redis-server --version` | 从 Redis 官方合作方 `Memurai` 下载 `Memurai Developer` MSI，静默安装到用户目录并使用 MSI 卸载链路回滚；安装后校验 `Memurai for Redis` 二进制是否存在 |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install redis`；回滚用 `brew uninstall --formula redis`       | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install redis`；回滚用 `scoop uninstall redis`                            |
 
 ### Maven
 
 |              | macOS                                                                                                                                          | Windows                                                                                                                                                          |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **直接安装** | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.tar.gz`，解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn -version` | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.zip`，`Expand-Archive` 解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn.cmd -version` |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install maven`；回滚用 `brew uninstall --formula maven`     | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install maven`；回滚用 `scoop uninstall maven`                                        |
 
 > **设计原则**: 直装流优先使用官方归档或便携包并落到用户目录；管理器流复用官方 Homebrew / Scoop / SDKMAN / Conda / nvm 生态，并在真实清理时优先调用官方卸载命令。
 
 ## 功能概览
 
 - 内置 `Node.js / Java / Python / Git / MySQL / Redis / Maven` 七套模板
-- 版本通过官方源动态获取（Node LTS、Java Adoptium、Python、Git、Maven）；MySQL / Redis 当前走平台包管理器安装，不提供版本选择
+- 版本通过官方源动态获取（Node LTS、Java Adoptium、Python、Git、Maven）；Maven 直装保留版本选择，MySQL / Redis 当前不暴露版本选择
 - 安装目录支持文件夹选择器自定义
 - 预检阶段检测已安装的 Node / Java / Python / Git / MySQL / Redis / Maven 环境，提供一键清理入口
 - 清理前自动创建快照，清理失败可一键回滚
@@ -230,7 +231,7 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 ### 工具×平台×场景覆盖矩阵
 
-对每个支持的工具流，在 macOS 和 Windows 上覆盖三大核心场景。MySQL / Redis 当前只覆盖平台包管理器流，Maven 当前只覆盖 Apache 官方归档直装流：
+对每个支持的工具流，在 macOS 和 Windows 上覆盖三大核心场景：
 
 | 场景                     | 说明                                                       |
 | ------------------------ | ---------------------------------------------------------- |
@@ -238,24 +239,28 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 | **已有环境处理**         | 检测已存在的环境并正确处理                                 |
 | **清理 → 重装 → 回滚**   | 先清理已有环境（含快照保护），再重新安装，验证完整流程     |
 
-完整覆盖矩阵（✅ = 真实安装测试通过）：
+完整覆盖矩阵（✅ = 已纳入真实安装/回滚测试矩阵）：
 
-| 工具    | 安装流              | macOS | Windows |
-| ------- | ------------------- | ----- | ------- |
-| Node.js | 直接安装            | ✅    | ✅      |
-| Node.js | nvm / nvm-windows   | ✅    | ✅      |
-| Java    | JDK 直接安装        | ✅    | ✅      |
-| Java    | SDKMAN              | ✅    | ✅      |
-| Python  | 直接安装            | ✅    | ✅      |
-| Python  | Conda               | ✅    | ✅      |
-| Git     | 直接安装            | ✅    | ✅      |
-| Git     | Homebrew            | ✅    | —       |
-| Git     | Scoop               | —     | ✅      |
-| MySQL   | Homebrew            | ✅    | —       |
-| MySQL   | Scoop               | —     | ✅      |
-| Redis   | Homebrew            | ✅    | —       |
-| Redis   | Scoop               | —     | ✅      |
-| Maven   | Apache 官方归档直装 | ✅    | ✅      |
+| 工具    | 安装流                   | macOS | Windows |
+| ------- | ------------------------ | ----- | ------- |
+| Node.js | 直接安装                 | ✅    | ✅      |
+| Node.js | nvm / nvm-windows        | ✅    | ✅      |
+| Java    | JDK 直接安装             | ✅    | ✅      |
+| Java    | SDKMAN                   | ✅    | ✅      |
+| Python  | 直接安装                 | ✅    | ✅      |
+| Python  | Conda                    | ✅    | ✅      |
+| Git     | 直接安装                 | ✅    | ✅      |
+| Git     | Homebrew                 | ✅    | —       |
+| Git     | Scoop                    | —     | ✅      |
+| MySQL   | MySQL Community 归档直装 | ✅    | ✅      |
+| MySQL   | Homebrew                 | ✅    | —       |
+| MySQL   | Scoop                    | —     | ✅      |
+| Redis   | 官方源码 / Memurai 直装  | ✅    | ✅      |
+| Redis   | Homebrew                 | ✅    | —       |
+| Redis   | Scoop                    | —     | ✅      |
+| Maven   | Apache 官方归档直装      | ✅    | ✅      |
+| Maven   | Homebrew                 | ✅    | —       |
+| Maven   | Scoop                    | —     | ✅      |
 
 ### 清理与回滚验证
 

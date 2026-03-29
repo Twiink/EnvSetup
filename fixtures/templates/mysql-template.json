@@ -7,8 +7,8 @@
   "version": "0.1.0",
   "platforms": ["darwin", "win32"],
   "description": {
-    "zh-CN": "通过平台包管理器安装 MySQL，macOS 使用 Homebrew，Windows 使用 Scoop。",
-    "en": "Install MySQL through the platform package manager: Homebrew on macOS and Scoop on Windows."
+    "zh-CN": "支持 MySQL 官方归档直装，或通过平台包管理器安装：macOS 使用 Homebrew，Windows 使用 Scoop。",
+    "en": "Install MySQL from the official archive directly, or use the platform package manager: Homebrew on macOS and Scoop on Windows."
   },
   "plugins": [
     {
@@ -25,7 +25,7 @@
       "type": "enum",
       "editable": true,
       "required": true,
-      "enum": ["package"],
+      "enum": ["mysql", "package"],
       "affects": ["mysql-env"]
     },
     "mysql.installRootDir": {

@@ -202,7 +202,7 @@ const mysqlTemplateFixture = {
       value: 'package',
       editable: true,
       required: true,
-      enum: ['package'],
+      enum: ['mysql', 'package'],
     },
     'mysql.installRootDir': {
       key: 'mysql.installRootDir',
@@ -237,7 +237,7 @@ const redisTemplateFixture = {
       value: 'package',
       editable: true,
       required: true,
-      enum: ['package'],
+      enum: ['redis', 'package'],
     },
     'redis.installRootDir': {
       key: 'redis.installRootDir',
@@ -272,7 +272,7 @@ const mavenTemplateFixture = {
       value: 'maven',
       editable: true,
       required: true,
-      enum: ['maven'],
+      enum: ['maven', 'package'],
     },
     'maven.mavenVersion': {
       key: 'maven.mavenVersion',

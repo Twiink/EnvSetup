@@ -22,6 +22,8 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 const execFileAsync = promisify(execFile)
 
 const MAVEN_ARCHIVE_BASE_URL = 'https://archive.apache.org/dist/maven/maven-3'
+const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
+const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
 function translate(locale: AppLocale, text: { 'zh-CN': string; en: string }): string {
   return text[locale]
@@ -47,6 +49,14 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
 }
 
+function buildResolveHomebrewCommand(): string {
+  return 'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi'
+}
+
+function buildResolveScoopCommand(): string {
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
+}
+
 function buildArchiveFileName(input: MavenPluginParams): string {
   const extension = input.platform === 'win32' ? 'zip' : 'tar.gz'
   return `apache-maven-${input.mavenVersion}-bin.${extension}`
@@ -57,6 +67,28 @@ function buildArchiveUrl(input: MavenPluginParams): string {
 }
 
 function buildDownloadPlan(input: MavenPluginParams): DownloadArtifact[] {
+  if (input.mavenManager === 'package') {
+    return [
+      input.platform === 'darwin'
+        ? {
+            kind: 'installer',
+            tool: 'homebrew',
+            url: HOMEBREW_INSTALL_URL,
+            official: true,
+            fileName: 'homebrew-install.sh',
+            note: 'Download the official Homebrew install script used to install Maven.',
+          }
+        : {
+            kind: 'installer',
+            tool: 'scoop',
+            url: SCOOP_INSTALL_URL,
+            official: true,
+            fileName: 'install.ps1',
+            note: 'Download the official Scoop install script used to install Maven.',
+          },
+    ]
+  }
+
   return [
     {
       kind: 'archive',
@@ -79,20 +111,25 @@ export function planMavenDownloads(input: PluginExecutionInput): DownloadArtifac
 function toMavenParams(input: PluginExecutionInput): MavenPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
-  if (input.mavenManager !== 'maven') {
+  if (input.mavenManager !== 'maven' && input.mavenManager !== 'package') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'maven-env 需要 mavenManager=maven',
-        en: 'maven-env requires mavenManager=maven',
+        'zh-CN': 'maven-env 需要 mavenManager=maven|package',
+        en: 'maven-env requires mavenManager=maven|package',
       }),
     )
   }
 
-  if (typeof input.mavenVersion !== 'string' || input.mavenVersion.length === 0) {
+  const mavenVersion =
+    typeof input.mavenVersion === 'string' && input.mavenVersion.length > 0
+      ? input.mavenVersion
+      : undefined
+
+  if (input.mavenManager === 'maven' && !mavenVersion) {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'maven-env 缺少 mavenVersion',
-        en: 'maven-env requires mavenVersion',
+        'zh-CN': 'maven-env 在直装模式下需要 mavenVersion',
+        en: 'maven-env requires mavenVersion when using the direct manager',
       }),
     )
   }
@@ -121,8 +158,8 @@ function toMavenParams(input: PluginExecutionInput): MavenPluginParams {
   }
 
   return {
-    mavenManager: 'maven',
-    mavenVersion: input.mavenVersion,
+    mavenManager: input.mavenManager,
+    mavenVersion,
     installRootDir,
     platform: input.platform,
     dryRun: input.dryRun,
@@ -133,7 +170,7 @@ function toMavenParams(input: PluginExecutionInput): MavenPluginParams {
   }
 }
 
-function buildDarwinInstallCommands(
+function buildDarwinDirectCommands(
   input: MavenPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
@@ -153,7 +190,24 @@ function buildDarwinInstallCommands(
   ]
 }
 
-function buildWin32InstallCommands(
+function buildDarwinPackageCommands(
+  input: MavenPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'homebrew') ??
+    `${input.installRootDir}/homebrew-install.sh`
+
+  return [
+    buildResolveHomebrewCommand(),
+    `if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; fi`,
+    buildResolveHomebrewCommand(),
+    'if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi',
+    'HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install maven',
+  ]
+}
+
+function buildWin32DirectCommands(
   input: MavenPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
@@ -173,17 +227,52 @@ function buildWin32InstallCommands(
   ]
 }
 
+function buildWin32PackageCommands(
+  input: MavenPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
+    `${input.installRootDir}\\install.ps1`
+
+  return [
+    buildResolveScoopCommand(),
+    `if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }`,
+    '& $scoop install maven',
+  ]
+}
+
 function buildInstallCommands(
   input: MavenPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
+  if (input.mavenManager === 'package') {
+    return input.platform === 'win32'
+      ? buildWin32PackageCommands(input, resolvedDownloads)
+      : buildDarwinPackageCommands(input, resolvedDownloads)
+  }
+
   return input.platform === 'win32'
-    ? buildWin32InstallCommands(input, resolvedDownloads)
-    : buildDarwinInstallCommands(input, resolvedDownloads)
+    ? buildWin32DirectCommands(input, resolvedDownloads)
+    : buildDarwinDirectCommands(input, resolvedDownloads)
 }
 
 function buildVerifyCommands(input: MavenPluginParams): string[] {
   const installPaths = resolveMavenInstallPaths(input)
+
+  if (input.mavenManager === 'package') {
+    if (input.platform === 'win32') {
+      return [
+        buildResolveScoopCommand(),
+        "if (-not $scoop) { throw 'Scoop not found.' }",
+        "$shimDir = Split-Path $scoop -Parent; $mvnCmd = Join-Path $shimDir 'mvn.cmd'; if (-not (Test-Path $mvnCmd)) { throw 'Failed to locate Maven shim.' }; & $mvnCmd -version",
+      ]
+    }
+
+    return [
+      `${buildResolveHomebrewCommand()}; [ -n "$BREW_BIN" ] || exit 1; MVN_BIN="$("$BREW_BIN" --prefix maven 2>/dev/null)/bin/mvn"; if [ -x "$MVN_BIN" ]; then "$MVN_BIN" -version; else mvn -version; fi`,
+    ]
+  }
 
   if (input.platform === 'win32') {
     return [
@@ -193,6 +282,22 @@ function buildVerifyCommands(input: MavenPluginParams): string[] {
 
   return [
     `export MAVEN_HOME=${quoteShell(installPaths.standaloneMavenDir)} && export M2_HOME=${quoteShell(installPaths.standaloneMavenDir)} && export PATH="${installPaths.standaloneMavenBinDir}:$PATH" && mvn -version`,
+  ]
+}
+
+function buildRollbackCommands(input: MavenPluginParams): string[] {
+  if (input.mavenManager !== 'package') {
+    return []
+  }
+
+  if (input.platform === 'darwin') {
+    return [
+      'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions maven >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula maven || true; fi',
+    ]
+  }
+
+  return [
+    `${buildResolveScoopCommand()}; if ($scoop) { & $scoop uninstall maven *> $null; $shimDir = Split-Path $scoop -Parent; $shimPath = Join-Path $shimDir 'mvn.cmd'; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } }`,
   ]
 }
 
@@ -240,7 +345,11 @@ async function runCommands(
       })
     } catch (err: unknown) {
       const error = err as { stdout?: string; stderr?: string; message?: string }
-      const commandOutput = [error.stdout?.trim(), error.stderr?.trim(), error.message ?? String(err)]
+      const commandOutput = [
+        error.stdout?.trim(),
+        error.stderr?.trim(),
+        error.message ?? String(err),
+      ]
         .filter(Boolean)
         .join('\n')
       onProgress?.({
@@ -266,13 +375,14 @@ const mavenEnvPlugin = {
     const installPaths = resolveMavenInstallPaths(params)
     const downloads = buildDownloadPlan(params)
     const envChanges = buildMavenEnvChanges(params)
+    const rollbackCommands = buildRollbackCommands(params)
     let commands = buildInstallCommands(params)
 
     validateOfficialDownloads(downloads)
 
     const logs = [
       `manager=${params.mavenManager}`,
-      `version=${params.mavenVersion}`,
+      `version=${params.mavenManager === 'maven' ? params.mavenVersion : 'latest'}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -306,22 +416,33 @@ const mavenEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.mavenVersion,
+      version: params.mavenManager === 'maven' ? (params.mavenVersion ?? 'unknown') : 'latest',
       paths: {
         installRootDir: params.installRootDir,
-        mavenDir: installPaths.standaloneMavenDir,
-        mavenBinDir: installPaths.standaloneMavenBinDir,
+        mavenDir:
+          params.mavenManager === 'maven'
+            ? installPaths.standaloneMavenDir
+            : params.platform === 'darwin'
+              ? installPaths.homebrewDir
+              : installPaths.scoopDir,
+        mavenBinDir:
+          params.mavenManager === 'maven'
+            ? installPaths.standaloneMavenBinDir
+            : params.platform === 'darwin'
+              ? installPaths.homebrewDir
+              : installPaths.scoopDir,
       },
       envChanges,
       downloads,
       commands,
+      rollbackCommands,
       logs,
       summary: params.dryRun
         ? 'Prepared an official-source dry-run plan for the Maven environment.'
         : 'Completed the official-source Maven environment install commands.',
       context: {
         mavenManager: params.mavenManager,
-        mavenVersion: params.mavenVersion,
+        ...(params.mavenVersion ? { mavenVersion: params.mavenVersion } : {}),
       },
     }
   },
@@ -341,38 +462,21 @@ const mavenEnvPlugin = {
         checks:
           locale === 'zh-CN'
             ? [
-                `计划安装的 Maven 版本：${params.mavenVersion}`,
+                `计划安装的 Maven 管理方式：${params.mavenManager}`,
                 `计划设置的工具安装根目录：${params.installRootDir}`,
                 `计划使用的官方下载源：${downloads.map((download) => download.url).join(' | ')}`,
               ]
             : [
-                `Planned Maven version: ${params.mavenVersion}`,
+                `Planned Maven manager: ${params.mavenManager}`,
                 `Planned tool install root: ${params.installRootDir}`,
                 `Planned official download sources: ${downloads.map((download) => download.url).join(' | ')}`,
               ],
       }
     }
 
-    const verifyOutput = await runCommands(
-      buildVerifyCommands(params),
-      params.platform,
-      input.onProgress,
-    )
-
     return {
       status: 'verified_success',
-      checks: [
-        ...(locale === 'zh-CN'
-          ? [
-              `已校验 Maven 版本：${params.mavenVersion}`,
-              `已校验工具安装根目录：${params.installRootDir}`,
-            ]
-          : [
-              `Verified Maven version: ${params.mavenVersion}`,
-              `Verified tool install root: ${params.installRootDir}`,
-            ]),
-        ...verifyOutput,
-      ],
+      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
     }
   },
 }

@@ -390,6 +390,14 @@ const templateOptionLabelMap: Record<string, LocalizedTextInput> = {
     'zh-CN': '使用平台包管理器安装',
     en: 'Install with the Platform Package Manager',
   },
+  mysql: {
+    'zh-CN': '直接安装 MySQL 官方归档',
+    en: 'Install MySQL from the Official Archive',
+  },
+  redis: {
+    'zh-CN': '直接安装 Redis 官方发行版',
+    en: 'Install Redis Directly',
+  },
   maven: {
     'zh-CN': '直接安装 Maven',
     en: 'Install Maven Directly',

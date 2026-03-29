@@ -181,6 +181,72 @@ const allRealRollbackCases: RealRollbackCase[] = [
       expect(await pathExists(join(installRootDir, 'maven-3.9.11'))).toBe(true)
     },
   },
+  {
+    name: 'Maven package',
+    tool: 'maven',
+    pluginId: 'maven-env',
+    plugin: mavenEnvPlugin,
+    templateId: 'maven-template',
+    timeout: 300_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      mavenManager: 'package',
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('maven')).toBe(true)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('maven')).toBe(true)
+      }
+    },
+    verifyRolledBackState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('maven')).toBe(false)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('maven')).toBe(false)
+      }
+    },
+  },
+  {
+    name: 'MySQL direct',
+    tool: 'mysql',
+    pluginId: 'mysql-env',
+    plugin: mysqlEnvPlugin,
+    templateId: 'mysql-template',
+    timeout: 300_000,
+    buildParams: (installRootDir: string, cacheDir: string) => ({
+      installRootDir,
+      mysqlManager: 'mysql',
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, 'mysql'))).toBe(true)
+    },
+  },
+  {
+    name: 'Redis direct',
+    tool: 'redis',
+    pluginId: 'redis-env',
+    plugin: redisEnvPlugin,
+    templateId: 'redis-template',
+    timeout: isWindows ? 600_000 : 300_000,
+    buildParams: (installRootDir: string, cacheDir: string) => ({
+      installRootDir,
+      redisManager: 'redis',
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      if (isMac) {
+        expect(await pathExists(join(installRootDir, 'redis', 'src', 'redis-server'))).toBe(true)
+      }
+      if (isWindows) {
+        expect(await pathExists(join(installRootDir, 'redis'))).toBe(true)
+      }
+    },
+  },
   ...(isMac
     ? [
         {

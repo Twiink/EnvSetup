@@ -415,13 +415,20 @@ export function buildCondaInitSnippet(condaDir: string): string {
 
 export type MysqlInstallPaths = {
   installRootDir: string
+  standaloneMysqlDir: string
+  standaloneMysqlBinDir: string
   homebrewDir: string
   scoopDir: string
 }
 
 export function resolveMysqlInstallPaths(input: MysqlPluginParams): MysqlInstallPaths {
+  const pathApi = getPathApi(input.platform)
+  const standaloneMysqlDir = pathApi.join(input.installRootDir, 'mysql')
+
   return {
     installRootDir: input.installRootDir,
+    standaloneMysqlDir,
+    standaloneMysqlBinDir: pathApi.join(standaloneMysqlDir, 'bin'),
     homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
     scoopDir: resolveScoopShimsDir(input.platform),
   }
@@ -429,6 +436,25 @@ export function resolveMysqlInstallPaths(input: MysqlPluginParams): MysqlInstall
 
 export function buildMysqlEnvChanges(input: MysqlPluginParams): EnvChange[] {
   const installPaths = resolveMysqlInstallPaths(input)
+
+  if (input.mysqlManager === 'mysql') {
+    return [
+      {
+        kind: 'env',
+        key: 'MYSQL_HOME',
+        value: installPaths.standaloneMysqlDir,
+        scope: 'user',
+        description: 'Set MYSQL_HOME to the standalone MySQL directory.',
+      },
+      {
+        kind: 'path',
+        key: 'PATH',
+        value: installPaths.standaloneMysqlBinDir,
+        scope: 'user',
+        description: 'Expose the standalone MySQL bin directory in PATH.',
+      },
+    ]
+  }
 
   return [
     {
@@ -450,13 +476,21 @@ export function buildMysqlEnvChanges(input: MysqlPluginParams): EnvChange[] {
 
 export type RedisInstallPaths = {
   installRootDir: string
+  standaloneRedisDir: string
+  standaloneRedisBinDir: string
   homebrewDir: string
   scoopDir: string
 }
 
 export function resolveRedisInstallPaths(input: RedisPluginParams): RedisInstallPaths {
+  const pathApi = getPathApi(input.platform)
+  const standaloneRedisDir = pathApi.join(input.installRootDir, 'redis')
+
   return {
     installRootDir: input.installRootDir,
+    standaloneRedisDir,
+    standaloneRedisBinDir:
+      input.platform === 'win32' ? standaloneRedisDir : pathApi.join(standaloneRedisDir, 'src'),
     homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
     scoopDir: resolveScoopShimsDir(input.platform),
   }
@@ -464,6 +498,25 @@ export function resolveRedisInstallPaths(input: RedisPluginParams): RedisInstall
 
 export function buildRedisEnvChanges(input: RedisPluginParams): EnvChange[] {
   const installPaths = resolveRedisInstallPaths(input)
+
+  if (input.redisManager === 'redis') {
+    return [
+      {
+        kind: 'env',
+        key: 'REDIS_HOME',
+        value: installPaths.standaloneRedisDir,
+        scope: 'user',
+        description: 'Set REDIS_HOME to the standalone Redis directory.',
+      },
+      {
+        kind: 'path',
+        key: 'PATH',
+        value: installPaths.standaloneRedisBinDir,
+        scope: 'user',
+        description: 'Expose the standalone Redis bin directory in PATH.',
+      },
+    ]
+  }
 
   return [
     {
@@ -487,21 +540,43 @@ export type MavenInstallPaths = {
   installRootDir: string
   standaloneMavenDir: string
   standaloneMavenBinDir: string
+  homebrewDir: string
+  scoopDir: string
 }
 
 export function resolveMavenInstallPaths(input: MavenPluginParams): MavenInstallPaths {
   const pathApi = getPathApi(input.platform)
-  const standaloneMavenDir = pathApi.join(input.installRootDir, `maven-${input.mavenVersion}`)
+  const standaloneMavenDir = pathApi.join(
+    input.installRootDir,
+    `maven-${input.mavenVersion ?? 'unknown'}`,
+  )
 
   return {
     installRootDir: input.installRootDir,
     standaloneMavenDir,
     standaloneMavenBinDir: pathApi.join(standaloneMavenDir, 'bin'),
+    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    scoopDir: resolveScoopShimsDir(input.platform),
   }
 }
 
 export function buildMavenEnvChanges(input: MavenPluginParams): EnvChange[] {
   const installPaths = resolveMavenInstallPaths(input)
+
+  if (input.mavenManager === 'package') {
+    return [
+      {
+        kind: 'path',
+        key: 'PATH',
+        value: input.platform === 'darwin' ? installPaths.homebrewDir : installPaths.scoopDir,
+        scope: 'user',
+        description:
+          input.platform === 'darwin'
+            ? 'Expose the Homebrew bin directory for Maven in PATH.'
+            : 'Expose the Scoop shims directory for Maven in PATH.',
+      },
+    ]
+  }
 
   return [
     {

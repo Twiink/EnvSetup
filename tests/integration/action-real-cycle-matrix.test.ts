@@ -190,6 +190,36 @@ const allRealCycleCases: RealCycleCase[] = [
     verifyPattern: /Apache Maven\s+3\.9\.11/i,
   },
   {
+    name: 'Maven package',
+    tool: 'maven',
+    pluginId: 'maven-env',
+    plugin: mavenEnvPlugin,
+    templateId: 'maven-template',
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        mavenManager: 'package',
+      }),
+    verifyPattern: /Apache Maven/i,
+    expectInstallRootAfterInstall: false,
+    verifyInstalledState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('maven')).toBe(true)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('maven')).toBe(true)
+      }
+    },
+    verifyRolledBackState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('maven')).toBe(false)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('maven')).toBe(false)
+      }
+    },
+  },
+  {
     name: 'Git direct',
     tool: 'git',
     pluginId: 'git-env',
@@ -201,6 +231,19 @@ const allRealCycleCases: RealCycleCase[] = [
         gitManager: 'git',
       }),
     verifyPattern: /git version/i,
+  },
+  {
+    name: 'MySQL direct',
+    tool: 'mysql',
+    pluginId: 'mysql-env',
+    plugin: mysqlEnvPlugin,
+    templateId: 'mysql-template',
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        mysqlManager: 'mysql',
+      }),
+    verifyPattern: /(mysql|8\.4\.8|ver)/i,
   },
   {
     name: 'MySQL package',
@@ -231,6 +274,19 @@ const allRealCycleCases: RealCycleCase[] = [
         expect(await isScoopPackageInstalled('mysql')).toBe(false)
       }
     },
+  },
+  {
+    name: 'Redis direct',
+    tool: 'redis',
+    pluginId: 'redis-env',
+    plugin: redisEnvPlugin,
+    templateId: 'redis-template',
+    buildParams: (installRootDir) =>
+      withSharedCaches({
+        installRootDir,
+        redisManager: 'redis',
+      }),
+    verifyPattern: /(redis|memurai)/i,
   },
   {
     name: 'Redis package',

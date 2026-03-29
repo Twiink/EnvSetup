@@ -21,6 +21,8 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 
 const execFileAsync = promisify(execFile)
 
+const MYSQL_DIRECT_VERSION = '8.4.8'
+const MYSQL_ARCHIVE_BASE_URL = 'https://dev.mysql.com/get/Downloads/MySQL-8.4'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -56,7 +58,40 @@ function buildResolveScoopCommand(): string {
   return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
 }
 
+function buildDirectArchiveFileName(input: MysqlPluginParams): string {
+  if (input.platform === 'win32') {
+    return `mysql-${MYSQL_DIRECT_VERSION}-winx64.zip`
+  }
+
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64'
+  return `mysql-${MYSQL_DIRECT_VERSION}-macos15-${arch}.tar.gz`
+}
+
+function buildDirectArchiveUrl(input: MysqlPluginParams): string {
+  return `${MYSQL_ARCHIVE_BASE_URL}/${buildDirectArchiveFileName(input)}`
+}
+
+function buildDirectExtractedDirName(input: MysqlPluginParams): string {
+  return buildDirectArchiveFileName(input).replace(/\.tar\.gz$|\.zip$/u, '')
+}
+
 function buildDownloadPlan(input: MysqlPluginParams): DownloadArtifact[] {
+  if (input.mysqlManager === 'mysql') {
+    return [
+      {
+        kind: 'archive',
+        tool: 'mysql',
+        url: buildDirectArchiveUrl(input),
+        official: true,
+        fileName: buildDirectArchiveFileName(input),
+        note:
+          input.platform === 'darwin'
+            ? 'Download the official MySQL Community Server macOS archive.'
+            : 'Download the official MySQL Community Server Windows noinstall archive.',
+      },
+    ]
+  }
+
   return [
     input.platform === 'darwin'
       ? {
@@ -88,11 +123,11 @@ export function planMysqlDownloads(input: PluginExecutionInput): DownloadArtifac
 function toMysqlParams(input: PluginExecutionInput): MysqlPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
-  if (input.mysqlManager !== 'package') {
+  if (input.mysqlManager !== 'mysql' && input.mysqlManager !== 'package') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'mysql-env 需要 mysqlManager=package',
-        en: 'mysql-env requires mysqlManager=package',
+        'zh-CN': 'mysql-env 需要 mysqlManager=mysql|package',
+        en: 'mysql-env requires mysqlManager=mysql|package',
       }),
     )
   }
@@ -121,7 +156,7 @@ function toMysqlParams(input: PluginExecutionInput): MysqlPluginParams {
   }
 
   return {
-    mysqlManager: 'package',
+    mysqlManager: input.mysqlManager,
     installRootDir,
     platform: input.platform,
     dryRun: input.dryRun,
@@ -132,7 +167,27 @@ function toMysqlParams(input: PluginExecutionInput): MysqlPluginParams {
   }
 }
 
-function buildDarwinInstallCommands(
+function buildDarwinDirectCommands(
+  input: MysqlPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
+  const installPaths = resolveMysqlInstallPaths(input)
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'mysql') ??
+    `${installPaths.installRootDir}/${buildDirectArchiveFileName(input)}`
+  const extractedDir = `${installPaths.installRootDir}/${buildDirectExtractedDirName(input)}`
+
+  return [
+    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
+    `rm -rf ${quoteShell(installPaths.standaloneMysqlDir)} ${quoteShell(extractedDir)}`,
+    `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
+    `mv ${quoteShell(extractedDir)} ${quoteShell(installPaths.standaloneMysqlDir)}`,
+    `chmod +x ${quoteShell(`${installPaths.standaloneMysqlBinDir}/mysql`)} ${quoteShell(`${installPaths.standaloneMysqlBinDir}/mysqld`)}`,
+    `export MYSQL_HOME=${quoteShell(installPaths.standaloneMysqlDir)} && export PATH="${installPaths.standaloneMysqlBinDir}:$PATH" && ${quoteShell(`${installPaths.standaloneMysqlBinDir}/mysql`)} --version`,
+  ]
+}
+
+function buildDarwinPackageCommands(
   input: MysqlPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
@@ -149,12 +204,33 @@ function buildDarwinInstallCommands(
   ]
 }
 
-function buildWin32InstallCommands(
+function buildWin32DirectCommands(
+  input: MysqlPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
+  const installPaths = resolveMysqlInstallPaths(input)
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'mysql') ??
+    `${installPaths.installRootDir}\\${buildDirectArchiveFileName(input)}`
+  const extractedDir = `${installPaths.installRootDir}\\${buildDirectExtractedDirName(input)}`
+
+  return [
+    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
+    `Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneMysqlDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
+    `Remove-Item -LiteralPath ${quotePowerShell(extractedDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
+    `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
+    `Move-Item -LiteralPath ${quotePowerShell(extractedDir)} -Destination ${quotePowerShell(installPaths.standaloneMysqlDir)} -Force`,
+    `$env:MYSQL_HOME = ${quotePowerShell(installPaths.standaloneMysqlDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneMysqlBinDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.standaloneMysqlBinDir}\\mysql.exe`)} --version`,
+  ]
+}
+
+function buildWin32PackageCommands(
   input: MysqlPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
   const installerPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ?? `${input.installRootDir}\\install.ps1`
+    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
+    `${input.installRootDir}\\install.ps1`
 
   return [
     buildResolveScoopCommand(),
@@ -167,12 +243,26 @@ function buildInstallCommands(
   input: MysqlPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
+  if (input.mysqlManager === 'mysql') {
+    return input.platform === 'win32'
+      ? buildWin32DirectCommands(input, resolvedDownloads)
+      : buildDarwinDirectCommands(input, resolvedDownloads)
+  }
+
   return input.platform === 'win32'
-    ? buildWin32InstallCommands(input, resolvedDownloads)
-    : buildDarwinInstallCommands(input, resolvedDownloads)
+    ? buildWin32PackageCommands(input, resolvedDownloads)
+    : buildDarwinPackageCommands(input, resolvedDownloads)
 }
 
-function buildDarwinVerifyCommands(): string[] {
+function buildDarwinVerifyCommands(input: MysqlPluginParams): string[] {
+  const installPaths = resolveMysqlInstallPaths(input)
+
+  if (input.mysqlManager === 'mysql') {
+    return [
+      `export MYSQL_HOME=${quoteShell(installPaths.standaloneMysqlDir)} && export PATH="${installPaths.standaloneMysqlBinDir}:$PATH" && ${quoteShell(`${installPaths.standaloneMysqlBinDir}/mysql`)} --version`,
+    ]
+  }
+
   return [
     buildResolveHomebrewCommand(),
     'if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi',
@@ -180,7 +270,15 @@ function buildDarwinVerifyCommands(): string[] {
   ]
 }
 
-function buildWin32VerifyCommands(): string[] {
+function buildWin32VerifyCommands(input: MysqlPluginParams): string[] {
+  const installPaths = resolveMysqlInstallPaths(input)
+
+  if (input.mysqlManager === 'mysql') {
+    return [
+      `$env:MYSQL_HOME = ${quotePowerShell(installPaths.standaloneMysqlDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneMysqlBinDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.standaloneMysqlBinDir}\\mysql.exe`)} --version`,
+    ]
+  }
+
   return [
     buildResolveScoopCommand(),
     "if (-not $scoop) { throw 'Scoop not found.' }",
@@ -189,10 +287,16 @@ function buildWin32VerifyCommands(): string[] {
 }
 
 function buildVerifyCommands(input: MysqlPluginParams): string[] {
-  return input.platform === 'win32' ? buildWin32VerifyCommands() : buildDarwinVerifyCommands()
+  return input.platform === 'win32'
+    ? buildWin32VerifyCommands(input)
+    : buildDarwinVerifyCommands(input)
 }
 
 function buildRollbackCommands(input: MysqlPluginParams): string[] {
+  if (input.mysqlManager === 'mysql') {
+    return []
+  }
+
   if (input.platform === 'darwin') {
     return [
       'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions mysql >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula mysql || true; fi',
@@ -248,7 +352,11 @@ async function runCommands(
       })
     } catch (err: unknown) {
       const error = err as { stdout?: string; stderr?: string; message?: string }
-      const commandOutput = [error.stdout?.trim(), error.stderr?.trim(), error.message ?? String(err)]
+      const commandOutput = [
+        error.stdout?.trim(),
+        error.stderr?.trim(),
+        error.message ?? String(err),
+      ]
         .filter(Boolean)
         .join('\n')
       onProgress?.({
@@ -281,7 +389,7 @@ const mysqlEnvPlugin = {
 
     const logs = [
       `manager=${params.mysqlManager}`,
-      `platform_manager=${params.platform === 'darwin' ? 'homebrew' : 'scoop'}`,
+      `version=${params.mysqlManager === 'mysql' ? MYSQL_DIRECT_VERSION : 'latest'}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -315,11 +423,11 @@ const mysqlEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: 'latest',
+      version: params.mysqlManager === 'mysql' ? MYSQL_DIRECT_VERSION : 'latest',
       paths: {
         installRootDir: params.installRootDir,
-        homebrewDir: installPaths.homebrewDir,
-        scoopDir: installPaths.scoopDir,
+        mysqlDir: installPaths.standaloneMysqlDir,
+        mysqlBinDir: installPaths.standaloneMysqlBinDir,
       },
       envChanges,
       downloads,
@@ -327,11 +435,11 @@ const mysqlEnvPlugin = {
       rollbackCommands,
       logs,
       summary: params.dryRun
-        ? 'Prepared a dry-run plan for the MySQL environment through the platform package manager.'
-        : 'Completed the MySQL environment install commands through the platform package manager.',
+        ? 'Prepared an official-source dry-run plan for the MySQL environment.'
+        : 'Completed the official-source MySQL environment install commands.',
       context: {
         mysqlManager: params.mysqlManager,
-        platformManager: params.platform === 'darwin' ? 'homebrew' : 'scoop',
+        mysqlVersion: params.mysqlManager === 'mysql' ? MYSQL_DIRECT_VERSION : 'latest',
       },
     }
   },
@@ -351,32 +459,21 @@ const mysqlEnvPlugin = {
         checks:
           locale === 'zh-CN'
             ? [
-                `计划使用的平台包管理器：${params.platform === 'darwin' ? 'Homebrew' : 'Scoop'}`,
+                `计划安装的 MySQL 管理方式：${params.mysqlManager}`,
                 `计划设置的工具安装根目录：${params.installRootDir}`,
                 `计划使用的官方下载源：${downloads.map((download) => download.url).join(' | ')}`,
               ]
             : [
-                `Planned platform package manager: ${params.platform === 'darwin' ? 'Homebrew' : 'Scoop'}`,
+                `Planned MySQL manager: ${params.mysqlManager}`,
                 `Planned tool install root: ${params.installRootDir}`,
                 `Planned official download sources: ${downloads.map((download) => download.url).join(' | ')}`,
               ],
       }
     }
 
-    const verifyOutput = await runCommands(
-      buildVerifyCommands(params),
-      params.platform,
-      input.onProgress,
-    )
-
     return {
       status: 'verified_success',
-      checks: [
-        ...(locale === 'zh-CN'
-          ? [`已校验 MySQL 安装命令可用`, `已校验工具安装根目录：${params.installRootDir}`]
-          : [`Verified MySQL installation command availability`, `Verified tool install root: ${params.installRootDir}`]),
-        ...verifyOutput,
-      ],
+      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
     }
   },
 }

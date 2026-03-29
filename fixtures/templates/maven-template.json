@@ -7,8 +7,8 @@
   "version": "0.1.0",
   "platforms": ["darwin", "win32"],
   "description": {
-    "zh-CN": "通过 Apache 官方二进制归档安装 Maven，并配置用户级环境变量。",
-    "en": "Install Maven from the official Apache binary archive and configure user-level environment variables."
+    "zh-CN": "支持通过 Apache 官方二进制归档直装 Maven，也支持通过平台包管理器安装：macOS 使用 Homebrew，Windows 使用 Scoop。",
+    "en": "Install Maven from the official Apache binary archive, or use the platform package manager: Homebrew on macOS and Scoop on Windows."
   },
   "plugins": [
     {
@@ -26,7 +26,7 @@
       "type": "enum",
       "editable": true,
       "required": true,
-      "enum": ["maven"],
+      "enum": ["maven", "package"],
       "affects": ["maven-env"]
     },
     "maven.mavenVersion": {

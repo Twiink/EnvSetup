@@ -227,6 +227,8 @@ export type DownloadArtifact = {
     | 'miniconda'
     | 'git'
     | 'git-for-windows'
+    | 'mysql'
+    | 'redis'
     | 'maven'
     | 'homebrew'
     | 'scoop'
@@ -337,20 +339,20 @@ export type GitPluginParams = PluginExecutionInput & {
 }
 
 export type MysqlPluginParams = PluginExecutionInput & {
-  mysqlManager: 'package'
+  mysqlManager: 'mysql' | 'package'
   installRootDir: string
   downloadCacheDir?: string
 }
 
 export type RedisPluginParams = PluginExecutionInput & {
-  redisManager: 'package'
+  redisManager: 'redis' | 'package'
   installRootDir: string
   downloadCacheDir?: string
 }
 
 export type MavenPluginParams = PluginExecutionInput & {
-  mavenManager: 'maven'
-  mavenVersion: string
+  mavenManager: 'maven' | 'package'
+  mavenVersion?: string
   installRootDir: string
   downloadCacheDir?: string
 }

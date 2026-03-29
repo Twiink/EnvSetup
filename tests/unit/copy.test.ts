@@ -174,6 +174,8 @@ describe('getTemplateOptionLabel', () => {
     expect(getTemplateOptionLabel('zh-CN', 'nvm')).toBe('使用 nvm 管理 Node.js')
     expect(getTemplateOptionLabel('en', 'nvm')).toBe('Use nvm to Manage Node.js')
     expect(getTemplateOptionLabel('zh-CN', 'package')).toBe('使用平台包管理器安装')
+    expect(getTemplateOptionLabel('zh-CN', 'mysql')).toBe('直接安装 MySQL 官方归档')
+    expect(getTemplateOptionLabel('en', 'redis')).toBe('Install Redis Directly')
     expect(getTemplateOptionLabel('en', 'maven')).toBe('Install Maven Directly')
   })
 

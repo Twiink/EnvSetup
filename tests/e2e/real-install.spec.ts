@@ -314,11 +314,14 @@ async function runGitInstallFlow(page: Page, managerLabel: string) {
   })
 }
 
-async function runMysqlInstallFlow(page: Page) {
+async function runMysqlInstallFlow(page: Page, managerLabel?: string) {
   await expect(page.getByRole('button', { name: 'MySQL 数据库环境' })).toBeVisible({
     timeout: 15_000,
   })
   await page.getByRole('button', { name: 'MySQL 数据库环境' }).click()
+  if (managerLabel) {
+    await page.locator('select[id="mysql.mysqlManager"]').selectOption({ label: managerLabel })
+  }
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
@@ -329,11 +332,14 @@ async function runMysqlInstallFlow(page: Page) {
   })
 }
 
-async function runRedisInstallFlow(page: Page) {
+async function runRedisInstallFlow(page: Page, managerLabel?: string) {
   await expect(page.getByRole('button', { name: 'Redis 缓存环境' })).toBeVisible({
     timeout: 15_000,
   })
   await page.getByRole('button', { name: 'Redis 缓存环境' }).click()
+  if (managerLabel) {
+    await page.locator('select[id="redis.redisManager"]').selectOption({ label: managerLabel })
+  }
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
@@ -344,12 +350,17 @@ async function runRedisInstallFlow(page: Page) {
   })
 }
 
-async function runMavenInstallFlow(page: Page) {
+async function runMavenInstallFlow(page: Page, managerLabel?: string, selectVersion = true) {
   await expect(page.getByRole('button', { name: 'Maven 构建环境' })).toBeVisible({
     timeout: 15_000,
   })
   await page.getByRole('button', { name: 'Maven 构建环境' }).click()
-  await page.locator('select[id="maven.mavenVersion"]').selectOption({ index: 0 })
+  if (managerLabel) {
+    await page.locator('select[id="maven.mavenManager"]').selectOption({ label: managerLabel })
+  }
+  if (selectVersion) {
+    await page.locator('select[id="maven.mavenVersion"]').selectOption({ index: 0 })
+  }
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
@@ -424,6 +435,17 @@ const realRollbackCases = [
     }),
   },
   {
+    name: 'mysql direct',
+    templateId: 'mysql-template',
+    buildOverrides: (installRoot: string) => ({
+      'mysql.mysqlManager': 'mysql',
+      'mysql.installRootDir': installRoot,
+    }),
+    verifyInstalledState: async (installRoot: string) => {
+      await expect(fs.access(path.join(installRoot, 'mysql'))).resolves.toBeUndefined()
+    },
+  },
+  {
     name: 'maven direct',
     templateId: 'maven-template',
     buildOverrides: (installRoot: string) => ({
@@ -435,8 +457,45 @@ const realRollbackCases = [
       await expect(fs.access(path.join(installRoot, 'maven-3.9.11'))).resolves.toBeUndefined()
     },
   },
+  {
+    name: 'maven package',
+    templateId: 'maven-template',
+    buildOverrides: (installRoot: string) => ({
+      'maven.mavenManager': 'package',
+      'maven.installRootDir': installRoot,
+    }),
+    verifyInstalledState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('maven')).toBe(true)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('maven')).toBe(true)
+      }
+    },
+    verifyRolledBackState: async () => {
+      if (isMac) {
+        expect(await isHomebrewFormulaInstalled('maven')).toBe(false)
+      }
+      if (isWindows) {
+        expect(await isScoopPackageInstalled('maven')).toBe(false)
+      }
+    },
+  },
   ...(isMac
     ? [
+        {
+          name: 'redis direct',
+          templateId: 'redis-template',
+          buildOverrides: (installRoot: string) => ({
+            'redis.redisManager': 'redis',
+            'redis.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async (installRoot: string) => {
+            await expect(
+              fs.access(path.join(installRoot, 'redis', 'src', 'redis-server')),
+            ).resolves.toBeUndefined()
+          },
+        },
         {
           name: 'mysql package',
           templateId: 'mysql-template',
@@ -487,6 +546,17 @@ const realRollbackCases = [
     : []),
   ...(isWindows
     ? [
+        {
+          name: 'redis direct',
+          templateId: 'redis-template',
+          buildOverrides: (installRoot: string) => ({
+            'redis.redisManager': 'redis',
+            'redis.installRootDir': installRoot,
+          }),
+          verifyInstalledState: async (installRoot: string) => {
+            await expect(fs.access(path.join(installRoot, 'redis'))).resolves.toBeUndefined()
+          },
+        },
         {
           name: 'git scoop',
           templateId: 'git-template',
@@ -679,11 +749,26 @@ test.describe('real install', () => {
   // MySQL / Redis / Maven
   // ============================================================
 
+  test('mysql direct install reaches terminal success path', async () => {
+    test.setTimeout(600_000)
+    const installRoot = makeInstallRoot('mysql-direct')
+    const { app, page, dataDir } = await launchRealRunApp(installRoot)
+    try {
+      await runMysqlInstallFlow(page, '直接安装 MySQL 官方归档')
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      await expect(fs.access(path.join(installRoot, 'mysql'))).resolves.toBeUndefined()
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
   test('mysql package install reaches terminal success path', async () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('mysql-package'))
     try {
-      await runMysqlInstallFlow(page)
+      await runMysqlInstallFlow(page, '使用平台包管理器安装')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
       expect(
@@ -695,15 +780,46 @@ test.describe('real install', () => {
     }
   })
 
+  test('redis direct install reaches terminal success path', async () => {
+    test.setTimeout(600_000)
+    const installRoot = makeInstallRoot('redis-direct')
+    const { app, page, dataDir } = await launchRealRunApp(installRoot)
+    try {
+      await runRedisInstallFlow(page, '直接安装 Redis 官方发行版')
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      await expect(fs.access(path.join(installRoot, 'redis'))).resolves.toBeUndefined()
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
   test('redis package install reaches terminal success path', async () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('redis-package'))
     try {
-      await runRedisInstallFlow(page)
+      await runRedisInstallFlow(page, '使用平台包管理器安装')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
       expect(
         await (isMac ? isHomebrewFormulaInstalled('redis') : isScoopPackageInstalled('redis')),
+      ).toBe(true)
+    } finally {
+      await dumpTaskLogs(dataDir)
+      await app.close()
+    }
+  })
+
+  test('maven package install reaches terminal success path', async () => {
+    test.setTimeout(300_000)
+    const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('maven-package'))
+    try {
+      await runMavenInstallFlow(page, '使用平台包管理器安装', false)
+      await dumpTaskLogs(dataDir)
+      await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      expect(
+        await (isMac ? isHomebrewFormulaInstalled('maven') : isScoopPackageInstalled('maven')),
       ).toBe(true)
     } finally {
       await dumpTaskLogs(dataDir)
@@ -734,8 +850,11 @@ test.describe('real rollback via built Electron app IPC', () => {
     test(`${testCase.name} removes installed directory`, async () => {
       const packagedRollbackCases = new Set([
         'node nvm',
+        'mysql direct',
         'mysql package',
+        'redis direct',
         'redis package',
+        'maven package',
         'maven direct',
       ])
       test.skip(

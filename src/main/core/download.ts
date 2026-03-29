@@ -20,6 +20,8 @@ const OFFICIAL_DOWNLOAD_HOSTS: Record<DownloadArtifact['tool'], Set<string>> = {
   miniconda: new Set(['repo.anaconda.com']),
   git: new Set(['sourceforge.net', 'git-scm.com']),
   'git-for-windows': new Set(['github.com', 'gitforwindows.org']),
+  mysql: new Set(['dev.mysql.com', 'cdn.mysql.com']),
+  redis: new Set(['download.redis.io', 'download.memurai.com']),
   maven: new Set(['archive.apache.org', 'downloads.apache.org', 'dlcdn.apache.org']),
   homebrew: new Set(['github.com', 'brew.sh', 'raw.githubusercontent.com']),
   scoop: new Set(['github.com', 'raw.githubusercontent.com', 'get.scoop.sh']),

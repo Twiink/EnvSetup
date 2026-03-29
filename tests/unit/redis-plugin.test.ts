@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({
   execFileMock: vi.fn((_file, _args, callback) => {
-    callback(null, { stdout: 'Redis server v=8.0.0', stderr: '' })
+    callback(null, { stdout: 'Redis server v=7.4.7', stderr: '' })
   }),
 }))
 
@@ -15,19 +15,47 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi.fn().mockResolvedValue([
-    {
-      artifact: { tool: 'scoop', url: 'https://get.scoop.sh' },
-      localPath: 'C:\\cache\\install.ps1',
+  downloadArtifacts: vi.fn(async ({ downloads }) =>
+    downloads.map((artifact: { fileName?: string; tool: string; url: string }) => ({
+      artifact,
+      localPath: `/tmp/cache/${artifact.fileName ?? artifact.tool}`,
       cacheHit: true,
-    },
-  ]),
+    })),
+  ),
   validateOfficialDownloads: vi.fn(),
 }))
 
 import redisEnvPlugin from '../../src/main/plugins/redisEnvPlugin'
 
 describe('redis env plugin', () => {
+  it('builds an official direct dry-run install plan on darwin', async () => {
+    const result = await redisEnvPlugin.install({
+      redisManager: 'redis',
+      installRootDir: '/tmp/redis-toolchain',
+      dryRun: true,
+      platform: 'darwin',
+    })
+
+    expect(result.status).toBe('installed_unverified')
+    expect(result.executionMode).toBe('dry_run')
+    expect(result.version).toBe('7.4.7')
+    expect(result.downloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool: 'redis',
+          url: expect.stringContaining('download.redis.io/releases/redis-7.4.7.tar.gz'),
+        }),
+      ]),
+    )
+    expect(result.commands.join('\n')).toContain('make BUILD_TLS=no MALLOC=libc')
+    expect(result.envChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'REDIS_HOME', value: '/tmp/redis-toolchain/redis' }),
+        expect.objectContaining({ key: 'PATH', value: '/tmp/redis-toolchain/redis/src' }),
+      ]),
+    )
+  })
+
   it('builds a Homebrew dry-run install plan on darwin', async () => {
     const result = await redisEnvPlugin.install({
       redisManager: 'package',
@@ -36,19 +64,26 @@ describe('redis env plugin', () => {
       platform: 'darwin',
     })
 
-    expect(result.status).toBe('installed_unverified')
-    expect(result.executionMode).toBe('dry_run')
-    expect(result.version).toBe('latest')
-    expect(result.downloads).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          tool: 'homebrew',
-          url: expect.stringContaining('raw.githubusercontent.com/Homebrew/install'),
-        }),
-      ]),
-    )
     expect(result.commands.join('\n')).toContain('install redis')
     expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula redis')
+  })
+
+  it('builds a Memurai-based direct dry-run install plan on win32', async () => {
+    const result = await redisEnvPlugin.install({
+      redisManager: 'redis',
+      installRootDir: 'C:\\envsetup\\redis',
+      dryRun: true,
+      platform: 'win32',
+    })
+
+    expect(result.commands.join('\n')).toContain('msiexec.exe')
+    expect(result.commands.join('\n')).toContain('Memurai for Redis installed')
+    expect(result.rollbackCommands?.join('\n')).toContain('DisplayName -like')
+    expect(result.envChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'REDIS_HOME', value: 'C:\\envsetup\\redis\\redis' }),
+      ]),
+    )
   })
 
   it('builds a Scoop dry-run install plan on win32', async () => {
@@ -68,9 +103,9 @@ describe('redis env plugin', () => {
     )
   })
 
-  it('returns localized dry-run verify copy in english', async () => {
+  it('returns localized dry-run verify copy in english for direct installs', async () => {
     const installResult = await redisEnvPlugin.install({
-      redisManager: 'package',
+      redisManager: 'redis',
       installRootDir: '/tmp/redis-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -78,7 +113,7 @@ describe('redis env plugin', () => {
     })
 
     const verifyResult = await redisEnvPlugin.verify({
-      redisManager: 'package',
+      redisManager: 'redis',
       installRootDir: '/tmp/redis-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -87,17 +122,17 @@ describe('redis env plugin', () => {
     })
 
     expect(verifyResult.status).toBe('verified_success')
-    expect(verifyResult.checks[0]).toContain('Homebrew')
-    expect(verifyResult.checks[2]).toContain('official download sources')
+    expect(verifyResult.checks[0]).toContain('Planned Redis manager: redis')
+    expect(verifyResult.checks[2]).toContain('download.redis.io')
   })
 
   it('runs real-run install commands when dryRun is false', async () => {
     const result = await redisEnvPlugin.install({
-      redisManager: 'package',
-      installRootDir: 'C:\\envsetup\\redis',
-      downloadCacheDir: 'C:\\envsetup\\download-cache',
+      redisManager: 'redis',
+      installRootDir: '/tmp/redis-toolchain',
+      downloadCacheDir: '/tmp/download-cache',
       dryRun: false,
-      platform: 'win32',
+      platform: 'darwin',
       onProgress: vi.fn(),
     })
 

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({
   execFileMock: vi.fn((_file, _args, callback) => {
-    callback(null, { stdout: 'mysql  Ver 9.0.0', stderr: '' })
+    callback(null, { stdout: 'mysql  Ver 8.4.8', stderr: '' })
   }),
 }))
 
@@ -15,25 +15,22 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi.fn().mockResolvedValue([
-    {
-      artifact: {
-        tool: 'homebrew',
-        url: 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh',
-      },
-      localPath: '/tmp/cache/homebrew-install.sh',
+  downloadArtifacts: vi.fn(async ({ downloads }) =>
+    downloads.map((artifact: { fileName?: string; tool: string; url: string }) => ({
+      artifact,
+      localPath: `/tmp/cache/${artifact.fileName ?? artifact.tool}`,
       cacheHit: true,
-    },
-  ]),
+    })),
+  ),
   validateOfficialDownloads: vi.fn(),
 }))
 
 import mysqlEnvPlugin from '../../src/main/plugins/mysqlEnvPlugin'
 
 describe('mysql env plugin', () => {
-  it('builds a Homebrew dry-run install plan on darwin', async () => {
+  it('builds an official direct dry-run install plan on darwin', async () => {
     const result = await mysqlEnvPlugin.install({
-      mysqlManager: 'package',
+      mysqlManager: 'mysql',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -41,15 +38,33 @@ describe('mysql env plugin', () => {
 
     expect(result.status).toBe('installed_unverified')
     expect(result.executionMode).toBe('dry_run')
-    expect(result.version).toBe('latest')
+    expect(result.version).toBe('8.4.8')
     expect(result.downloads).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          tool: 'homebrew',
-          url: expect.stringContaining('raw.githubusercontent.com/Homebrew/install'),
+          tool: 'mysql',
+          url: expect.stringContaining('dev.mysql.com/get/Downloads/MySQL-8.4'),
         }),
       ]),
     )
+    expect(result.commands.join('\n')).toContain('tar -xzf')
+    expect(result.commands.join('\n')).toContain('/tmp/mysql-toolchain/mysql/bin/mysql')
+    expect(result.envChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'MYSQL_HOME', value: '/tmp/mysql-toolchain/mysql' }),
+        expect.objectContaining({ key: 'PATH', value: '/tmp/mysql-toolchain/mysql/bin' }),
+      ]),
+    )
+  })
+
+  it('builds a Homebrew package dry-run install plan on darwin', async () => {
+    const result = await mysqlEnvPlugin.install({
+      mysqlManager: 'package',
+      installRootDir: '/tmp/mysql-toolchain',
+      dryRun: true,
+      platform: 'darwin',
+    })
+
     expect(result.commands.join('\n')).toContain('install mysql')
     expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula mysql')
     expect(result.envChanges).toEqual(
@@ -58,6 +73,23 @@ describe('mysql env plugin', () => {
           key: 'PATH',
           value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
         }),
+      ]),
+    )
+  })
+
+  it('builds a Windows direct dry-run install plan with Expand-Archive', async () => {
+    const result = await mysqlEnvPlugin.install({
+      mysqlManager: 'mysql',
+      installRootDir: 'C:\\envsetup\\mysql',
+      dryRun: true,
+      platform: 'win32',
+    })
+
+    expect(result.commands.join('\n')).toContain('Expand-Archive')
+    expect(result.commands.join('\n')).toContain('mysql.exe')
+    expect(result.envChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'MYSQL_HOME', value: 'C:\\envsetup\\mysql\\mysql' }),
       ]),
     )
   })
@@ -79,9 +111,9 @@ describe('mysql env plugin', () => {
     )
   })
 
-  it('returns localized dry-run verify copy in english', async () => {
+  it('returns localized dry-run verify copy in english for direct installs', async () => {
     const installResult = await mysqlEnvPlugin.install({
-      mysqlManager: 'package',
+      mysqlManager: 'mysql',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -89,7 +121,7 @@ describe('mysql env plugin', () => {
     })
 
     const verifyResult = await mysqlEnvPlugin.verify({
-      mysqlManager: 'package',
+      mysqlManager: 'mysql',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -98,13 +130,13 @@ describe('mysql env plugin', () => {
     })
 
     expect(verifyResult.status).toBe('verified_success')
-    expect(verifyResult.checks[0]).toContain('Homebrew')
-    expect(verifyResult.checks[2]).toContain('raw.githubusercontent.com')
+    expect(verifyResult.checks[0]).toContain('Planned MySQL manager: mysql')
+    expect(verifyResult.checks[2]).toContain('dev.mysql.com')
   })
 
   it('runs real-run install commands when dryRun is false', async () => {
     const result = await mysqlEnvPlugin.install({
-      mysqlManager: 'package',
+      mysqlManager: 'mysql',
       installRootDir: '/tmp/mysql-toolchain',
       downloadCacheDir: '/tmp/download-cache',
       dryRun: false,

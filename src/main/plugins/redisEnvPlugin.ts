@@ -21,6 +21,11 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 
 const execFileAsync = promisify(execFile)
 
+const REDIS_DIRECT_VERSION = '7.4.7'
+const REDIS_DIRECT_ARCHIVE_URL = `https://download.redis.io/releases/redis-${REDIS_DIRECT_VERSION}.tar.gz`
+const MEMURAI_WINDOWS_VERSION = '4.2.2'
+const MEMURAI_REDIS_API_VERSION = '7.4.7'
+const MEMURAI_INSTALLER_URL = `https://download.memurai.com/Memurai-Developer/${MEMURAI_WINDOWS_VERSION}/Memurai-for-Redis-v${MEMURAI_WINDOWS_VERSION}.msi`
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -56,7 +61,53 @@ function buildResolveScoopCommand(): string {
   return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
 }
 
+function buildDirectArchiveFileName(input: RedisPluginParams): string {
+  return input.platform === 'win32'
+    ? `Memurai-for-Redis-v${MEMURAI_WINDOWS_VERSION}.msi`
+    : `redis-${REDIS_DIRECT_VERSION}.tar.gz`
+}
+
+function buildDirectExtractedDirName(): string {
+  return `redis-${REDIS_DIRECT_VERSION}`
+}
+
+function buildMemuraiCleanupCommand(installDir?: string): string {
+  const removeInstallDir = installDir
+    ? `if (Test-Path ${quotePowerShell(installDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installDir)} -Recurse -Force -ErrorAction SilentlyContinue }`
+    : undefined
+
+  return [
+    '$entries = @()',
+    "foreach ($registryPath in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*')) { $entries += Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Memurai*' } }",
+    '$entries = $entries | Sort-Object DisplayName -Unique',
+    'foreach ($entry in $entries) {',
+    '$command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }',
+    'if (-not $command) { continue }',
+    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $process = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/quiet', '/norestart') -Wait -PassThru; if ($process.ExitCode -ne 0) { throw \"Memurai uninstall failed with exit code $($process.ExitCode).\" } }",
+    '}',
+    removeInstallDir,
+  ]
+    .filter(Boolean)
+    .join('; ')
+}
+
 function buildDownloadPlan(input: RedisPluginParams): DownloadArtifact[] {
+  if (input.redisManager === 'redis') {
+    return [
+      {
+        kind: input.platform === 'win32' ? 'installer' : 'archive',
+        tool: 'redis',
+        url: input.platform === 'win32' ? MEMURAI_INSTALLER_URL : REDIS_DIRECT_ARCHIVE_URL,
+        official: true,
+        fileName: buildDirectArchiveFileName(input),
+        note:
+          input.platform === 'win32'
+            ? 'Download the Memurai Developer installer for Redis-compatible Windows direct install.'
+            : 'Download the official Redis source archive for direct install.',
+      },
+    ]
+  }
+
   return [
     input.platform === 'darwin'
       ? {
@@ -88,11 +139,11 @@ export function planRedisDownloads(input: PluginExecutionInput): DownloadArtifac
 function toRedisParams(input: PluginExecutionInput): RedisPluginParams {
   const locale = input.locale ?? DEFAULT_LOCALE
 
-  if (input.redisManager !== 'package') {
+  if (input.redisManager !== 'redis' && input.redisManager !== 'package') {
     throw new Error(
       translate(locale, {
-        'zh-CN': 'redis-env 需要 redisManager=package',
-        en: 'redis-env requires redisManager=package',
+        'zh-CN': 'redis-env 需要 redisManager=redis|package',
+        en: 'redis-env requires redisManager=redis|package',
       }),
     )
   }
@@ -121,7 +172,7 @@ function toRedisParams(input: PluginExecutionInput): RedisPluginParams {
   }
 
   return {
-    redisManager: 'package',
+    redisManager: input.redisManager,
     installRootDir,
     platform: input.platform,
     dryRun: input.dryRun,
@@ -132,7 +183,27 @@ function toRedisParams(input: PluginExecutionInput): RedisPluginParams {
   }
 }
 
-function buildDarwinInstallCommands(
+function buildDarwinDirectCommands(
+  input: RedisPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
+  const installPaths = resolveRedisInstallPaths(input)
+  const archivePath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'redis') ??
+    `${installPaths.installRootDir}/${buildDirectArchiveFileName(input)}`
+  const extractedDir = `${installPaths.installRootDir}/${buildDirectExtractedDirName()}`
+
+  return [
+    `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
+    `rm -rf ${quoteShell(installPaths.standaloneRedisDir)} ${quoteShell(extractedDir)}`,
+    `tar -xzf ${quoteShell(archivePath)} -C ${quoteShell(installPaths.installRootDir)}`,
+    `mv ${quoteShell(extractedDir)} ${quoteShell(installPaths.standaloneRedisDir)}`,
+    `cd ${quoteShell(installPaths.standaloneRedisDir)} && make BUILD_TLS=no MALLOC=libc`,
+    `export REDIS_HOME=${quoteShell(installPaths.standaloneRedisDir)} && export PATH="${installPaths.standaloneRedisBinDir}:$PATH" && redis-server --version`,
+  ]
+}
+
+function buildDarwinPackageCommands(
   input: RedisPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
@@ -149,12 +220,30 @@ function buildDarwinInstallCommands(
   ]
 }
 
-function buildWin32InstallCommands(
+function buildWin32DirectCommands(
+  input: RedisPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
+  const installPaths = resolveRedisInstallPaths(input)
+  const installerPath =
+    resolveDownloadedArtifactPath(resolvedDownloads, 'redis') ??
+    `${installPaths.installRootDir}\\${buildDirectArchiveFileName(input)}`
+
+  return [
+    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
+    `Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneRedisDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
+    `$installDir = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneRedisDir)}); $process = Start-Process msiexec.exe -ArgumentList @('/i', ${quotePowerShell(installerPath)}, '/quiet', '/norestart', 'INSTALLFOLDER=' + $installDir, 'ADD_INSTALLFOLDER_TO_PATH=0', 'INSTALL_SERVICE=0', 'ADD_FIREWALL_RULE=0') -Wait -PassThru; if ($process.ExitCode -ne 0) { throw "Memurai install failed with exit code $($process.ExitCode)." }`,
+    `$env:REDIS_HOME = ${quotePowerShell(installPaths.standaloneRedisDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneRedisDir)} + ';' + $env:Path; $redisCandidates = @((Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai-cli.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-server.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-cli.exe')); $redisExe = $redisCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $redisExe) { throw 'Failed to locate Memurai binaries after installation.' }; Write-Output 'Memurai for Redis installed'; Write-Output $redisExe`,
+  ]
+}
+
+function buildWin32PackageCommands(
   input: RedisPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
   const installerPath =
-    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ?? `${input.installRootDir}\\install.ps1`
+    resolveDownloadedArtifactPath(resolvedDownloads, 'scoop') ??
+    `${input.installRootDir}\\install.ps1`
 
   return [
     buildResolveScoopCommand(),
@@ -167,12 +256,26 @@ function buildInstallCommands(
   input: RedisPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
+  if (input.redisManager === 'redis') {
+    return input.platform === 'win32'
+      ? buildWin32DirectCommands(input, resolvedDownloads)
+      : buildDarwinDirectCommands(input, resolvedDownloads)
+  }
+
   return input.platform === 'win32'
-    ? buildWin32InstallCommands(input, resolvedDownloads)
-    : buildDarwinInstallCommands(input, resolvedDownloads)
+    ? buildWin32PackageCommands(input, resolvedDownloads)
+    : buildDarwinPackageCommands(input, resolvedDownloads)
 }
 
-function buildDarwinVerifyCommands(): string[] {
+function buildDarwinVerifyCommands(input: RedisPluginParams): string[] {
+  const installPaths = resolveRedisInstallPaths(input)
+
+  if (input.redisManager === 'redis') {
+    return [
+      `export REDIS_HOME=${quoteShell(installPaths.standaloneRedisDir)} && export PATH="${installPaths.standaloneRedisBinDir}:$PATH" && redis-server --version`,
+    ]
+  }
+
   return [
     buildResolveHomebrewCommand(),
     'if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi',
@@ -180,7 +283,15 @@ function buildDarwinVerifyCommands(): string[] {
   ]
 }
 
-function buildWin32VerifyCommands(): string[] {
+function buildWin32VerifyCommands(input: RedisPluginParams): string[] {
+  const installPaths = resolveRedisInstallPaths(input)
+
+  if (input.redisManager === 'redis') {
+    return [
+      `$env:REDIS_HOME = ${quotePowerShell(installPaths.standaloneRedisDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneRedisDir)} + ';' + $env:Path; $redisCandidates = @((Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai-cli.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-server.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-cli.exe')); $redisExe = $redisCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $redisExe) { throw 'Failed to locate Memurai binaries.' }; Write-Output 'Memurai for Redis installed'; Write-Output $redisExe`,
+    ]
+  }
+
   return [
     buildResolveScoopCommand(),
     "if (-not $scoop) { throw 'Scoop not found.' }",
@@ -189,10 +300,18 @@ function buildWin32VerifyCommands(): string[] {
 }
 
 function buildVerifyCommands(input: RedisPluginParams): string[] {
-  return input.platform === 'win32' ? buildWin32VerifyCommands() : buildDarwinVerifyCommands()
+  return input.platform === 'win32'
+    ? buildWin32VerifyCommands(input)
+    : buildDarwinVerifyCommands(input)
 }
 
 function buildRollbackCommands(input: RedisPluginParams): string[] {
+  if (input.redisManager === 'redis') {
+    return input.platform === 'win32'
+      ? [buildMemuraiCleanupCommand(resolveRedisInstallPaths(input).standaloneRedisDir)]
+      : []
+  }
+
   if (input.platform === 'darwin') {
     return [
       'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions redis >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula redis || true; fi',
@@ -248,7 +367,11 @@ async function runCommands(
       })
     } catch (err: unknown) {
       const error = err as { stdout?: string; stderr?: string; message?: string }
-      const commandOutput = [error.stdout?.trim(), error.stderr?.trim(), error.message ?? String(err)]
+      const commandOutput = [
+        error.stdout?.trim(),
+        error.stderr?.trim(),
+        error.message ?? String(err),
+      ]
         .filter(Boolean)
         .join('\n')
       onProgress?.({
@@ -281,7 +404,7 @@ const redisEnvPlugin = {
 
     const logs = [
       `manager=${params.redisManager}`,
-      `platform_manager=${params.platform === 'darwin' ? 'homebrew' : 'scoop'}`,
+      `version=${params.redisManager === 'redis' ? (params.platform === 'win32' ? `memurai-${MEMURAI_WINDOWS_VERSION}` : REDIS_DIRECT_VERSION) : 'latest'}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -315,11 +438,16 @@ const redisEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: 'latest',
+      version:
+        params.redisManager === 'redis'
+          ? params.platform === 'win32'
+            ? `memurai-${MEMURAI_WINDOWS_VERSION}`
+            : REDIS_DIRECT_VERSION
+          : 'latest',
       paths: {
         installRootDir: params.installRootDir,
-        homebrewDir: installPaths.homebrewDir,
-        scoopDir: installPaths.scoopDir,
+        redisDir: installPaths.standaloneRedisDir,
+        redisBinDir: installPaths.standaloneRedisBinDir,
       },
       envChanges,
       downloads,
@@ -327,11 +455,19 @@ const redisEnvPlugin = {
       rollbackCommands,
       logs,
       summary: params.dryRun
-        ? 'Prepared a dry-run plan for the Redis environment through the platform package manager.'
-        : 'Completed the Redis environment install commands through the platform package manager.',
+        ? 'Prepared an official-source dry-run plan for the Redis environment.'
+        : 'Completed the official-source Redis environment install commands.',
       context: {
         redisManager: params.redisManager,
-        platformManager: params.platform === 'darwin' ? 'homebrew' : 'scoop',
+        redisVersion:
+          params.redisManager === 'redis'
+            ? params.platform === 'win32'
+              ? `memurai-${MEMURAI_WINDOWS_VERSION}`
+              : REDIS_DIRECT_VERSION
+            : 'latest',
+        ...(params.platform === 'win32' && params.redisManager === 'redis'
+          ? { redisApiVersion: MEMURAI_REDIS_API_VERSION }
+          : {}),
       },
     }
   },
@@ -351,32 +487,21 @@ const redisEnvPlugin = {
         checks:
           locale === 'zh-CN'
             ? [
-                `计划使用的平台包管理器：${params.platform === 'darwin' ? 'Homebrew' : 'Scoop'}`,
+                `计划安装的 Redis 管理方式：${params.redisManager}`,
                 `计划设置的工具安装根目录：${params.installRootDir}`,
                 `计划使用的官方下载源：${downloads.map((download) => download.url).join(' | ')}`,
               ]
             : [
-                `Planned platform package manager: ${params.platform === 'darwin' ? 'Homebrew' : 'Scoop'}`,
+                `Planned Redis manager: ${params.redisManager}`,
                 `Planned tool install root: ${params.installRootDir}`,
                 `Planned official download sources: ${downloads.map((download) => download.url).join(' | ')}`,
               ],
       }
     }
 
-    const verifyOutput = await runCommands(
-      buildVerifyCommands(params),
-      params.platform,
-      input.onProgress,
-    )
-
     return {
       status: 'verified_success',
-      checks: [
-        ...(locale === 'zh-CN'
-          ? [`已校验 Redis 安装命令可用`, `已校验工具安装根目录：${params.installRootDir}`]
-          : [`Verified Redis installation command availability`, `Verified tool install root: ${params.installRootDir}`]),
-        ...verifyOutput,
-      ],
+      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
     }
   },
 }

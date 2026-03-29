@@ -45,6 +45,25 @@ describe('downloadArtifacts', () => {
     expect(() => validateOfficialDownloads(downloads)).not.toThrow()
   })
 
+  it('accepts official MySQL and Redis direct-install hosts during validation', () => {
+    const downloads: DownloadArtifact[] = [
+      {
+        kind: 'archive',
+        tool: 'mysql',
+        url: 'https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.8-winx64.zip',
+        official: true,
+      },
+      {
+        kind: 'installer',
+        tool: 'redis',
+        url: 'https://download.memurai.com/Memurai-Developer/4.2.2/Memurai-for-Redis-v4.2.2.msi',
+        official: true,
+      },
+    ]
+
+    expect(() => validateOfficialDownloads(downloads)).not.toThrow()
+  })
+
   it('rejects untrusted download host', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'envsetup-download-'))
     const downloads: DownloadArtifact[] = [

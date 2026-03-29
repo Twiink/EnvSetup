@@ -11,7 +11,7 @@
   "parameters": {
     "mysqlManager": {
       "type": "enum",
-      "values": ["package"],
+      "values": ["mysql", "package"],
       "required": true
     },
     "installRootDir": {

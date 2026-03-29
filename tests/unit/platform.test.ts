@@ -512,6 +512,12 @@ describe('resolveMysqlInstallPaths', () => {
     installRootDir: '/tools',
   }
 
+  it('resolves standalone mysql directories for direct installs', () => {
+    const paths = resolveMysqlInstallPaths({ ...darwinMysql, mysqlManager: 'mysql' as const })
+    expect(paths.standaloneMysqlDir).toBe('/tools/mysql')
+    expect(paths.standaloneMysqlBinDir).toBe('/tools/mysql/bin')
+  })
+
   it('uses Homebrew bin directory on darwin', () => {
     const paths = resolveMysqlInstallPaths(darwinMysql)
     expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
@@ -529,6 +535,12 @@ describe('buildMysqlEnvChanges', () => {
     mysqlManager: 'package' as const,
     installRootDir: '/tools',
   }
+
+  it('includes MYSQL_HOME and PATH for direct installs', () => {
+    const changes = buildMysqlEnvChanges({ ...darwinMysql, mysqlManager: 'mysql' as const })
+    expect(changes.find((change) => change.key === 'MYSQL_HOME')?.value).toBe('/tools/mysql')
+    expect(changes.find((change) => change.key === 'PATH')?.value).toBe('/tools/mysql/bin')
+  })
 
   it('points PATH to Homebrew bin on darwin', () => {
     const changes = buildMysqlEnvChanges(darwinMysql)
@@ -563,6 +575,12 @@ describe('resolveRedisInstallPaths', () => {
     installRootDir: '/tools',
   }
 
+  it('resolves standalone redis directories for direct installs', () => {
+    const paths = resolveRedisInstallPaths({ ...darwinRedis, redisManager: 'redis' as const })
+    expect(paths.standaloneRedisDir).toBe('/tools/redis')
+    expect(paths.standaloneRedisBinDir).toBe('/tools/redis/src')
+  })
+
   it('uses Homebrew bin directory on darwin', () => {
     const paths = resolveRedisInstallPaths(darwinRedis)
     expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
@@ -580,6 +598,12 @@ describe('buildRedisEnvChanges', () => {
     redisManager: 'package' as const,
     installRootDir: '/tools',
   }
+
+  it('includes REDIS_HOME and PATH for direct installs', () => {
+    const changes = buildRedisEnvChanges({ ...darwinRedis, redisManager: 'redis' as const })
+    expect(changes.find((change) => change.key === 'REDIS_HOME')?.value).toBe('/tools/redis')
+    expect(changes.find((change) => change.key === 'PATH')?.value).toBe('/tools/redis/src')
+  })
 
   it('points PATH to Homebrew bin on darwin', () => {
     const changes = buildRedisEnvChanges(darwinRedis)
@@ -630,6 +654,15 @@ describe('resolveMavenInstallPaths', () => {
     expect(paths.standaloneMavenDir).toBe('\\tools\\maven-3.9.11')
     expect(paths.standaloneMavenBinDir).toBe('\\tools\\maven-3.9.11\\bin')
   })
+
+  it('resolves package-manager helper paths', () => {
+    const paths = resolveMavenInstallPaths({
+      ...darwinMaven,
+      mavenManager: 'package' as const,
+      mavenVersion: undefined,
+    })
+    expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
+  })
 })
 
 describe('buildMavenEnvChanges', () => {
@@ -649,6 +682,21 @@ describe('buildMavenEnvChanges', () => {
   it('includes PATH change for standalone Maven bin', () => {
     const changes = buildMavenEnvChanges(darwinMaven)
     expect(changes.find((change) => change.key === 'PATH')?.value).toBe('/tools/maven-3.9.11/bin')
+  })
+
+  it('uses package-manager PATH when mavenManager=package', () => {
+    const darwinPackage = {
+      ...darwinMaven,
+      mavenManager: 'package' as const,
+      mavenVersion: undefined,
+    }
+    const changes = buildMavenEnvChanges(darwinPackage)
+    expect(changes).toEqual([
+      expect.objectContaining({
+        key: 'PATH',
+        value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+      }),
+    ])
   })
 })
 

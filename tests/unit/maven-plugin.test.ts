@@ -15,23 +15,20 @@ vi.mock('node:child_process', () => ({
 }))
 
 vi.mock('../../src/main/core/download', () => ({
-  downloadArtifacts: vi.fn().mockResolvedValue([
-    {
-      artifact: {
-        tool: 'maven',
-        url: 'https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz',
-      },
-      localPath: '/tmp/cache/apache-maven-3.9.11-bin.tar.gz',
+  downloadArtifacts: vi.fn(async ({ downloads }) =>
+    downloads.map((artifact: { fileName?: string; tool: string; url: string }) => ({
+      artifact,
+      localPath: `/tmp/cache/${artifact.fileName ?? artifact.tool}`,
       cacheHit: true,
-    },
-  ]),
+    })),
+  ),
   validateOfficialDownloads: vi.fn(),
 }))
 
 import mavenEnvPlugin from '../../src/main/plugins/mavenEnvPlugin'
 
 describe('maven env plugin', () => {
-  it('builds an official-source dry-run install plan on darwin', async () => {
+  it('builds an official-source dry-run direct install plan on darwin', async () => {
     const result = await mavenEnvPlugin.install({
       mavenManager: 'maven',
       mavenVersion: '3.9.11',
@@ -60,7 +57,25 @@ describe('maven env plugin', () => {
     )
   })
 
-  it('builds a Windows dry-run install plan with Expand-Archive', async () => {
+  it('builds a Homebrew package dry-run install plan on darwin', async () => {
+    const result = await mavenEnvPlugin.install({
+      mavenManager: 'package',
+      installRootDir: '/tmp/maven-toolchain',
+      dryRun: true,
+      platform: 'darwin',
+    })
+
+    expect(result.commands.join('\n')).toContain('install maven')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula maven')
+    expect(result.envChanges).toEqual([
+      expect.objectContaining({
+        key: 'PATH',
+        value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+      }),
+    ])
+  })
+
+  it('builds a Windows dry-run direct install plan with Expand-Archive', async () => {
     const result = await mavenEnvPlugin.install({
       mavenManager: 'maven',
       mavenVersion: '3.9.11',
@@ -71,6 +86,21 @@ describe('maven env plugin', () => {
 
     expect(result.commands.join('\n')).toContain('Expand-Archive')
     expect(result.commands.join('\n')).toContain('mvn.cmd')
+  })
+
+  it('builds a Scoop package dry-run install plan on win32', async () => {
+    const result = await mavenEnvPlugin.install({
+      mavenManager: 'package',
+      installRootDir: 'C:\\envsetup\\maven',
+      dryRun: true,
+      platform: 'win32',
+    })
+
+    expect(result.commands.join('\n')).toContain('scoop install maven')
+    expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall maven')
+    expect(result.envChanges).toEqual([
+      expect.objectContaining({ key: 'PATH', value: '%USERPROFILE%\\scoop\\shims' }),
+    ])
   })
 
   it('returns localized dry-run verify copy in english', async () => {
@@ -94,14 +124,13 @@ describe('maven env plugin', () => {
     })
 
     expect(verifyResult.status).toBe('verified_success')
-    expect(verifyResult.checks[0]).toContain('Planned Maven version: 3.9.11')
+    expect(verifyResult.checks[0]).toContain('Planned Maven manager: maven')
     expect(verifyResult.checks[2]).toContain('archive.apache.org')
   })
 
   it('runs real-run install commands when dryRun is false', async () => {
     const result = await mavenEnvPlugin.install({
-      mavenManager: 'maven',
-      mavenVersion: '3.9.11',
+      mavenManager: 'package',
       installRootDir: '/tmp/maven-toolchain',
       downloadCacheDir: '/tmp/download-cache',
       dryRun: false,
