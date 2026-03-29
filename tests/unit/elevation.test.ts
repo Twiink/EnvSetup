@@ -1,5 +1,5 @@
 /**
- * Unit tests for the elevation module.
+ * elevation 模块的单元测试。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'

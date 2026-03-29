@@ -1,4 +1,4 @@
-# Builds release artifacts and packaged-app verification flows for supported EnvSetup platforms.
+# 构建 EnvSetup 的发布产物，并执行打包应用的验证流程。
 
 name: Release
 

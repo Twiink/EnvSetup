@@ -1,5 +1,5 @@
 /**
- * Unit tests for the locale module.
+ * locale 模块的单元测试。
  */
 
 import { describe, expect, it } from 'vitest'

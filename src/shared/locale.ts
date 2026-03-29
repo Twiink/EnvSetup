@@ -1,5 +1,5 @@
 /**
- * Defines supported locales plus normalization helpers shared across the main and renderer processes.
+ * 定义支持的语言及主进程与渲染层共享的语言工具函数。
  */
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'en'] as const

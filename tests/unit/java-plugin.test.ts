@@ -1,5 +1,5 @@
 /**
- * Unit tests for the java plugin module.
+ * java-plugin 模块的单元测试。
  */
 
 import { describe, expect, it, vi } from 'vitest'

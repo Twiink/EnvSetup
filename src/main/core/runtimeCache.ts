@@ -1,5 +1,5 @@
 /**
- * Provides lightweight in-memory caching for expensive runtime lookups inside the main process.
+ * 提供主进程内的轻量级运行时缓存。
  */
 
 type CacheEntry<T> = {

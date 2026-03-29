@@ -1,5 +1,5 @@
 /**
- * Wraps platform detection and platform-specific path or command helpers.
+ * 封装跨平台路径、环境变量和命令构建逻辑。
  */
 
 import { posix, win32 } from 'node:path'
@@ -300,7 +300,7 @@ export function buildJavaEnvChanges(input: JavaPluginParams): EnvChange[] {
         ),
       )
     } else {
-      // Windows: SDKMAN runs through Git Bash
+      // Windows 上的 SDKMAN 实际通过 Git Bash 执行，因此这里只需要保留核心环境变量。
       envChanges.push({
         kind: 'env',
         key: 'SDKMAN_DIR',

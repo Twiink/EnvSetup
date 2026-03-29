@@ -1,5 +1,5 @@
 /**
- * Provides the built-in Node fixture plugin used by tests and template resolution.
+ * 提供测试与模板解析使用的内置 Node 示例插件。
  */
 
 export { default } from '../../../src/main/plugins/nodeEnvPlugin'

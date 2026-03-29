@@ -1,5 +1,5 @@
 /**
- * Bootstraps the Electron main process and wires application lifecycle events to EnvSetup services.
+ * 启动 Electron 主进程并注册应用生命周期逻辑。
  */
 
 import { app, BrowserWindow, nativeImage } from 'electron'

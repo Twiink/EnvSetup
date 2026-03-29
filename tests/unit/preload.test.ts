@@ -1,5 +1,5 @@
 /**
- * Unit tests for the preload module.
+ * preload 模块的单元测试。
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'

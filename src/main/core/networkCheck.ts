@@ -1,5 +1,5 @@
 /**
- * Performs reachability probes for official download endpoints before real installations.
+ * 在真实安装前探测官方下载地址的网络可达性。
  */
 
 import type {
@@ -136,7 +136,7 @@ async function cancelResponseBody(response: Response): Promise<void> {
   try {
     await response.body?.cancel()
   } catch {
-    // Ignore body cancellation failures; headers have already been received.
+    // 只要响应头已经拿到，body 取消失败不影响连通性判断。
   }
 }
 

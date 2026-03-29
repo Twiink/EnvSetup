@@ -1,5 +1,5 @@
 /**
- * Unit tests for the ipc module.
+ * ipc 模块的单元测试。
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'

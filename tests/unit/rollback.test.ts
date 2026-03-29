@@ -1,5 +1,5 @@
 /**
- * Unit tests for the rollback module.
+ * rollback 模块的单元测试。
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'

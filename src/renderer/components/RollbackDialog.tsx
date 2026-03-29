@@ -1,5 +1,5 @@
 /**
- * Collects rollback decisions when a task fails or cleanup restoration is required.
+ * 在失败后展示回滚建议并触发回滚操作。
  */
 
 import { useState } from 'react'

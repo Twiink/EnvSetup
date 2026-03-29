@@ -1,5 +1,5 @@
 /**
- * Restores environment state from snapshots when cleanup or install flows must be reverted.
+ * 在安装或清理失败后根据快照恢复环境状态。
  */
 
 import type { AppPlatform, FailureAnalysis, RollbackResult, RollbackSuggestion } from './contracts'
@@ -185,7 +185,7 @@ export async function executeRollback(
       allowElevation: true,
     })
 
-    // Step 2: Restore shell configs from snapshot
+    // 第 2 步：恢复 shell 配置文件，让终端初始化脚本回到快照时状态。
     let shellConfigsRestored = 0
     try {
       if (snapshot.shellConfigs && Object.keys(snapshot.shellConfigs).length > 0) {
@@ -201,7 +201,7 @@ export async function executeRollback(
       })
     }
 
-    // Step 3: Reconcile tracked roots to the exact snapshot state.
+    // 第 3 步：把受追踪目录恢复为快照中的精确内容，补回缺失文件并清理新增文件。
     const reconcileRoots = [
       ...(trackedPaths.length > 0 ? trackedPaths : snapshot.trackedPaths),
       ...(installPaths ?? []),
@@ -227,7 +227,7 @@ export async function executeRollback(
       result.errors.push(...reconcileResult.errors)
     }
 
-    // Step 4: Execute plugin-specific rollback commands.
+    // 第 4 步：补跑插件级回滚命令，处理快照机制无法覆盖的外部副作用。
     if (!options.skipRollbackCommands && rollbackCommands.length > 0) {
       const commandErrors = await runRollbackCommands(rollbackCommands, currentPlatform)
       result.errors.push(...commandErrors)

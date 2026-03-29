@@ -1,5 +1,5 @@
 /**
- * Integration coverage for rollback recovery when cleanup or restore operations fail mid-flight.
+ * 覆盖清理或恢复中途失败时的回滚恢复路径。
  */
 
 import { constants } from 'node:fs'

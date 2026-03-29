@@ -1,5 +1,5 @@
 /**
- * Unit tests for the task module.
+ * task 模块的单元测试。
  */
 
 import { mkdtemp, rm } from 'node:fs/promises'

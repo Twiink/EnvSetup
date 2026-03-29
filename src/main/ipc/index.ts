@@ -1,5 +1,5 @@
 /**
- * Registers IPC handlers that expose templates, bootstrap data, task actions, and rollback flows to the renderer.
+ * 注册渲染层可调用的模板、任务、快照与回滚 IPC 接口。
  */
 
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
@@ -98,6 +98,7 @@ const versionsCache = createRuntimeCache<string[]>()
 const bootstrapCache = createRuntimeCache<BootstrapData>()
 const precheckCache =
   createRuntimeCache<ReturnType<typeof runPrecheck> extends Promise<infer T> ? T : never>()
+// 主进程缓存只保存派生数据，安装/清理/回滚后统一失效，避免界面继续读到旧状态。
 
 const taskCache = new Map<string, InstallTask>()
 let ipcRegistered = false
@@ -109,6 +110,7 @@ async function listTemplates(): Promise<ResolvedTemplate[]> {
 }
 
 function buildPrecheckEnvironmentFingerprint(): string {
+  // 把预检依赖的关键环境变量折叠成指纹，环境变化后自动绕开旧缓存。
   return JSON.stringify(
     Object.fromEntries(PRECHECK_ENV_KEYS.map((key) => [key, process.env[key] ?? ''])),
   )
@@ -132,6 +134,7 @@ async function listGitVersionsCached(): Promise<string[]> {
 
 async function loadBootstrap(): Promise<BootstrapData> {
   return bootstrapCache.getOrLoad('bootstrap', BOOTSTRAP_CACHE_TTL_MS, async () => {
+    // 首屏把模板和版本列表一次性并发拉齐，减少 renderer 多次 IPC 往返。
     const [templates, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions] =
       await Promise.all([
         listTemplates(),
@@ -424,7 +427,7 @@ export function registerIpcHandlers(): void {
         throw new Error('taskId is required to create a snapshot')
       }
       const paths = await ensureAppPaths()
-      // Collect tracked paths from the cached task if available
+      // 手动快照优先复用任务缓存中的追踪路径，保证快照范围与安装过程一致。
       const cachedTask = taskCache.get(payload.taskId)
       const manualTrackedPaths = cachedTask
         ? [
@@ -483,6 +486,7 @@ export function registerIpcHandlers(): void {
         const snapshot = await loadSnapshot(paths.snapshotsDir, payload.snapshotId)
         const task = await getTask(snapshot.taskId, paths.tasksDir)
         if (task.rollbackBaseSnapshotId && task.snapshotId === payload.snapshotId) {
+          // 如果当前失败任务是建立在清理快照之上的，则回滚到清理前的基线快照。
           targetSnapshotId = task.rollbackBaseSnapshotId
           skipRollbackCommands = true
         }

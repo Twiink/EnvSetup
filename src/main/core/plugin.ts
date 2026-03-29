@@ -1,5 +1,5 @@
 /**
- * Loads built-in or imported plugins, validates manifests, and prepares plugin execution state.
+ * 加载内置或导入插件、校验清单并准备插件执行状态。
  */
 
 import { execFile } from 'node:child_process'

@@ -1,5 +1,5 @@
 /**
- * Implements Python installation, cleanup, and rollback strategies across supported platforms.
+ * 实现 Python 在各平台上的安装、清理与回滚策略。
  */
 
 import { execFile } from 'node:child_process'
@@ -58,7 +58,7 @@ function resolvePythonArch(): string {
   return process.arch === 'x64' ? 'x86_64' : 'arm64'
 }
 
-/** @deprecated Retained for potential future source-compilation option. Not called in production. */
+/** @deprecated 为未来可能恢复的源码编译方案保留，生产流程不会调用。 */
 function buildPythonSourceUrl(input: PythonPluginParams): string {
   return `${PYTHON_FTP_BASE_URL}/${input.pythonVersion}/Python-${input.pythonVersion}.tar.xz`
 }
@@ -78,7 +78,7 @@ function buildMinicondaUrl(input: PythonPluginParams): string {
 function buildDownloadPlan(input: PythonPluginParams): DownloadArtifact[] {
   if (input.pythonManager === 'python') {
     if (input.platform === 'darwin') {
-      // Use precompiled .pkg installer instead of source compilation
+      // macOS 直接安装优先走官方 .pkg，避免源码编译过慢。
       return [
         {
           kind: 'installer',
@@ -123,7 +123,7 @@ function buildDownloadPlan(input: PythonPluginParams): DownloadArtifact[] {
     ]
   }
 
-  // conda mode
+  // conda 模式只需要下载 Miniconda 安装器。
   return [
     {
       kind: 'installer',
@@ -225,7 +225,7 @@ function buildPythonPkgUrl(input: PythonPluginParams): string {
   return `${PYTHON_FTP_BASE_URL}/${input.pythonVersion}/python-${input.pythonVersion}-macos11.pkg`
 }
 
-/** Extract major.minor from a version string like '3.12.10' */
+/** 从版本号中提取 major.minor，例如把 `3.12.10` 提取为 `3.12`。 */
 function extractPythonMajorMinor(version: string): string {
   const parts = version.split('.')
   return `${parts[0]}.${parts[1]}`
@@ -270,7 +270,7 @@ def decode_pbzx(payload_bytes: bytes) -> bytes:
     while offset < len(payload_bytes):
         if offset + 16 > len(payload_bytes):
             raise ValueError('truncated pbzx chunk header')
-        offset += 8  # per-chunk flags
+        offset += 8  # 每个 chunk 的标志位
         chunk_length = struct.unpack_from('>Q', payload_bytes, offset)[0]
         offset += 8
         chunk = payload_bytes[offset : offset + chunk_length]
@@ -337,7 +337,7 @@ PY`,
   return commands
 }
 
-/** @deprecated Retained for potential future source-compilation option. Not called in production. */
+/** @deprecated 为未来可能恢复的源码编译方案保留，生产流程不会调用。 */
 function _buildDarwinStandaloneCommands(input: PythonPluginParams): string[] {
   const installPaths = resolvePythonInstallPaths(input)
   const archiveUrl = buildPythonSourceUrl(input)
@@ -430,7 +430,7 @@ function buildWindowsStandaloneCommands(
     ...(resolvedDownloads
       ? []
       : [`Remove-Item -LiteralPath ${quotePowerShell(archivePath)} -Force`]),
-    // Enable pip in embedded Python by uncommenting import site
+    // Windows embed 版默认禁用了 site，这里打开后才能顺利引导 pip。
     `$pthFile = Get-ChildItem -Path ${quotePowerShell(installPaths.standalonePythonDir)} -Filter 'python*._pth' | Select-Object -First 1; if ($pthFile) { (Get-Content $pthFile.FullName) -replace '^#import site','import site' | Set-Content $pthFile.FullName }`,
   )
 
@@ -508,7 +508,7 @@ export function buildInstallCommands(
 ): string[] {
   if (input.platform === 'darwin') {
     if (input.pythonManager === 'conda') return buildDarwinCondaCommands(input, resolvedDownloads)
-    // 'python' and 'pkg' managers both use .pkg extraction on macOS (fast, precompiled)
+    // macOS 下的 `python` 和 `pkg` 两种模式最终都走 .pkg 解包路径。
     return buildDarwinPkgCommands(input, resolvedDownloads)
   }
 

@@ -1,5 +1,5 @@
 /**
- * Defines the shared EnvSetup contracts, task payloads, plugin types, and IPC-facing schemas.
+ * 定义 EnvSetup 共享的数据契约、任务结构、插件类型和 IPC 载荷。
  */
 
 import type { AppLocale, LocalizedTextInput } from '../../shared/locale'
@@ -158,9 +158,9 @@ export type PrecheckInput = {
   networkAvailable?: boolean
   networkChecks?: NetworkCheckResult[]
   elevationRequired?: boolean
-  /** Template-declared checks that failed (e.g. required tools not found) */
+  /** 模板声明的检查项中，当前判定为失败的条目。 */
   failedTemplateChecks?: string[]
-  /** Windows + SDKMAN: Git Bash (bash.exe) not found in PATH */
+  /** Windows + SDKMAN 场景下，PATH 中缺少 Git Bash（bash.exe）。 */
   gitBashMissing?: boolean
 }
 

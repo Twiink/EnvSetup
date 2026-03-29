@@ -1,5 +1,5 @@
 /**
- * Coordinates template selection, localization, prechecks, and task state for the desktop application.
+ * 协调模板选择、本地化、预检与任务状态的主界面组件。
  */
 
 import { useEffect, useState } from 'react'
@@ -27,6 +27,7 @@ function buildInitialValues(
   pythonVersions: string[],
   gitVersions: string[],
 ): Record<string, Primitive> {
+  // 先使用模板默认值，再用当前可用版本列表纠正已经失效的默认版本。
   const values = Object.fromEntries(
     Object.values(template.fields).map((field) => [field.key, field.value]),
   )
@@ -118,6 +119,7 @@ function registerTaskProgressListener(callback: (event: TaskProgressEvent) => vo
 
 export default function App() {
   const [locale, setLocale] = useState<AppLocale>(() => {
+    // 语言偏好持久化在 localStorage，刷新后直接恢复。
     if (typeof window === 'undefined') {
       return DEFAULT_LOCALE
     }
@@ -150,6 +152,7 @@ export default function App() {
 
     async function loadTemplates() {
       try {
+        // 启动时一次性加载模板和版本清单，避免页面初始化阶段多次请求主进程。
         const {
           templates: nextTemplates,
           nodeLtsVersions: nextNodeLtsVersions,
@@ -198,6 +201,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
+      // 组件卸载时清理 IPC 监听器，防止重复挂载后收到旧任务事件。
       removeTaskProgressListenerSafely()
     }
   }, [])
@@ -219,6 +223,7 @@ export default function App() {
       return
     }
 
+    // 切换模板后，预检、任务结果和清理备份都不再可信，需要整体重置。
     setSelectedTemplateId(templateId)
     setValues(
       buildInitialValues(template, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions),
@@ -297,6 +302,7 @@ export default function App() {
     setError(undefined)
     setTaskProgressEvents([])
     removeTaskProgressListenerSafely()
+    // 任务启动前重新注册监听器，只收集当前任务的实时进度事件。
     registerTaskProgressListener((event) => {
       if (event.taskId !== task.id) {
         return
@@ -361,6 +367,7 @@ export default function App() {
     setError(undefined)
     setTaskProgressEvents([])
     removeTaskProgressListenerSafely()
+    // 插件重试时只保留当前插件的事件，避免把旧日志重新混进列表。
     registerTaskProgressListener((event) => {
       if (event.taskId !== task.id || event.pluginId !== pluginId) {
         return
@@ -429,6 +436,7 @@ export default function App() {
         values,
         locale,
       })
+      // 清理会改变本地环境状态，因此完成后立刻重跑预检刷新界面。
       setPrecheck(nextPrecheck)
 
       if (cleanupErrors.length > 0) {
@@ -460,6 +468,7 @@ export default function App() {
         values,
         locale,
       })
+      // 回滚后同样需要重新探测环境，保证后续创建任务使用的是恢复后的状态。
       setPrecheck(nextPrecheck)
 
       if (rollbackResult.success) {

@@ -1,22 +1,22 @@
 /**
- * Creates structured task logs that are reused across install, cleanup, and rollback flows.
+ * 生成并清洗安装、清理与回滚流程中的结构化日志。
  */
 
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-// Sensitive key names — matched case-insensitively
+// 敏感 key 名集合，匹配时忽略大小写。
 const SENSITIVE_KEYS_SOURCE =
   '(?:token|password|passwd|secret|api[_-]?key|auth|credential|private[_-]?key|access[_-]?key)'
 
-// key=value (plain, no quotes)
+// 纯文本的 key=value 形式。
 const KV_PATTERN = new RegExp(`(${SENSITIVE_KEYS_SOURCE})\\s*=\\s*([^\\s,;&"'\`]+)`, 'gi')
-// key: "value" or key: 'value' or key: `value` (JSON / YAML style)
+// JSON / YAML 风格的 key: "value"、key: 'value'、key: `value`。
 const KV_QUOTED_PATTERN = new RegExp(
   `(${SENSITIVE_KEYS_SOURCE})\\s*[=:]\\s*(["'\`])([^"'\`]*)\\2`,
   'gi',
 )
-// Bearer <token> / Basic <token>
+// 常见的 Authorization 头格式。
 const BEARER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9+/=._-]{8,}/gi
 
 export function sanitizeLog(line: string): string {

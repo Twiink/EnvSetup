@@ -1,5 +1,5 @@
 /**
- * End-to-end coverage for the main desktop workflow from bootstrap to task execution.
+ * 覆盖桌面应用从启动到任务执行的主要端到端流程。
  */
 
 import fs from 'node:fs/promises'

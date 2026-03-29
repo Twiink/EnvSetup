@@ -1,5 +1,5 @@
 /**
- * Detects and formats privilege-elevation commands for platform-specific install steps.
+ * 处理跨平台提权命令的生成与执行回退。
  */
 
 import { execFile } from 'node:child_process'

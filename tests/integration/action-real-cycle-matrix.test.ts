@@ -1,5 +1,5 @@
 /**
- * Integration coverage for the GitHub Actions real install, cleanup, reinstall, and rollback matrix.
+ * 覆盖 GitHub Actions 真实安装、清理、重装与回滚矩阵。
  */
 
 import { execFile } from 'node:child_process'

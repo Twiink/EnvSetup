@@ -1,5 +1,5 @@
 /**
- * Fetches and normalizes installable Git versions for template defaults and overrides.
+ * 拉取并规范化可安装的 Git 版本列表。
  */
 
 const GIT_FOR_WINDOWS_RELEASE_URL =

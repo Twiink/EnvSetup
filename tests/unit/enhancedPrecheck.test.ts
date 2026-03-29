@@ -1,5 +1,5 @@
 /**
- * Unit tests for the enhanced precheck module.
+ * enhancedPrecheck 模块的单元测试。
  */
 
 import { existsSync } from 'node:fs'

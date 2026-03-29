@@ -1,6 +1,6 @@
 # EnvSetup
 
-开发环境一键配置桌面应用，基于 Electron + React 构建。
+开发环境一键配置桌面应用，基于 Electron + React 构建。支持 Node.js、Java、Python、Git 四种开发工具的自动化安装、清理与回滚，覆盖 macOS 和 Windows 双平台。
 
 ## 技术栈
 
@@ -40,30 +40,64 @@
 
 - **自动快照**: 任务执行前自动对插件涉及的路径创建快照（SHA-256 内容寻址存储）
 - **手动快照**: 用户可在 UI 中手动创建快照
-- **智能回滚**: 任务失败时根据故障分析推荐最佳回滚快照，支持全量和部分回滚
+- **智能回滚**: 任务失败时根据故障分析推荐最佳回滚快照（置信度评分），支持全量和部分回滚
 - **引用计数 GC**: 删除快照时自动清理无引用的存储对象
+- **环境变量还原**: 回滚时精确恢复 `process.env` 到快照状态，包括文件路径、文件内容和环境变量值
 
 ### 增强预检
 
 - **影响预估**: 预测文件变更数量、磁盘占用、预计耗时
 - **冲突检测**: 在执行前发现文件冲突、环境变量冲突、版本不匹配
+- **网络探测**: 针对模板依赖的网络目标（如 nodejs.org、github.com）逐一可达性检测
 - **故障分类**: 将错误归类为 `network / permission / conflict / dependency`，判断是否可重试并给出建议操作
+
+## 支持的工具与安装方式
+
+内置 4 套模板，每种工具支持**直接安装**和**管理器安装**两种方式：
+
+### Node.js
+
+|              | macOS                                                                                   | Windows                                                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `nodejs.org/dist` 下载 `.tar.gz`，`tar` 解压，`shasum -a 256` 校验                   | 从 `nodejs.org/dist` 下载 `.zip`，`Expand-Archive` 解压，`.NET SHA256` 校验                                                   |
+| **管理器**   | **nvm** — 从 GitHub 下载 `nvm v0.40.4` 源码 `.tar.gz` 解压安装，`nvm install` 安装 Node | **nvm-windows** — 从 GitHub 下载 `nvm-noinstall.zip` v1.2.2 解压，写 `settings.txt`，`nvm.exe install` + `mklink /J` junction |
+
+### Java
+
+|              | macOS                                                                                                                                             | Windows                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `api.adoptium.net` 下载 **Eclipse Temurin** JDK `.tar.gz`，`tar --strip-components=1` 解压，展平 `Contents/Home`                               | 从 `api.adoptium.net` 下载 Temurin JDK `.zip`，`Expand-Archive` 解压，`Move-Item` 到目标路径          |
+| **管理器**   | **SDKMAN** — 从 `api.sdkman.io` 下载 CLI v5.22.3 `.zip` 离线搭建（不用 `get.sdkman.io`），JDK 通过 `sdk install java <alias> <localDir>` 本地注册 | **SDKMAN** — 同左，但通过 **Git Bash** 执行；若系统无 `bash.exe` 则先静默安装 Git for Windows v2.47.1 |
+
+### Python
+
+|              | macOS                                                                                                                    | Windows                                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **直接安装** | 从 `python.org/ftp` 下载 `.pkg`，`pkgutil --expand` + 内联 Python 脚本解码 pbzx/cpio，提取 `Python.framework` 到用户目录 | 从 `python.org/ftp` 下载 `embed-amd64.zip` + `get-pip.py`，`Expand-Archive` 解压，修改 `._pth` 启用 `import site`，运行 `get-pip.py` |
+| **管理器**   | **Conda** — 从 `repo.anaconda.com` 下载 `Miniconda3-latest-MacOSX-{arch}.sh`，`bash -b -p` 静默安装                      | **Conda** — 从 `repo.anaconda.com` 下载 `Miniconda3-latest-Windows-x86_64.exe`，`Start-Process /S` 静默安装                          |
+
+### Git
+
+|              | macOS                                                                                                                                  | Windows                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `sourceforge.net/git-osx-installer` 下载 `.dmg`，`hdiutil attach` → `pkgutil --expand-full` 解包（跳过 `.Trashes`）                 | 从 GitHub `git-for-windows` 下载 `Git-2.47.1-64-bit.tar.bz2`（非 exe 安装器），`tar -xjf` 解压                                           |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install git`；回滚用 `brew uninstall --formula git` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，shadow `Get-ExecutionPolicy` 后执行，`scoop install git`；回滚用 `scoop uninstall git` |
+
+> **设计原则**: 全部避免系统级安装器（不用 `.msi`/`.exe` 安装向导），所有工具解压到用户目录；管理器均离线引导，不依赖 curl 管道脚本。
 
 ## 功能概览
 
-- 内置 `Frontend / Java / Python` 三套模板（Java / Python 当前为占位预检模板）
-- 支持任务取消
-- 前端环境插件支持 `node` 直装和 `nvm` 管理器两种方式
-- Node 版本通过官方 LTS 列表下拉选择
-- 安装根目录、npm cache、npm global prefix 支持文件夹选择器
-- 预检阶段检测已安装的 Node / Java / Python 环境，提供一键清理入口
-- 前端环境插件基于官方源生成安装计划：
-  - `node` 直装使用 `nodejs.org/dist`
-  - macOS `nvm` 使用 `nvm-sh/nvm` 官方仓库
-  - Windows `nvm` 使用 `coreybutler/nvm-windows` 官方 Release
+- 内置 `Node.js / Java / Python / Git` 四套模板，支持直接安装和管理器安装两种方式
+- 版本通过官方源动态获取（Node LTS、Java Adoptium、Python、Git）
+- 安装目录支持文件夹选择器自定义
+- 预检阶段检测已安装的 Node / Java / Python / Git 环境，提供一键清理入口
+- 清理前自动创建快照，清理失败可一键回滚
 - 命令级实时进度日志，可展开查看终端输出
 - 本地插件 manifest 校验，支持目录和 zip 导入
 - 任务状态管理（含失败分类与回滚建议）、日志脱敏、插件级重试
+- 环境变量持久化（macOS 写 shell profile managed block，Windows 用 setx）
+- 提权回退机制（macOS osascript，权限错误自动重试）
+- 下载安全（域名白名单、checksum 校验、失败重试）
 
 ## 项目结构
 
@@ -74,18 +108,30 @@ src/
 │   │   ├── task.ts           # 任务状态机
 │   │   ├── precheck.ts       # 预检系统
 │   │   ├── enhancedPrecheck.ts  # 增强预检（影响预估/冲突检测）
-│   │   ├── environment.ts    # 环境检测
+│   │   ├── environment.ts    # 环境检测与清理
 │   │   ├── executionMode.ts  # 执行模式解析
-│   │   ├── snapshot.ts       # 快照管理
-│   │   ├── rollback.ts       # 回滚引擎
-│   │   ├── failureAnalysis.ts  # 故障分析
+│   │   ├── snapshot.ts       # 快照管理（SHA-256 内容寻址 + 引用计数 GC）
+│   │   ├── rollback.ts       # 回滚引擎（置信度评分 + 全量/部分回滚）
+│   │   ├── failureAnalysis.ts  # 故障分析与分类
+│   │   ├── envPersistence.ts # 环境变量持久化
+│   │   ├── download.ts       # 下载管理（白名单/校验/重试/缓存）
+│   │   ├── elevation.ts      # 提权与回退
+│   │   ├── networkCheck.ts   # 网络可达性探测
+│   │   ├── platform.ts       # 跨平台策略（路径/命令/shell profile）
 │   │   ├── plugin.ts         # 插件导入与校验
-│   │   ├── template.ts       # 模板加载
-│   │   ├── contracts.ts      # 类型定义
+│   │   ├── template.ts       # 模板加载与解析
+│   │   ├── contracts.ts      # 类型与常量定义
+│   │   ├── nodeVersions.ts   # Node LTS 版本列表
+│   │   ├── javaVersions.ts   # Java LTS 版本列表
+│   │   ├── pythonVersions.ts # Python 版本列表
+│   │   ├── gitVersions.ts    # Git 版本列表
 │   │   └── ...
 │   ├── ipc/            # IPC 通信层
 │   └── plugins/        # 内置插件
-│       └── nodeEnvPlugin.ts
+│       ├── nodeEnvPlugin.ts   # Node.js 安装插件
+│       ├── javaEnvPlugin.ts   # Java 安装插件
+│       ├── pythonEnvPlugin.ts # Python 安装插件
+│       └── gitEnvPlugin.ts    # Git 安装插件
 ├── preload/            # Electron preload 桥接
 ├── renderer/           # React UI
 │   ├── App.tsx
@@ -98,12 +144,9 @@ src/
 │       ├── SnapshotPanel.tsx    # 快照管理
 │       └── RollbackDialog.tsx   # 回滚对话框
 └── shared/             # 主进程/渲染进程共享
-fixtures/templates/     # 内置模板定义
-tests/
-├── unit/               # 单元测试（18 个文件）
-├── integration/        # 集成测试（快照-回滚流程）
-├── renderer/           # 渲染进程组件测试
-└── e2e/                # E2E 测试（含真实安装验证）
+fixtures/
+├── templates/          # 内置模板定义（node/java/python/git）
+└── plugins/            # 外部插件（node-env/git-env）
 ```
 
 ## 开发
@@ -134,24 +177,69 @@ npm run dist             # 构建 + 生成安装包
 ## 测试
 
 ```bash
-npm test                 # 单元测试 + 集成测试（Vitest）
+npm test                 # 单元测试 + 集成测试（Vitest，mock 模式）
 npm run test:e2e         # E2E 测试（需先构建，Playwright）
 ```
 
-### 测试覆盖
+### 测试体系
 
-| 层级         | 说明                                                               |
-| ------------ | ------------------------------------------------------------------ |
-| 单元测试     | 核心逻辑全覆盖：任务、预检、插件、快照、回滚、故障分析、执行模式等 |
-| 集成测试     | 快照-回滚完整流程验证                                              |
-| 渲染进程测试 | React 组件交互、国际化切换、任务执行流程                           |
-| E2E 测试     | 应用启动、模板选择、预检、任务创建与执行完整路径                   |
-| CI 真实安装  | GitHub Actions 在 macOS + Windows 上执行真实安装验证               |
+项目采用四层测试体系，共 **49 个测试文件**（28 单元 + 6 集成 + 7 渲染 + 2 E2E + 6 真实安装集成）：
+
+| 层级             | 文件数 | 说明                                                                                                                                                    |
+| ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **单元测试**     | 28     | 核心逻辑全覆盖：任务状态机、预检、4 个插件、快照、回滚、故障分析、执行模式、下载安全、提权、环境变量持久化、跨平台策略、版本列表、网络探测、IPC、国际化 |
+| **集成测试**     | 6      | 快照-回滚完整流程、环境变量还原、全工具×管理器组合的安装/清理/回滚流程、真实安装+回滚矩阵                                                               |
+| **渲染进程测试** | 7      | React 组件交互（模板/参数/预检/任务/快照/回滚面板）、全应用流程、国际化切换                                                                             |
+| **E2E 测试**     | 2      | Electron 应用启动、模板选择→预检→创建→执行完整路径、dry-run 回滚、真实安装+回滚                                                                         |
+
+### 执行模式隔离
+
+| 环境            | 模式     | 说明                                                        |
+| --------------- | -------- | ----------------------------------------------------------- |
+| 本地 `npm test` | **模拟** | 不执行真实安装/清理/回滚，安全用于本地开发                  |
+| GitHub Actions  | **真实** | `ENVSETUP_REAL_RUN=1`，执行真实下载、安装、清理、回滚       |
+| 打包应用验证    | **真实** | `ENVSETUP_PACKAGED_RUN=1`，通过打包后的 Electron 二进制执行 |
+
+### 工具×平台×场景覆盖矩阵
+
+对每种工具的每种安装方式（直接/管理器），在 macOS 和 Windows 上覆盖三大核心场景：
+
+| 场景                     | 说明                                                       |
+| ------------------------ | ---------------------------------------------------------- |
+| **无环境 → 安装 → 回滚** | 全新安装成功后执行回滚，验证安装目录被移除、环境变量被还原 |
+| **已有环境处理**         | 检测已存在的环境并正确处理                                 |
+| **清理 → 重装 → 回滚**   | 先清理已有环境（含快照保护），再重新安装，验证完整流程     |
+
+完整覆盖矩阵（✅ = 真实安装测试通过）：
+
+| 工具    | 管理器            | macOS | Windows |
+| ------- | ----------------- | ----- | ------- |
+| Node.js | 直接安装          | ✅    | ✅      |
+| Node.js | nvm / nvm-windows | ✅    | ✅      |
+| Java    | JDK 直接安装      | ✅    | ✅      |
+| Java    | SDKMAN            | ✅    | ✅      |
+| Python  | 直接安装          | ✅    | ✅      |
+| Python  | Conda             | ✅    | ✅      |
+| Git     | 直接安装          | ✅    | ✅      |
+| Git     | Homebrew          | ✅    | —       |
+| Git     | Scoop             | —     | ✅      |
+
+### 清理与回滚验证
+
+- **清理**: 检测安装方式 → 有官方卸载则调用（brew uninstall / scoop uninstall / sdk rm）→ 无则删文件+清环境变量 → 清理前自动创建快照 → 失败可回滚
+- **回滚**: SHA-256 校验文件内容一致性 → 恢复目录结构（含嵌套空目录）→ 精确还原 `process.env`（突变恢复、新增 key 移除、PATH 还原）→ 回滚后状态与原始状态完全一致
 
 ## CI/CD
 
-- **E2E 真实安装**: push 到 `master` 时在 macOS 和 Windows 上运行真实安装测试
-- **Release**: 推送 `v*` 标签时自动构建并发布 GitHub Release（macOS + Windows 产物）
+GitHub Actions 工作流 `e2e-real-install.yml`，push 到 `master` 或 PR 时触发：
+
+| Job              | 平台                     | 说明                                                           |
+| ---------------- | ------------------------ | -------------------------------------------------------------- |
+| **unit**         | macOS + Windows          | 运行全部单元和集成测试（mock 模式）                            |
+| **real-install** | macOS + Windows × 4 工具 | 真实安装+回滚集成测试矩阵（`ENVSETUP_REAL_RUN=1`），含下载缓存 |
+| **e2e**          | macOS + Windows          | 打包应用后通过 Playwright 执行真实安装+回滚烟雾测试            |
+
+Release 工作流：推送 `v*` 标签时自动构建并发布 GitHub Release（macOS + Windows 产物）。
 
 ## 代码质量
 
@@ -171,9 +259,10 @@ npm run format:check     # 格式检查
 
 ## 使用流程
 
-1. 启动应用，选择模板（如 `前端开发环境`）
-2. 调整参数：Node 版本、管理器类型、安装目录等
-3. 运行预检，查看通过 / 警告 / 阻塞结果及已发现环境
+1. 启动应用，选择模板（Node.js / Java / Python / Git）
+2. 调整参数：版本、管理器类型（直接安装/管理器安装）、安装目录等
+3. 运行预检，查看通过 / 警告 / 阻塞结果、已发现环境及网络可达性
 4. 创建任务并启动执行
 5. 在任务面板查看命令级实时进度、日志和结果摘要
-6. 如执行失败，查看故障分析和回滚建议
+6. 如需清理已有环境，可一键清理（自动创建快照保护）
+7. 如执行失败，查看故障分析和回滚建议，一键回滚到任意快照点

@@ -1,5 +1,5 @@
 /**
- * Summarizes task failures into actionable diagnostics for the renderer and tests.
+ * 把任务失败信息归类成可展示、可回滚的故障分析结果。
  */
 
 import type { ErrorCode, FailureAnalysis, FailureCategory, PluginInstallResult } from './contracts'

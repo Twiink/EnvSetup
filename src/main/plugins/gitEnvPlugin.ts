@@ -1,5 +1,5 @@
 /**
- * Implements Git installation, cleanup, and rollback strategies across supported platforms.
+ * 实现 Git 在各平台上的安装、清理与回滚策略。
  */
 
 import { execFile } from 'node:child_process'
@@ -100,7 +100,7 @@ function buildScoopGitUninstallCommand(): string {
     'if ($scoop) {',
     '$prefix = Get-ScoopGitPrefix $scoop',
     'if ($prefix) { & $scoop uninstall git *> $null; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." } }',
-    // Force-remove apps\git from all possible scoop roots (matches isScoopGitInstalled logic)
+    // 额外清理所有可能的 apps\\git 目录，避免 uninstall 残留导致探测误判。
     '$scoopRoots = @()',
     '$shimDir = Split-Path $scoop -Parent',
     '$scoopRoots += Split-Path $shimDir -Parent',
@@ -108,9 +108,9 @@ function buildScoopGitUninstallCommand(): string {
     "$scoopRoots += Join-Path $env:USERPROFILE 'scoop'",
     '$scoopRoots = $scoopRoots | Select-Object -Unique',
     "foreach ($r in $scoopRoots) { $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { Remove-Item -LiteralPath $gd -Recurse -Force } }",
-    // Clean up git shims
+    // 同步清理 shim，可避免 PATH 里残留旧的 git 命令入口。
     `if ($shimDir -and (Test-Path $shimDir)) { foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } } }`,
-    // Final verification: check the same paths isScoopGitInstalled checks
+    // 最后按探测逻辑再校验一次，确保 cleanup 后不会再被识别成已安装。
     '$remainingPrefix = Get-ScoopGitPrefix $scoop',
     'if ($remainingPrefix) { throw "Scoop git uninstall did not remove the installed prefix: $remainingPrefix" }',
     '}',

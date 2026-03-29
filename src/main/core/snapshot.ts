@@ -1,5 +1,5 @@
 /**
- * Captures and restores file-system and shell-environment snapshots around real cleanup flows.
+ * 围绕真实清理流程捕获并恢复文件系统与环境变量快照。
  */
 
 import { execFile } from 'node:child_process'
@@ -89,7 +89,7 @@ export async function storeObject(objectsDir: string, content: Buffer): Promise<
     await access(objectPath, constants.F_OK)
     return hash
   } catch {
-    // file does not exist, proceed to write
+    // 对象文件不存在时继续写入；存在则直接复用内容寻址结果。
   }
 
   await mkdir(subDir, { recursive: true })
@@ -286,7 +286,7 @@ export async function createSnapshot(options: {
             type = process.platform === 'win32' ? 'junction' : 'dir'
           }
         } catch {
-          // Keep the default file-type symlink when the target is not accessible.
+          // 目标不可访问时保留默认 file 类型，至少把链接本身记录下来。
         }
         symlinks[targetPath] = { target, type }
       } catch {
@@ -1083,13 +1083,13 @@ export async function reconcileSnapshotState(options: {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return
       }
-      // On Windows, a recently-executed .exe may deny lstat with EPERM.
-      // Attempt removal directly; if the file is truly gone, that's fine.
+      // Windows 上最近执行过的 .exe 可能在 lstat 阶段暂时返回 EPERM。
+      // 此时直接尝试删除；如果文件本来就已不存在，也属于可接受结果。
       if (isPermissionError(error) && process.platform === 'win32') {
         try {
           await removePathWithElevation(targetPath, currentPlatform, options.allowElevation)
         } catch {
-          // Ignore — the file may already be gone or truly unremovable.
+          // 忽略单条失败：文件可能已经消失，或者确实无法移除。
         }
         return
       }

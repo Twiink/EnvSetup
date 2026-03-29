@@ -1,5 +1,5 @@
 /**
- * Reads and writes persisted environment selections and user overrides.
+ * 读取和写入用户保存的环境变量选择与覆盖项。
  */
 
 import { execFile } from 'node:child_process'

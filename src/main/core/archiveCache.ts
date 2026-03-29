@@ -1,5 +1,5 @@
 /**
- * Caches extracted archives so repeated install flows can reuse unpacked payloads.
+ * 缓存已解压的归档文件，避免重复安装时再次解包。
  */
 
 import { execFile } from 'node:child_process'
@@ -29,6 +29,7 @@ export type PreparedExtractedArchive = {
 }
 
 const inFlightExtractions = new Map<string, Promise<PreparedExtractedArchive>>()
+// 解压流程也按缓存键做并发去重，避免多个任务同时写同一目录。
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
@@ -159,6 +160,7 @@ export async function prepareExtractedArchive(options: {
     )
 
     try {
+      // 先写临时目录，最后整体替换正式缓存目录，避免中断后留下半成品缓存。
       await rm(tempExtractionDir, { recursive: true, force: true })
       await mkdir(tempExtractionDir, { recursive: true })
       await extractArchive(options.archivePath, options.format, tempExtractionDir)

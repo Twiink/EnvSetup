@@ -1,5 +1,5 @@
 /**
- * Unit tests for the download module.
+ * download 模块的单元测试。
  */
 
 import { mkdtemp, readFile } from 'node:fs/promises'

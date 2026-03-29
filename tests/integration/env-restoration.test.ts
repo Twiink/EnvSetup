@@ -1,5 +1,5 @@
 /**
- * Integration coverage for environment restoration after install, cleanup, and rollback tasks.
+ * 覆盖安装、清理和回滚后的环境变量恢复行为。
  */
 
 import { readFile, rm, writeFile } from 'node:fs/promises'

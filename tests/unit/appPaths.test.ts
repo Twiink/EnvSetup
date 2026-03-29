@@ -1,5 +1,5 @@
 /**
- * Unit tests for the app paths module.
+ * appPaths 模块的单元测试。
  */
 
 import { mkdtemp } from 'node:fs/promises'

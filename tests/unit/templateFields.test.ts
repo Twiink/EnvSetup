@@ -1,5 +1,5 @@
 /**
- * Unit tests for the template fields module.
+ * templateFields 模块的单元测试。
  */
 
 import { describe, expect, it } from 'vitest'

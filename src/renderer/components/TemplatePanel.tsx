@@ -1,5 +1,5 @@
 /**
- * Lets the user choose a template and review the tools included in that setup.
+ * 展示模板列表并支持切换当前安装模板。
  */
 
 import type { ResolvedTemplate } from '../../main/core/contracts'

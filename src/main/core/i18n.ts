@@ -1,5 +1,5 @@
 /**
- * Loads localized strings and shared copy used by main-process workflows.
+ * 加载主进程使用的本地化文案。
  */
 
 import type { ErrorCode } from './contracts'

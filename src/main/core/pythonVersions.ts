@@ -1,5 +1,5 @@
 /**
- * Fetches and normalizes installable Python versions for templates and overrides.
+ * 拉取并规范化可安装的 Python 版本列表。
  */
 
 const PYTHON_EOL_API_URL = 'https://endoflife.date/api/python.json'

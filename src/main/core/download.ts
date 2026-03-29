@@ -1,5 +1,5 @@
 /**
- * Validates official download sources, fetches artifacts, and persists them in the local download cache.
+ * 校验官方下载源、下载工件，并将其写入本地下载缓存。
  */
 
 import { createHash } from 'node:crypto'
@@ -43,6 +43,7 @@ export type DownloadArtifactsOptions = {
 
 const inFlightDownloads = new Map<string, Promise<DownloadResolvedArtifact>>()
 const inFlightChecksums = new Map<string, Promise<string>>()
+// 以缓存文件路径为键做并发去重，避免多个插件同时下载同一个工件。
 
 function makeError(code: ErrorCode, message: string): DownloadError {
   const error = new Error(message) as DownloadError
@@ -125,6 +126,7 @@ async function fetchWithRetry(options: {
   const maxAttempts = Math.max(1, options.retryCount + 1)
   let lastError: unknown
 
+  // 对网络抖动类错误做有限重试；命中非重试错误时立即返回。
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const response = await options.fetchImpl(options.url)
@@ -175,7 +177,7 @@ async function loadChecksumText(options: {
   try {
     return await readFile(cacheFile, 'utf8')
   } catch {
-    // cache miss
+    // checksum 文本未命中缓存时，再走网络请求。
   }
 
   const inFlight = inFlightChecksums.get(cacheFile)
@@ -213,6 +215,7 @@ async function downloadArtifact(options: {
   try {
     const cacheStat = await stat(options.cacheFile)
     if (cacheStat.isFile()) {
+      // 已有缓存文件时仍重新校验 checksum，避免脏缓存被静默复用。
       await verifyChecksumIfNeeded(
         options.download,
         options.cacheFile,
@@ -343,6 +346,7 @@ export async function downloadArtifacts(
           })
         } catch (error) {
           if ((error as { code?: ErrorCode }).code === 'DOWNLOAD_CHECKSUM_FAILED') {
+            // 校验失败通常意味着缓存文件损坏；删掉后重新执行完整下载。
             await rm(cacheFile, { force: true }).catch(() => undefined)
             return downloadArtifact({
               download,

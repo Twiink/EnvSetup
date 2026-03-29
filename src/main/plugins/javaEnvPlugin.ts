@@ -1,5 +1,5 @@
 /**
- * Implements Java installation, cleanup, and rollback strategies across supported platforms.
+ * 实现 Java 在各平台上的安装、清理与回滚策略。
  */
 
 import { execFile } from 'node:child_process'
@@ -149,7 +149,7 @@ async function prepareInstallSources(
   return preparedSources
 }
 
-/** Extract the major feature version from a Temurin version string like '21.0.6+7' or '21' */
+/** 从 Temurin 版本号中提取 feature 版本，例如把 `21.0.6+7` 提取为 `21`。 */
 function extractFeatureVersion(version: string): string {
   return version.split('.')[0]
 }
@@ -319,7 +319,7 @@ function buildDarwinStandaloneCommands(
   }
 
   commands.push(
-    // macOS Temurin archives contain Contents/Home/; flatten if present
+    // macOS 的 Temurin 归档常带有 Contents/Home 结构，这里展开到统一的 JDK 根目录。
     `if [ -d ${quoteShell(installPaths.standaloneJdkDir + '/Contents/Home')} ]; then mv ${quoteShell(installPaths.standaloneJdkDir + '/Contents/Home')}/* ${quoteShell(installPaths.standaloneJdkDir)}/ && rm -rf ${quoteShell(installPaths.standaloneJdkDir + '/Contents')}; fi`,
     `export JAVA_HOME=${quoteShell(installPaths.standaloneJdkDir)} && export PATH="${installPaths.standaloneJdkBinDir}:$PATH" && java -version`,
   )
@@ -345,7 +345,7 @@ function buildDarwinSdkmanCommands(
     `${installPaths.installRootDir}/sdkman-cli-${SDKMAN_CLI_VERSION}.zip`
   const bashScript = [
     `export SDKMAN_DIR=${quoteShell(installPaths.sdkmanDir)}`,
-    // Set up SDKMAN directory structure manually (avoids network dependency of install script)
+    // 手动搭建 SDKMAN 目录结构，避免依赖官方在线安装脚本。
     'mkdir -p "$SDKMAN_DIR/bin" "$SDKMAN_DIR/src" "$SDKMAN_DIR/ext" "$SDKMAN_DIR/etc" "$SDKMAN_DIR/var" "$SDKMAN_DIR/tmp" "$SDKMAN_DIR/candidates"',
     `unzip -qo ${quoteShell(sdkmanCliZipPath)} -d "$SDKMAN_DIR/tmp"`,
     'cp -rf "$SDKMAN_DIR/tmp"/sdkman-*/* "$SDKMAN_DIR"',
@@ -424,7 +424,7 @@ function buildWindowsStandaloneCommands(
   } else {
     commands.push(
       `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
-      // Temurin extracts to a directory like jdk-21.0.6+7; move its contents
+      // Temurin 解压后通常会多一层 jdk-* 目录，这里把内容移动到目标根目录。
       `$extracted = Get-ChildItem -Path ${quotePowerShell(installPaths.installRootDir)} -Directory | Where-Object { $_.Name -like 'jdk-*' } | Select-Object -First 1; if ($extracted) { Move-Item -Path "$($extracted.FullName)\\*" -Destination ${quotePowerShell(installPaths.standaloneJdkDir)} -Force; Remove-Item -LiteralPath $extracted.FullName -Recurse -Force }`,
       ...(resolvedDownloads
         ? []
@@ -532,7 +532,7 @@ function buildWindowsSdkmanCommands(
     `if ($sdkmanRegisterExitCode -ne 0) { throw "SDKMAN local Java registration failed with exit code $sdkmanRegisterExitCode." }`,
   ].join('; ')
 
-  // SDKMAN on Windows requires Git Bash
+  // Windows 上的 SDKMAN 必须借助 Git Bash 执行 shell 脚本。
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
   ]

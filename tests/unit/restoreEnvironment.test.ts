@@ -1,5 +1,5 @@
 /**
- * Unit tests for the restore environment module.
+ * restoreEnvironment 模块的单元测试。
  */
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'

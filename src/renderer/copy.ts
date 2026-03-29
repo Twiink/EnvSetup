@@ -1,5 +1,5 @@
 /**
- * Provides localized renderer copy helpers and UI label lookups.
+ * 提供渲染层本地化文案和标签查询函数。
  */
 
 import type {

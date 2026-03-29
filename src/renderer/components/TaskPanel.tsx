@@ -1,5 +1,5 @@
 /**
- * Displays active task progress, logs, and high-level execution controls.
+ * 展示任务进度、日志和执行控制。
  */
 
 import { useMemo, useState } from 'react'

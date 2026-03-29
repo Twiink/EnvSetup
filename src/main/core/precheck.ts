@@ -1,5 +1,5 @@
 /**
- * Runs baseline readiness checks before installation or cleanup tasks begin.
+ * 在任务开始前执行基础预检。
  */
 
 import { constants } from 'node:fs'
@@ -63,7 +63,7 @@ export async function buildRuntimePrecheckInput(
 ): Promise<PrecheckInput> {
   const detections = await detectTemplateEnvironments(template, values)
 
-  // Collect all writable paths from plugin params
+  // 汇总插件声明的可写路径，预检阶段会逐个验证是否可写。
   const writablePaths: string[] = []
 
   for (const plugin of template.plugins) {
@@ -80,19 +80,19 @@ export async function buildRuntimePrecheckInput(
     }
   }
 
-  // If no plugin-specific paths found, fall back to cwd
+  // 模板未声明安装路径时，退回到当前工作目录做兜底校验。
   if (writablePaths.length === 0) {
     writablePaths.push(process.cwd())
   }
 
   const currentPlatform = process.platform === 'win32' ? 'win32' : 'darwin'
 
-  // Template-level checks: identify which declared tool checks have environment conflicts
+  // 模板声明的 checks 表示“希望环境里不存在的工具”，这里把冲突项单独记录下来。
   const failedTemplateChecks = template.checks.filter((toolId) =>
     detections.some((d) => d.tool === toolId),
   )
 
-  // Check Git Bash availability for Windows + SDKMAN
+  // Windows 上的 SDKMAN 依赖 Git Bash，因此预检阶段提前暴露缺失问题。
   let gitBashMissing: boolean | undefined
   if (currentPlatform === 'win32' && values['java.javaManager'] === 'sdkman') {
     const bashExe = await findExecutable(['bash'])

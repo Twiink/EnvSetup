@@ -1,5 +1,5 @@
 /**
- * Builds richer precheck diagnostics by combining environment state with plugin requirements.
+ * 基于插件结果与环境信息生成更丰富的增强预检结果。
  */
 
 import { existsSync } from 'node:fs'

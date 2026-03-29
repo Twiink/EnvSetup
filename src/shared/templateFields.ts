@@ -1,5 +1,5 @@
 /**
- * Validates template field definitions and resolved values shared across the application.
+ * 校验模板字段定义与解析后的字段值。
  */
 
 import type { Primitive, ResolvedTemplate, ResolvedTemplateField } from '../main/core/contracts'

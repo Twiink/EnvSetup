@@ -1,5 +1,5 @@
 /**
- * Unit tests for the environment module.
+ * environment 模块的单元测试。
  */
 
 import { access, chmod, mkdtemp, mkdir, realpath, writeFile } from 'node:fs/promises'

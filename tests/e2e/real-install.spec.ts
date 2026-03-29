@@ -1,5 +1,5 @@
 /**
- * End-to-end coverage for real-install scenarios in the packaged application.
+ * 覆盖打包应用中的真实安装端到端场景。
  */
 
 import fs from 'node:fs/promises'

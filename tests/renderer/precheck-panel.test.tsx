@@ -1,5 +1,5 @@
 /**
- * Renderer tests for the precheck panel view and its user interactions.
+ * precheck-panel 视图及交互行为的渲染测试。
  */
 
 // @vitest-environment jsdom

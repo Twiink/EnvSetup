@@ -1,5 +1,5 @@
 /**
- * Exposes the safe EnvSetup preload bridge that the renderer uses to call main-process APIs.
+ * 暴露给渲染层使用的安全 preload 桥接接口。
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -7,6 +7,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { EnvSetupApi, TaskProgressEvent } from '../main/core/contracts'
 
 let taskProgressListener: ((event: TaskProgressEvent) => void) | undefined
+// 渲染层始终只保留一个活动中的任务进度监听器，避免重复注册造成事件风暴。
 
 const api: EnvSetupApi = {
   loadBootstrap: () => ipcRenderer.invoke('bootstrap:load'),

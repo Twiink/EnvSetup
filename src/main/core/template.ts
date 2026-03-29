@@ -1,5 +1,5 @@
 /**
- * Loads built-in templates and resolves them into executable installation plans.
+ * 加载内置模板并解析成可执行的安装计划。
  */
 
 import { readFile, readdir } from 'node:fs/promises'

@@ -1,5 +1,5 @@
 /**
- * Coordinates task execution, progress events, cancellation, and result aggregation.
+ * 协调任务执行、进度事件、取消与结果聚合。
  */
 
 import { randomUUID } from 'node:crypto'
@@ -81,7 +81,7 @@ function finalizeTaskStatus(task: InstallTask): TaskStatus {
     return 'succeeded'
   }
 
-  // installed_unverified means verify was never called — treat as failed for finalization
+  // installed_unverified 表示安装后没有完成 verify，这里按失败处理，避免任务被误判为成功。
   const terminallyFailed = (status: string) =>
     status === 'failed' || status === 'installed_unverified'
 
@@ -142,7 +142,7 @@ function buildExecutionInput(
   dryRun: boolean,
   runtimeContext?: Record<string, Primitive>,
 ): PluginExecutionInput {
-  // Merge context from all preceding verified plugins so later plugins can consume outputs
+  // 把前置插件已经验证成功的上下文合并进来，便于后续插件消费安装产物或环境变量。
   const precedingContext: Record<string, Primitive> = {}
   for (const p of task.plugins) {
     if (p.pluginId === plugin.pluginId) break
@@ -260,6 +260,7 @@ export async function executeTask(options: {
     }
 
     if (!options.pluginFilter && plugin.status === 'verified_success') {
+      // 全量执行时跳过已完成插件；单插件重试模式会绕过这条逻辑。
       continue
     }
 
@@ -320,6 +321,7 @@ export async function executeTask(options: {
         options.onProgress?.({ ...event, taskId: nextTask.id })
       }
 
+      // 执行顺序固定为 check -> prepare -> install -> verify，保证状态可预测。
       if (runner.check) {
         const checkResult = await runner.check(executionInput)
         if (!checkResult.pass) {
@@ -382,6 +384,7 @@ export async function executeTask(options: {
   }
 
   nextTask = withTaskUpdate(nextTask, (draft) => {
+    // 所有插件收口后再统一回算任务级状态和结果等级。
     draft.status = finalizeTaskStatus(draft)
     draft.resultLevel =
       draft.status === 'succeeded'

@@ -1,5 +1,5 @@
 /**
- * Renderer tests for the rollback dialog view and its user interactions.
+ * rollback-dialog 视图及交互行为的渲染测试。
  */
 
 // @vitest-environment jsdom

@@ -1,5 +1,5 @@
 /**
- * Integration coverage for snapshot creation and rollback restoration across multi-step workflows.
+ * 覆盖快照创建、推荐与回滚恢复的集成流程。
  */
 
 import { mkdtemp, rm } from 'node:fs/promises'

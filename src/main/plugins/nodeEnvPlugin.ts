@@ -1,5 +1,5 @@
 /**
- * Implements Node.js installation, cleanup, and rollback strategies across supported platforms.
+ * 实现 Node.js 在各平台上的安装、清理与回滚策略。
  */
 
 import { execFile } from 'node:child_process'
@@ -79,6 +79,7 @@ async function prepareInstallSources(
     return preparedSources
   }
 
+  // 不同安装模式依赖的归档不同，这里只准备当前模式真正会用到的缓存目录。
   if (input.nodeManager === 'node') {
     const archivePath = resolveDownloadedArtifactPath(resolvedDownloads, 'node')
     if (!archivePath) {
@@ -451,8 +452,8 @@ function buildWindowsNvmCommands(
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.nvmDir)} | Out-Null`,
-    // Do NOT pre-create nvmWindowsSymlinkDir — nvm-windows creates it as a directory junction via `nvm use`.
-    // Pre-creating it as a real directory prevents the junction from being established.
+    // 不要提前创建 nvm 的 node-current 目录；nvm-windows 会在 `nvm use` 时把它建成目录联接。
+    // 如果这里先建成普通目录，后续联接将无法建立，导致切换版本失败。
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmCacheDir)} | Out-Null`,
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.npmGlobalPrefix)} | Out-Null`,
   ]

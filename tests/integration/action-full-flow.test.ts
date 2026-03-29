@@ -1,5 +1,5 @@
 /**
- * Integration coverage for the full install, cleanup, and rollback flow exercised in CI-oriented scenarios.
+ * 覆盖 CI 场景下完整的安装、清理与回滚集成流程。
  */
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'

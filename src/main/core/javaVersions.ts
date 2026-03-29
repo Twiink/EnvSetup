@@ -1,5 +1,5 @@
 /**
- * Fetches and normalizes installable Java distributions and LTS selections.
+ * 拉取并规范化可安装的 Java 与 LTS 版本列表。
  */
 
 const ADOPTIUM_RELEASES_URL = 'https://api.adoptium.net/v3/info/available_releases'
@@ -73,7 +73,7 @@ export async function fetchOfficialJavaLtsVersions(
     throw new Error('No Adoptium LTS releases were returned.')
   }
 
-  // Filter to recent LTS versions (>= 11)
+  // 只保留较新的 LTS 主版本（>= 11）。
   const featureVersions = ltsReleases
     .filter((v): v is number => typeof v === 'number' && v >= 11)
     .sort((a, b) => b - a)

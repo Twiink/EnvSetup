@@ -1,5 +1,5 @@
 /**
- * Unit tests for the i18n module.
+ * i18n 模块的单元测试。
  */
 
 import { describe, expect, it } from 'vitest'

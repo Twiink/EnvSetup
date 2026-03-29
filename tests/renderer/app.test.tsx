@@ -1,5 +1,5 @@
 /**
- * Renderer tests for the app view and its user interactions.
+ * app 视图及交互行为的渲染测试。
  */
 
 // @vitest-environment jsdom

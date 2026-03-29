@@ -1,5 +1,5 @@
 /**
- * Centralizes user-scoped directories used for downloads, caches, snapshots, and plugin state.
+ * 统一管理下载缓存、解包缓存、快照和插件状态等用户级目录。
  */
 
 import { mkdir } from 'node:fs/promises'

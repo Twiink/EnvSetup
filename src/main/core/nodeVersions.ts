@@ -1,5 +1,5 @@
 /**
- * Fetches and normalizes installable Node.js versions for templates and overrides.
+ * 拉取并规范化可安装的 Node.js 版本列表。
  */
 
 const NODE_DIST_INDEX_URL = 'https://nodejs.org/dist/index.json'

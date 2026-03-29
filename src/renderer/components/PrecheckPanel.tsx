@@ -1,5 +1,5 @@
 /**
- * Displays precheck findings and download or network readiness before a task starts.
+ * 展示预检结果、网络状态与环境发现信息。
  */
 
 import type {

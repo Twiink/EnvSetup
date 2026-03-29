@@ -1,4 +1,4 @@
-# Runs the CI workflow that builds EnvSetup and exercises real install, cleanup, and rollback scenarios.
+# 运行 EnvSetup 的 CI 工作流，覆盖真实安装、清理与回滚场景。
 
 name: E2E Real Install
 
@@ -13,9 +13,9 @@ on:
 
 jobs:
   # ============================================================
-  # Job 1: Unit + Integration tests (vitest, mock plugins)
-  # Runs fast mock-based tests for all tools.
-  # Real-install tests are SKIPPED here (ENVSETUP_REAL_RUN not set).
+  # Job 1：单元测试 + 集成测试（Vitest，mock 插件）
+  # 这里运行的是快速的 mock 流程，不执行真实安装。
+  # 未设置 ENVSETUP_REAL_RUN，因此真实安装测试会被跳过。
   # ============================================================
   unit:
     strategy:
@@ -39,13 +39,11 @@ jobs:
         timeout-minutes: 10
 
   # ============================================================
-  # Job 2: Real installation + rollback integration tests (vitest)
-  # Uses REAL plugins with dryRun=false. Downloads real artifacts,
-  # runs real shell commands, verifies installed binaries, then
-  # executes real rollback for both fresh-install and cleanup→install flows.
-  # Covers:
-  #   Node (direct+nvm), Java (jdk+sdkman), Python (conda+direct),
-  #   Git (direct+homebrew/scoop with package-manager uninstall rollback)
+  # Job 2：真实安装 + 回滚集成测试（Vitest）
+  # 这里使用 dryRun=false 的真实插件，下载真实工件、执行真实命令、
+  # 校验安装结果，并覆盖全新安装与“清理后再安装”两类回滚路径。
+  # 覆盖 Node（direct+nvm）、Java（jdk+sdkman）、Python（conda+direct）、
+  # 以及 Git（direct+homebrew/scoop，含包管理器卸载回滚）。
   # ============================================================
   real-install:
     strategy:
@@ -100,11 +98,9 @@ jobs:
           retention-days: 7
 
   # ============================================================
-  # Job 3: Packaged-app E2E smoke tests
-  # Builds the unpacked application bundle first, then verifies one
-  # representative real install + rollback flow through the packaged
-  # Electron binary. The full manager/platform matrix stays in the
-  # real-install integration job above.
+  # Job 3：打包应用 E2E 冒烟测试
+  # 先构建 unpacked 应用，再通过打包后的 Electron 二进制验证一条
+  # 代表性的真实安装 + 回滚链路；完整矩阵仍由上面的 real-install 任务负责。
   # ============================================================
   e2e:
     strategy:

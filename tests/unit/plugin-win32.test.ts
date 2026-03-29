@@ -1,5 +1,5 @@
 /**
- * Unit tests for the plugin win32 module.
+ * plugin-win32 模块的单元测试。
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'

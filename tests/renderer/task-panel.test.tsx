@@ -1,5 +1,5 @@
 /**
- * Renderer tests for the task panel view and its user interactions.
+ * task-panel 视图及交互行为的渲染测试。
  */
 
 // @vitest-environment jsdom

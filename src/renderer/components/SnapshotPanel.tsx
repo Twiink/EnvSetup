@@ -1,5 +1,5 @@
 /**
- * Shows snapshot details used to explain cleanup and rollback state to the user.
+ * 展示快照列表以及清理、回滚相关信息。
  */
 
 import { useState } from 'react'

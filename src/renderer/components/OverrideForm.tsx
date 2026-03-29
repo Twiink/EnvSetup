@@ -1,5 +1,5 @@
 /**
- * Renders editable template overrides for tool versions and advanced install options.
+ * 渲染模板覆盖参数表单，用于调整版本和高级安装选项。
  */
 
 import type { ChangeEvent } from 'react'

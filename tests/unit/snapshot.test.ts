@@ -1,5 +1,5 @@
 /**
- * Unit tests for the snapshot module.
+ * snapshot 模块的单元测试。
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'

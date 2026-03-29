@@ -1,5 +1,5 @@
 /**
- * Discovers installed toolchains and normalizes them into renderer-friendly environment snapshots.
+ * 探测已安装工具链，并整理成渲染层可消费的环境快照。
  */
 
 import { execFile } from 'node:child_process'
@@ -94,6 +94,7 @@ function isCondaManagedPath(targetPath: string): boolean {
   )
 }
 
+// 下面几组 infer* 函数会从可执行文件路径反推安装根目录，供预检和 cleanup 复用。
 function inferNodeInstallRootFromExecutable(executablePath: string): string | undefined {
   const normalizedPath = resolve(executablePath)
 
