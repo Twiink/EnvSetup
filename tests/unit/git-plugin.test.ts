@@ -114,6 +114,38 @@ describe('git env plugin', () => {
     )
   })
 
+  it('removes the whole Scoop bootstrap root on rollback when Scoop was absent before install', async () => {
+    vi.mocked(execFile).mockClear()
+    vi.mocked(execFile)
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: '', stderr: '' })
+      })
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: 'Installed.', stderr: '' })
+      })
+
+    const result = await gitPlugin.install({
+      gitManager: 'scoop',
+      installRootDir: 'C:\\toolchain',
+      downloadCacheDir: 'C:\\download-cache',
+      dryRun: false,
+      platform: 'win32',
+      onProgress: vi.fn(),
+    })
+
+    expect(result.executionMode).toBe('real_run')
+    expect(result.logs).toContain('preexisting_scoop_root=absent')
+    expect(result.rollbackCommands?.join('\n')).toContain(
+      'Remove-Item -LiteralPath $r -Recurse -Force',
+    )
+    expect(result.rollbackCommands?.join('\n')).toContain(
+      'Scoop rollback did not remove the bootstrap root',
+    )
+    expect(result.rollbackCommands?.join('\n')).not.toContain(
+      "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1'))",
+    )
+  })
+
   it('rejects homebrew mode on win32', async () => {
     await expect(
       gitPlugin.install({

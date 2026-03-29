@@ -90,9 +90,22 @@ function buildResolveScoopGitPrefixFunction(): string {
   ].join('\n')
 }
 
-function buildScoopGitUninstallCommand(): string {
+function buildScoopGitRootCleanupCommand(): string {
+  return [
+    '$scoopRoots = @()',
+    '$shimDir = Split-Path $scoop -Parent',
+    '$scoopRoots += Split-Path $shimDir -Parent',
+    'if ($env:SCOOP) { $scoopRoots += $env:SCOOP }',
+    "$scoopRoots += Join-Path $env:USERPROFILE 'scoop'",
+    '$scoopRoots = $scoopRoots | Select-Object -Unique',
+  ].join('; ')
+}
+
+function buildScoopGitUninstallCommand(options: { removeScoopRoots?: boolean } = {}): string {
   const setScoopEnvFallback =
     "if (-not $env:SCOOP) { $env:SCOOP = Join-Path $env:USERPROFILE 'scoop' }"
+  const scoopRootCleanup = buildScoopGitRootCleanupCommand()
+
   return [
     buildResolveScoopGitPrefixFunction(),
     buildResolveScoopCommand(),
@@ -100,19 +113,13 @@ function buildScoopGitUninstallCommand(): string {
     'if ($scoop) {',
     '$prefix = Get-ScoopGitPrefix $scoop',
     'if ($prefix) { & $scoop uninstall git *> $null; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." } }',
-    // 额外清理所有可能的 apps\\git 目录，避免 uninstall 残留导致探测误判。
-    '$scoopRoots = @()',
-    '$shimDir = Split-Path $scoop -Parent',
-    '$scoopRoots += Split-Path $shimDir -Parent',
-    'if ($env:SCOOP) { $scoopRoots += $env:SCOOP }',
-    "$scoopRoots += Join-Path $env:USERPROFILE 'scoop'",
-    '$scoopRoots = $scoopRoots | Select-Object -Unique',
-    "foreach ($r in $scoopRoots) { $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { Remove-Item -LiteralPath $gd -Recurse -Force } }",
-    // 同步清理 shim，可避免 PATH 里残留旧的 git 命令入口。
-    `if ($shimDir -and (Test-Path $shimDir)) { foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } } }`,
-    // 最后按探测逻辑再校验一次，确保 cleanup 后不会再被识别成已安装。
-    '$remainingPrefix = Get-ScoopGitPrefix $scoop',
-    'if ($remainingPrefix) { throw "Scoop git uninstall did not remove the installed prefix: $remainingPrefix" }',
+    scoopRootCleanup,
+    options.removeScoopRoots
+      ? 'foreach ($r in $scoopRoots) { if ($r -and (Test-Path $r)) { Remove-Item -LiteralPath $r -Recurse -Force } }'
+      : "foreach ($r in $scoopRoots) { $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { Remove-Item -LiteralPath $gd -Recurse -Force } }",
+    options.removeScoopRoots
+      ? 'foreach ($r in $scoopRoots) { if ($r -and (Test-Path $r)) { throw "Scoop rollback did not remove the bootstrap root: $r" } }'
+      : `if ($shimDir -and (Test-Path $shimDir)) { foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } } }; $remainingPrefix = Get-ScoopGitPrefix $scoop; if ($remainingPrefix) { throw "Scoop git uninstall did not remove the installed prefix: $remainingPrefix" }`,
     '}',
   ].join('; ')
 }
@@ -393,6 +400,22 @@ function buildRollbackCommands(input: GitPluginParams): string[] {
   return []
 }
 
+async function detectExistingScoopRoot(): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `${buildResolveScoopCommand()}; if ($scoop) { Write-Output (Split-Path (Split-Path $scoop -Parent) -Parent) }`,
+    ])
+    const root = stdout.trim()
+    return root.length > 0 ? root : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function buildVerifyCommands(input: GitPluginParams): string[] {
   const paths = resolveGitInstallPaths(input)
 
@@ -474,9 +497,10 @@ const gitEnvPlugin = {
     const params = toGitParams(input)
     const paths = resolveGitInstallPaths(params)
     const downloads = buildDownloadPlan(params)
-    const rollbackCommands = buildRollbackCommands(params)
+    let rollbackCommands = buildRollbackCommands(params)
     const envChanges = buildGitEnvChanges(params)
     let commands = buildInstallCommands(params)
+    let preExistingScoopRoot: string | undefined
 
     validateOfficialDownloads(downloads)
 
@@ -488,6 +512,18 @@ const gitEnvPlugin = {
     ]
 
     if (!params.dryRun) {
+      if (params.gitManager === 'scoop' && params.platform === 'win32') {
+        preExistingScoopRoot = await detectExistingScoopRoot()
+        logs.push(
+          preExistingScoopRoot
+            ? `preexisting_scoop_root=${preExistingScoopRoot}`
+            : 'preexisting_scoop_root=absent',
+        )
+        rollbackCommands = [
+          buildScoopGitUninstallCommand({ removeScoopRoots: !preExistingScoopRoot }),
+        ]
+      }
+
       if (!params.downloadCacheDir) {
         throw Object.assign(new Error('Download cache directory is required for real-run'), {
           code: 'DOWNLOAD_FAILED',
@@ -533,6 +569,7 @@ const gitEnvPlugin = {
       context: {
         gitManager: params.gitManager,
         gitVersion: params.gitVersion ?? GIT_FOR_WINDOWS_VERSION,
+        ...(preExistingScoopRoot ? { preExistingScoopRoot } : {}),
       },
     }
   },
