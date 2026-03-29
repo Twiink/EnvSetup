@@ -869,7 +869,7 @@ describe.skipIf(!isRealRun)('action real cycle matrix', () => {
           plugin.status,
           plugin,
         )
-        // Full restore-to-pre-cleanup rollback is covered in action-real-rollback.test.ts.
+        // Full restore-to-pre-cleanup rollback is covered in action-real-rollback-matrix.test.ts.
       },
       resolveRealCycleTimeout(testCase, 'cleanup'),
     )

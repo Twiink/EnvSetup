@@ -431,6 +431,9 @@ const realRollbackCases = [
       'maven.mavenVersion': '3.9.11',
       'maven.installRootDir': installRoot,
     }),
+    verifyInstalledState: async (installRoot: string) => {
+      await expect(fs.access(path.join(installRoot, 'maven-3.9.11'))).resolves.toBeUndefined()
+    },
   },
   ...(isMac
     ? [
@@ -533,8 +536,9 @@ const realRollbackCases = [
 test.describe('real install', () => {
   test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
   // Packaged E2E stays as a smoke suite. The manager/platform matrix is covered by
-  // tests/integration/action-real-cycle-matrix.test.ts, while this suite only verifies
-  // that the packaged Electron binary can execute a representative real-run flow end-to-end.
+  // tests/integration/action-real-cycle-matrix.test.ts and
+  // tests/integration/action-real-rollback-matrix.test.ts, while this suite verifies a
+  // small representative set of real-run flows against the packaged Electron binary.
 
   // ============================================================
   // Node.js
@@ -675,39 +679,47 @@ test.describe('real install', () => {
   // MySQL / Redis / Maven
   // ============================================================
 
-  test.skip('mysql package install reaches terminal success path', async () => {
+  test('mysql package install reaches terminal success path', async () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('mysql-package'))
     try {
       await runMysqlInstallFlow(page)
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      expect(
+        await (isMac ? isHomebrewFormulaInstalled('mysql') : isScoopPackageInstalled('mysql')),
+      ).toBe(true)
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()
     }
   })
 
-  test.skip('redis package install reaches terminal success path', async () => {
+  test('redis package install reaches terminal success path', async () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('redis-package'))
     try {
       await runRedisInstallFlow(page)
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      expect(
+        await (isMac ? isHomebrewFormulaInstalled('redis') : isScoopPackageInstalled('redis')),
+      ).toBe(true)
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()
     }
   })
 
-  test.skip('maven direct install reaches terminal success path', async () => {
+  test('maven direct install reaches terminal success path', async () => {
     test.setTimeout(300_000)
-    const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('maven-direct'))
+    const installRoot = makeInstallRoot('maven-direct')
+    const { app, page, dataDir } = await launchRealRunApp(installRoot)
     try {
       await runMavenInstallFlow(page)
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      await expect(fs.access(path.join(installRoot, 'maven-3.9.11'))).resolves.toBeUndefined()
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()
@@ -720,9 +732,15 @@ test.describe('real rollback via built Electron app IPC', () => {
 
   for (const testCase of realRollbackCases) {
     test(`${testCase.name} removes installed directory`, async () => {
+      const packagedRollbackCases = new Set([
+        'node nvm',
+        'mysql package',
+        'redis package',
+        'maven direct',
+      ])
       test.skip(
-        testCase.name !== 'node nvm',
-        'Packaged E2E keeps one representative real rollback case; full manager coverage lives in integration tests.',
+        !packagedRollbackCases.has(testCase.name),
+        'Packaged E2E keeps a small real rollback smoke set; the full manager matrix lives in integration tests.',
       )
       test.setTimeout(600_000)
       const installRoot = makeInstallRoot(`rollback-${toCaseSlug(testCase.name)}`)
@@ -741,7 +759,7 @@ test.describe('real rollback via built Electron app IPC', () => {
         expect(started.snapshotId).toBeTruthy()
         expect(started.pluginStatuses).toContain('verified_success')
         expect(started.pluginExecutionModes).toContain('real_run')
-        await testCase.verifyInstalledState?.()
+        await testCase.verifyInstalledState?.(installRoot)
 
         const rollbackResult = await executeRollbackViaApp(page, started.snapshotId!, installRoot)
 
@@ -749,7 +767,7 @@ test.describe('real rollback via built Electron app IPC', () => {
         expect(rollbackResult.executionMode).toBe('real_run')
         expect(rollbackResult.directoriesRemoved).toBeGreaterThanOrEqual(1)
         await expect(fs.access(installRoot)).rejects.toThrow()
-        await testCase.verifyRolledBackState?.()
+        await testCase.verifyRolledBackState?.(installRoot)
       } finally {
         await dumpTaskLogs(dataDir)
         await app.close().catch(() => {})
