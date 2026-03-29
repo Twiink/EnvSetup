@@ -213,8 +213,8 @@ function buildWin32DirectCommands(
 
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneMysqlDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
-    `Remove-Item -LiteralPath ${quotePowerShell(extractedDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
+    `if (Test-Path ${quotePowerShell(installPaths.standaloneMysqlDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneMysqlDir)} -Recurse -Force -ErrorAction SilentlyContinue }`,
+    `if (Test-Path ${quotePowerShell(extractedDir)}) { Remove-Item -LiteralPath ${quotePowerShell(extractedDir)} -Recurse -Force -ErrorAction SilentlyContinue }`,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
     `Move-Item -LiteralPath ${quotePowerShell(extractedDir)} -Destination ${quotePowerShell(installPaths.standaloneMysqlDir)} -Force`,
     `$env:MYSQL_HOME = ${quotePowerShell(installPaths.standaloneMysqlDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneMysqlBinDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.standaloneMysqlBinDir}\\mysql.exe`)} --version`,
@@ -274,9 +274,7 @@ function buildWin32VerifyCommands(input: MysqlPluginParams): string[] {
   }
 
   return [
-    buildResolveScoopCommand(),
-    "if (-not $scoop) { throw 'Scoop not found.' }",
-    "$shimDir = Split-Path $scoop -Parent; $mysqlCandidates = @((Join-Path $shimDir 'mysql.exe'), (Join-Path $shimDir 'mysql.cmd'), (Join-Path $shimDir 'mysqld.exe'), (Join-Path $shimDir 'mysqld.cmd')); $mysqlBin = $mysqlCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $mysqlBin) { throw 'Failed to locate MySQL shim.' }; & $mysqlBin --version",
+    `${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $shimDir = Split-Path $scoop -Parent; $mysqlCandidates = @((Join-Path $shimDir 'mysql.exe'), (Join-Path $shimDir 'mysql.cmd'), (Join-Path $shimDir 'mysqld.exe'), (Join-Path $shimDir 'mysqld.cmd')); $mysqlBin = $mysqlCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $mysqlBin) { throw 'Failed to locate MySQL shim.' }; & $mysqlBin --version`,
   ]
 }
 

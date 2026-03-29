@@ -228,7 +228,7 @@ function buildWin32DirectCommands(
 
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneRedisDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
+    `if (Test-Path ${quotePowerShell(installPaths.standaloneRedisDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneRedisDir)} -Recurse -Force -ErrorAction SilentlyContinue }`,
     `$installDir = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneRedisDir)}); $process = Start-Process msiexec.exe -ArgumentList @('/i', ${quotePowerShell(installerPath)}, '/quiet', '/norestart', 'INSTALLFOLDER=' + $installDir, 'ADD_INSTALLFOLDER_TO_PATH=0', 'INSTALL_SERVICE=0', 'ADD_FIREWALL_RULE=0') -Wait -PassThru; if ($process.ExitCode -ne 0) { throw "Memurai install failed with exit code $($process.ExitCode)." }`,
     `$env:REDIS_HOME = ${quotePowerShell(installPaths.standaloneRedisDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneRedisDir)} + ';' + $env:Path; $redisCandidates = @((Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai-cli.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-server.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-cli.exe')); $redisExe = $redisCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $redisExe) { throw 'Failed to locate Memurai binaries after installation.' }; Write-Output 'Memurai for Redis installed'; Write-Output $redisExe`,
   ]
@@ -287,9 +287,7 @@ function buildWin32VerifyCommands(input: RedisPluginParams): string[] {
   }
 
   return [
-    buildResolveScoopCommand(),
-    "if (-not $scoop) { throw 'Scoop not found.' }",
-    "$shimDir = Split-Path $scoop -Parent; $redisCandidates = @((Join-Path $shimDir 'redis-server.exe'), (Join-Path $shimDir 'redis-server.cmd'), (Join-Path $shimDir 'redis-cli.exe'), (Join-Path $shimDir 'redis-cli.cmd')); $redisBin = $redisCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $redisBin) { throw 'Failed to locate Redis shim.' }; & $redisBin --version",
+    `${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $shimDir = Split-Path $scoop -Parent; $redisCandidates = @((Join-Path $shimDir 'redis-server.exe'), (Join-Path $shimDir 'redis-server.cmd'), (Join-Path $shimDir 'redis-cli.exe'), (Join-Path $shimDir 'redis-cli.cmd')); $redisBin = $redisCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $redisBin) { throw 'Failed to locate Redis shim.' }; & $redisBin --version`,
   ]
 }
 
