@@ -229,7 +229,7 @@ async function isScoopGitInstalled(): Promise<boolean> {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; & $scoop prefix git *> $null; exit $LASTEXITCODE`,
+      `$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = (Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { $scoop = (Get-Command 'scoop' -ErrorAction SilentlyContinue).Source }; if (-not $scoop) { exit 1 }; if (-not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }; $rawPrefix = & $scoop prefix git 2>$null | Select-Object -First 1; if ($rawPrefix) { $prefix = $rawPrefix.ToString().Trim(); if ($prefix -and [System.IO.Path]::IsPathRooted($prefix) -and (Test-Path $prefix)) { exit 0 } }; $roots = @($env:SCOOP); $roots += Join-Path $env:USERPROFILE 'scoop'; $roots = $roots | Select-Object -Unique; foreach ($r in $roots) { $gc = Join-Path $r 'apps\\git\\current'; if (Test-Path $gc) { exit 0 }; $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { $vd = Get-ChildItem -Path $gd -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'current' } | Select-Object -First 1; if ($vd) { exit 0 } } }; exit 1`,
     ])
     return true
   } catch {
