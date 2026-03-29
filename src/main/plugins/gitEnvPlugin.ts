@@ -87,21 +87,28 @@ function buildResolveScoopGitPrefixFunction(): string {
 }
 
 function buildScoopGitUninstallCommand(): string {
+  const setScoopEnvFallback =
+    "if (-not $env:SCOOP) { $env:SCOOP = Join-Path $env:USERPROFILE 'scoop' }"
   return [
     buildResolveScoopGitPrefixFunction(),
     buildResolveScoopCommand(),
+    setScoopEnvFallback,
     'if ($scoop) {',
     '$prefix = Get-ScoopGitPrefix $scoop',
     'if ($prefix) { & $scoop uninstall git *> $null; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0) { throw "Scoop git uninstall failed with exit code $uninstallExitCode." } }',
-    '$remainingPrefix = Get-ScoopGitPrefix $scoop',
-    '$residualPaths = @()',
-    'foreach ($candidate in @($prefix, $remainingPrefix)) { if ($candidate) { $normalized = [System.IO.Path]::GetFullPath($candidate); if ($normalized.ToLower().EndsWith("\\current")) { $parent = Split-Path $normalized -Parent; if ($parent) { $normalized = $parent } }; $residualPaths += $normalized } }',
-    '$residualPaths = $residualPaths | Select-Object -Unique',
-    'foreach ($residualPath in $residualPaths) { if ($residualPath -and (Test-Path $residualPath)) { Remove-Item -LiteralPath $residualPath -Recurse -Force } }',
+    // Force-remove apps\git from all possible scoop roots (matches isScoopGitInstalled logic)
+    '$scoopRoots = @()',
     '$shimDir = Split-Path $scoop -Parent',
+    '$scoopRoots += Split-Path $shimDir -Parent',
+    'if ($env:SCOOP) { $scoopRoots += $env:SCOOP }',
+    "$scoopRoots += Join-Path $env:USERPROFILE 'scoop'",
+    '$scoopRoots = $scoopRoots | Select-Object -Unique',
+    "foreach ($r in $scoopRoots) { $gd = Join-Path $r 'apps\\git'; if (Test-Path $gd) { Remove-Item -LiteralPath $gd -Recurse -Force } }",
+    // Clean up git shims
     `if ($shimDir -and (Test-Path $shimDir)) { foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1')) { $shimPath = Join-Path $shimDir $shimName; if (Test-Path $shimPath) { Remove-Item -LiteralPath $shimPath -Force } } }`,
+    // Final verification: check the same paths isScoopGitInstalled checks
     '$remainingPrefix = Get-ScoopGitPrefix $scoop',
-    "if ($remainingPrefix) { throw 'Scoop git uninstall did not remove the installed prefix.' }",
+    "if ($remainingPrefix) { throw \"Scoop git uninstall did not remove the installed prefix: $remainingPrefix\" }",
     '}',
   ].join('; ')
 }
@@ -328,11 +335,17 @@ function buildWindowsScoopCommands(resolvedDownloads?: DownloadResolvedArtifact[
   const setScoopEnvFallback =
     "if (-not $env:SCOOP) { $env:SCOOP = Join-Path $env:USERPROFILE 'scoop' }"
   const postInstallVerify = [
-    '$scoopRoot = Split-Path (Split-Path $scoop -Parent) -Parent',
-    "$appsGit = Join-Path $scoopRoot 'apps\\git'",
-    'if (-not (Test-Path $appsGit)) {',
+    '$scoopRoots = @()',
+    '$scoopRoots += Split-Path (Split-Path $scoop -Parent) -Parent',
+    'if ($env:SCOOP) { $scoopRoots += $env:SCOOP }',
+    "$scoopRoots += Join-Path $env:USERPROFILE 'scoop'",
+    '$scoopRoots = $scoopRoots | Select-Object -Unique',
+    '$foundAppsGit = $false',
+    "foreach ($r in $scoopRoots) { if (Test-Path (Join-Path $r 'apps\\git')) { $foundAppsGit = $true; break } }",
+    'if (-not $foundAppsGit) {',
     '$listOutput = & $scoop list *>&1 | Out-String',
-    'throw "Scoop git install did not create apps\\git. scoopRoot=$scoopRoot SCOOP=$env:SCOOP USERPROFILE=$env:USERPROFILE scoopList=$listOutput"',
+    "$diag = 'scoopRoots=' + ($scoopRoots -join ',') + ' SCOOP=' + $env:SCOOP + ' USERPROFILE=' + $env:USERPROFILE + ' scoopList=' + $listOutput",
+    'throw ("Scoop git install did not create apps\\git. " + $diag)',
     '}',
   ].join('; ')
   const installerPath =
