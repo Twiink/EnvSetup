@@ -259,9 +259,7 @@ function buildVerifyCommands(input: MavenPluginParams): string[] {
   if (input.mavenManager === 'package') {
     if (input.platform === 'win32') {
       return [
-        buildResolveScoopCommand(),
-        "if (-not $scoop) { throw 'Scoop not found.' }",
-        "$shimDir = Split-Path $scoop -Parent; $mvnCmd = Join-Path $shimDir 'mvn.cmd'; if (-not (Test-Path $mvnCmd)) { throw 'Failed to locate Maven shim.' }; & $mvnCmd -version",
+        `${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $shimDir = Split-Path $scoop -Parent; $mvnCmd = Join-Path $shimDir 'mvn.cmd'; if (-not (Test-Path $mvnCmd)) { throw 'Failed to locate Maven shim.' }; & $mvnCmd -version`,
       ]
     }
 
