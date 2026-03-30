@@ -60,7 +60,7 @@ function resolveMysqlSeries(version: string): string {
 }
 
 function resolveMysqlHomebrewFormula(input: MysqlPluginParams): string {
-  return `mysql@${resolveSelectedMysqlVersion(input)}`
+  return `mysql@${resolveMysqlSeries(resolveSelectedMysqlVersion(input))}`
 }
 
 function resolveMysqlScoopPackage(input: MysqlPluginParams): string {
@@ -227,7 +227,7 @@ function buildDarwinPackageCommands(
   const resolveBrewCmd = buildResolveHomebrewCommand()
   const formula = resolveMysqlHomebrewFormula(input)
   return [
-    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; MYSQL_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$MYSQL_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$MYSQL_FORMULA"; fi`,
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; MYSQL_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$MYSQL_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install --formula "$MYSQL_FORMULA"; fi`,
   ]
 }
 

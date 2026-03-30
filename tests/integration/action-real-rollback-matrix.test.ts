@@ -45,6 +45,25 @@ function selectCiVersion(tool: RealRollbackTool, fallback: string): string {
     : fallback
 }
 
+function resolveVersionSeries(version: string, segments = 2): string {
+  return version
+    .split('.')
+    .slice(0, segments)
+    .join('.')
+}
+
+function resolveMysqlHomebrewFormula(version?: string): string {
+  return version ? `mysql@${resolveVersionSeries(version)}` : 'mysql'
+}
+
+function resolveRedisHomebrewFormula(): string {
+  return 'redis'
+}
+
+function resolveMavenHomebrewFormula(): string {
+  return 'maven'
+}
+
 const nodeTestVersion = selectCiVersion('node', '20.20.1')
 const javaTestVersion = selectCiVersion('java', '21.0.6+7')
 const pythonTestVersion = selectCiVersion('python', '3.12.10')
@@ -342,7 +361,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
     }),
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`maven@${mavenTestVersion}`)).toBe(true)
+        expect(await isHomebrewFormulaInstalled(resolveMavenHomebrewFormula())).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(true)
@@ -350,7 +369,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`maven@${mavenTestVersion}`)).toBe(false)
+        expect(await isHomebrewFormulaInstalled(resolveMavenHomebrewFormula())).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(false)
@@ -432,10 +451,14 @@ const allRealRollbackCases: RealRollbackCase[] = [
             downloadCacheDir: cacheDir,
           }),
           verifyInstalledState: async () => {
-            expect(await isHomebrewFormulaInstalled(`mysql@${mysqlTestVersion}`)).toBe(true)
+            expect(await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion))).toBe(
+              true,
+            )
           },
           verifyRolledBackState: async () => {
-            expect(await isHomebrewFormulaInstalled(`mysql@${mysqlTestVersion}`)).toBe(false)
+            expect(
+              await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion)),
+            ).toBe(false)
           },
         } satisfies RealRollbackCase,
         {
@@ -452,10 +475,10 @@ const allRealRollbackCases: RealRollbackCase[] = [
             downloadCacheDir: cacheDir,
           }),
           verifyInstalledState: async () => {
-            expect(await isHomebrewFormulaInstalled(`redis@${redisTestVersion}`)).toBe(true)
+            expect(await isHomebrewFormulaInstalled(resolveRedisHomebrewFormula())).toBe(true)
           },
           verifyRolledBackState: async () => {
-            expect(await isHomebrewFormulaInstalled(`redis@${redisTestVersion}`)).toBe(false)
+            expect(await isHomebrewFormulaInstalled(resolveRedisHomebrewFormula())).toBe(false)
           },
         } satisfies RealRollbackCase,
       ]

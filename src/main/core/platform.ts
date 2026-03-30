@@ -66,26 +66,29 @@ function resolveHomebrewFormulaBinDir(formula: string): string {
   return posix.join(resolveHomebrewOptDir(), formula, 'bin')
 }
 
+function resolveVersionSeries(version: string, segments = 2): string {
+  return version
+    .split('.')
+    .slice(0, segments)
+    .join('.')
+}
+
 function resolveGitHomebrewFormula(input: GitPluginParams): string {
   return input.gitManager === 'homebrew' && input.gitVersion ? `git@${input.gitVersion}` : 'git'
 }
 
 function resolveMysqlHomebrewFormula(input: MysqlPluginParams): string {
   return input.mysqlManager === 'package' && input.mysqlVersion
-    ? `mysql@${input.mysqlVersion}`
+    ? `mysql@${resolveVersionSeries(input.mysqlVersion)}`
     : 'mysql'
 }
 
-function resolveRedisHomebrewFormula(input: RedisPluginParams): string {
-  return input.redisManager === 'package' && input.redisVersion
-    ? `redis@${input.redisVersion}`
-    : 'redis'
+function resolveRedisHomebrewFormula(_input: RedisPluginParams): string {
+  return 'redis'
 }
 
-function resolveMavenHomebrewFormula(input: MavenPluginParams): string {
-  return input.mavenManager === 'package' && input.mavenVersion
-    ? `maven@${input.mavenVersion}`
-    : 'maven'
+function resolveMavenHomebrewFormula(_input: MavenPluginParams): string {
+  return 'maven'
 }
 
 export function resolveNodeInstallPaths(input: NodePluginParams): NodeInstallPaths {

@@ -54,12 +54,12 @@ function resolveSelectedMavenVersion(input: MavenPluginParams): string {
   return input.mavenVersion ?? DEFAULT_MAVEN_VERSIONS[0]
 }
 
-function resolveMavenHomebrewFormula(input: MavenPluginParams): string {
-  return `maven@${resolveSelectedMavenVersion(input)}`
+function resolveMavenHomebrewFormula(_input: MavenPluginParams): string {
+  return 'maven'
 }
 
-function resolveMavenScoopPackage(input: MavenPluginParams): string {
-  return `maven@${resolveSelectedMavenVersion(input)}`
+function resolveMavenScoopPackage(_input: MavenPluginParams): string {
+  return 'maven'
 }
 
 function buildResolveHomebrewCommand(): string {
@@ -242,7 +242,7 @@ function buildDarwinPackageCommands(
   const resolveBrewCmd = buildResolveHomebrewCommand()
   const formula = resolveMavenHomebrewFormula(input)
   return [
-    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; MAVEN_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$MAVEN_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$MAVEN_FORMULA"; fi`,
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; MAVEN_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$MAVEN_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install --formula "$MAVEN_FORMULA"; fi`,
   ]
 }
 

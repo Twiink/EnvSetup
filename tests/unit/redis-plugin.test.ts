@@ -68,10 +68,10 @@ describe('redis env plugin', () => {
     })
 
     expect(result.version).toBe('7.4.7')
-    expect(result.commands.join('\n')).toContain('version-install "$REDIS_FORMULA"')
-    expect(result.commands.join('\n')).toContain("REDIS_FORMULA='redis@7.4.7'")
+    expect(result.commands.join('\n')).toContain('install --formula "$REDIS_FORMULA"')
+    expect(result.commands.join('\n')).toContain("REDIS_FORMULA='redis'")
     expect(result.commands.join('\n')).not.toContain('mkdir -p')
-    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula redis@7.4.7')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula redis')
   })
 
   it('builds a Memurai-based direct dry-run install plan on win32', async () => {

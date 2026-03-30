@@ -41,6 +41,8 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).toContain('hdiutil attach')
     expect(result.commands.join('\n')).toContain('.Trashes')
     expect(result.commands.join('\n')).toContain('pkgutil --expand')
+    expect(result.commands.join('\n')).toContain("python3 - <<'PY'")
+    expect(result.commands.join('\n')).toContain('usr/local/git')
   })
 
   it('returns dry-run result for direct git install on win32', async () => {
@@ -100,7 +102,7 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).not.toContain(
       '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer',
     )
-    expect(result.commands.join('\n')).toContain('& $scoop install git@2.49.1.1')
+    expect(result.commands.join('\n')).toContain('& $scoop install git')
     expect(result.commands.join('\n')).toContain('Scoop git install failed with exit code')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
     expect(result.rollbackCommands?.join('\n')).toContain(

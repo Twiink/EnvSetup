@@ -526,8 +526,8 @@ describe('resolveMysqlInstallPaths', () => {
     const paths = resolveMysqlInstallPaths(darwinMysql)
     expect(paths.homebrewDir).toBe(
       process.arch === 'x64'
-        ? '/usr/local/opt/mysql@8.4.8/bin'
-        : '/opt/homebrew/opt/mysql@8.4.8/bin',
+        ? '/usr/local/opt/mysql@8.4/bin'
+        : '/opt/homebrew/opt/mysql@8.4/bin',
     )
   })
 
@@ -559,8 +559,8 @@ describe('buildMysqlEnvChanges', () => {
           key: 'PATH',
           value:
             process.arch === 'x64'
-              ? '/usr/local/opt/mysql@8.4.8/bin'
-              : '/opt/homebrew/opt/mysql@8.4.8/bin',
+              ? '/usr/local/opt/mysql@8.4/bin'
+              : '/opt/homebrew/opt/mysql@8.4/bin',
         }),
       ]),
     )
@@ -597,9 +597,7 @@ describe('resolveRedisInstallPaths', () => {
   it('uses Homebrew bin directory on darwin', () => {
     const paths = resolveRedisInstallPaths(darwinRedis)
     expect(paths.homebrewDir).toBe(
-      process.arch === 'x64'
-        ? '/usr/local/opt/redis@7.4.7/bin'
-        : '/opt/homebrew/opt/redis@7.4.7/bin',
+      process.arch === 'x64' ? '/usr/local/opt/redis/bin' : '/opt/homebrew/opt/redis/bin',
     )
   })
 
@@ -630,9 +628,7 @@ describe('buildRedisEnvChanges', () => {
         expect.objectContaining({
           key: 'PATH',
           value:
-            process.arch === 'x64'
-              ? '/usr/local/opt/redis@7.4.7/bin'
-              : '/opt/homebrew/opt/redis@7.4.7/bin',
+            process.arch === 'x64' ? '/usr/local/opt/redis/bin' : '/opt/homebrew/opt/redis/bin',
         }),
       ]),
     )
@@ -682,9 +678,7 @@ describe('resolveMavenInstallPaths', () => {
       mavenManager: 'package' as const,
     })
     expect(paths.homebrewDir).toBe(
-      process.arch === 'x64'
-        ? '/usr/local/opt/maven@3.9.11/bin'
-        : '/opt/homebrew/opt/maven@3.9.11/bin',
+      process.arch === 'x64' ? '/usr/local/opt/maven/bin' : '/opt/homebrew/opt/maven/bin',
     )
   })
 })
@@ -717,10 +711,7 @@ describe('buildMavenEnvChanges', () => {
     expect(changes).toEqual([
       expect.objectContaining({
         key: 'PATH',
-        value:
-          process.arch === 'x64'
-            ? '/usr/local/opt/maven@3.9.11/bin'
-            : '/opt/homebrew/opt/maven@3.9.11/bin',
+        value: process.arch === 'x64' ? '/usr/local/opt/maven/bin' : '/opt/homebrew/opt/maven/bin',
       }),
     ])
   })

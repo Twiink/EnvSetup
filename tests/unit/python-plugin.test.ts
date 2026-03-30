@@ -241,7 +241,9 @@ describe('python env plugin', () => {
     expect(result.commands.join('\n')).toContain('pkgutil')
     expect(result.commands.join('\n')).toContain("python3 - <<'PY'")
     expect(result.commands.join('\n')).toContain("payload_bytes[:4] == b'pbzx'")
-    expect(result.commands.join('\n')).toContain('FRAMEWORK_DIR=$(find')
+    expect(result.commands.join('\n')).toContain('Python.framework')
+    expect(result.commands.join('\n')).toContain('PythonT.framework')
+    expect(result.commands.join('\n')).toContain('DYLD_ROOT_PATH')
     expect(result.envChanges.length).toBeGreaterThan(0)
   })
 

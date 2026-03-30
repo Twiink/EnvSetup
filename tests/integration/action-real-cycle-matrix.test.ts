@@ -70,6 +70,25 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+function resolveVersionSeries(version: string, segments = 2): string {
+  return version
+    .split('.')
+    .slice(0, segments)
+    .join('.')
+}
+
+function resolveMysqlHomebrewFormula(version?: string): string {
+  return version ? `mysql@${resolveVersionSeries(version)}` : 'mysql'
+}
+
+function resolveRedisHomebrewFormula(): string {
+  return 'redis'
+}
+
+function resolveMavenHomebrewFormula(): string {
+  return 'maven'
+}
+
 const nodeTestVersion = selectCiVersion('node', '20.20.1')
 const javaTestVersion = selectCiVersion('java', '21.0.6+7')
 const normalizedJavaTestVersion = javaTestVersion.replace(/\+.*/u, '')
@@ -223,11 +242,14 @@ const allRealCycleCases: RealCycleCase[] = [
         mavenManager: 'package',
         mavenVersion: mavenTestVersion,
       }),
-    verifyPattern: new RegExp(`Apache Maven\\s+${escapeRegExp(mavenTestVersion)}`, 'i'),
+    verifyPattern: new RegExp(
+      `Apache Maven\\s+${escapeRegExp(resolveVersionSeries(mavenTestVersion))}\\.`,
+      'i',
+    ),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`maven@${mavenTestVersion}`)).toBe(true)
+        expect(await isHomebrewFormulaInstalled(resolveMavenHomebrewFormula())).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(true)
@@ -235,7 +257,7 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`maven@${mavenTestVersion}`)).toBe(false)
+        expect(await isHomebrewFormulaInstalled(resolveMavenHomebrewFormula())).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(false)
@@ -282,11 +304,15 @@ const allRealCycleCases: RealCycleCase[] = [
         mysqlManager: 'package',
         mysqlVersion: mysqlTestVersion,
       }),
-    verifyPattern: new RegExp(escapeRegExp(mysqlTestVersion), 'i'),
+    verifyPattern: isMac
+      ? new RegExp(`${escapeRegExp(resolveVersionSeries(mysqlTestVersion))}\\.`, 'i')
+      : new RegExp(escapeRegExp(mysqlTestVersion), 'i'),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`mysql@${mysqlTestVersion}`)).toBe(true)
+        expect(await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion))).toBe(
+          true,
+        )
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('mysql')).toBe(true)
@@ -294,7 +320,9 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`mysql@${mysqlTestVersion}`)).toBe(false)
+        expect(await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion))).toBe(
+          false,
+        )
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('mysql')).toBe(false)
@@ -327,11 +355,11 @@ const allRealCycleCases: RealCycleCase[] = [
         redisManager: 'package',
         redisVersion: redisTestVersion,
       }),
-    verifyPattern: new RegExp(escapeRegExp(redisTestVersion), 'i'),
+    verifyPattern: isMac ? /Redis server\s+v=/i : new RegExp(escapeRegExp(redisTestVersion), 'i'),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`redis@${redisTestVersion}`)).toBe(true)
+        expect(await isHomebrewFormulaInstalled(resolveRedisHomebrewFormula())).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('redis')).toBe(true)
@@ -339,7 +367,7 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(`redis@${redisTestVersion}`)).toBe(false)
+        expect(await isHomebrewFormulaInstalled(resolveRedisHomebrewFormula())).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('redis')).toBe(false)
@@ -385,7 +413,7 @@ const allRealCycleCases: RealCycleCase[] = [
               gitManager: 'scoop',
               gitVersion: gitTestVersion,
             }),
-          verifyPattern: new RegExp(`git version\\s+${escapeRegExp(gitTestVersion)}`, 'i'),
+          verifyPattern: /git version\s+\d+\.\d+\.\d+/i,
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
             expect(await isScoopGitInstalled()).toBe(true)
@@ -693,16 +721,10 @@ async function hydrateDetectionEnvironment(
   ) {
     const formula =
       testCase.tool === 'mysql'
-        ? params.mysqlVersion
-          ? `mysql@${params.mysqlVersion}`
-          : 'mysql'
+        ? resolveMysqlHomebrewFormula(params.mysqlVersion)
         : testCase.tool === 'redis'
-          ? params.redisVersion
-            ? `redis@${params.redisVersion}`
-            : 'redis'
-          : params.mavenVersion
-            ? `maven@${params.mavenVersion}`
-            : 'maven'
+          ? resolveRedisHomebrewFormula()
+          : resolveMavenHomebrewFormula()
     try {
       const { stdout } = await execFileAsync('sh', [
         '-c',

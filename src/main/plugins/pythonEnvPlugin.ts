@@ -231,6 +231,64 @@ function extractPythonMajorMinor(version: string): string {
   return `${parts[0]}.${parts[1]}`
 }
 
+function buildDarwinPythonWrappersCommand(
+  standalonePythonDir: string,
+  standalonePythonBinDir: string,
+  majorMinor: string,
+): string {
+  return [
+    `PYTHON_ROOT=${quoteShell(standalonePythonDir)}`,
+    `PYTHON_BIN_DIR=${quoteShell(standalonePythonBinDir)}`,
+    `PYTHON_MAJOR_MINOR=${quoteShell(majorMinor)}`,
+    `python3 - <<'PY'
+import os
+from pathlib import Path
+
+python_root = Path(os.environ['PYTHON_ROOT'])
+python_bin_dir = Path(os.environ['PYTHON_BIN_DIR'])
+major_minor = os.environ['PYTHON_MAJOR_MINOR']
+
+python_launcher = """#!/bin/sh
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+PYTHON_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+FRAMEWORKS_DIR="$PYTHON_ROOT/Library/Frameworks"
+export DYLD_ROOT_PATH="$PYTHON_ROOT"
+if [ -n "$DYLD_FRAMEWORK_PATH" ]; then
+  export DYLD_FRAMEWORK_PATH="$FRAMEWORKS_DIR:$DYLD_FRAMEWORK_PATH"
+else
+  export DYLD_FRAMEWORK_PATH="$FRAMEWORKS_DIR"
+fi
+if [ -n "$DYLD_FALLBACK_FRAMEWORK_PATH" ]; then
+  export DYLD_FALLBACK_FRAMEWORK_PATH="$FRAMEWORKS_DIR:$DYLD_FALLBACK_FRAMEWORK_PATH"
+else
+  export DYLD_FALLBACK_FRAMEWORK_PATH="$FRAMEWORKS_DIR"
+fi
+export PYTHONHOME="$PYTHON_ROOT/Library/Frameworks/Python.framework/Versions/__MAJOR_MINOR__"
+exec "$PYTHON_ROOT/Library/Frameworks/Python.framework/Versions/__MAJOR_MINOR__/bin/python__MAJOR_MINOR__" "$@"
+""".replace('__MAJOR_MINOR__', major_minor)
+
+pip_launcher = """#!/bin/sh
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+PYTHON_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+exec "$PYTHON_ROOT/bin/python3" -m pip "$@"
+"""
+
+
+def write_executable(target: Path, content: str) -> None:
+    target.write_text(content)
+    target.chmod(0o755)
+
+
+python_bin_dir.mkdir(parents=True, exist_ok=True)
+for name in ('python', 'python3', f'python{major_minor}'):
+    write_executable(python_bin_dir / name, python_launcher)
+
+for name in ('pip', 'pip3', f'pip{major_minor}'):
+    write_executable(python_bin_dir / name, pip_launcher)
+PY`,
+  ].join('; ')
+}
+
 function buildDarwinPkgCommands(
   input: PythonPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
@@ -245,6 +303,7 @@ function buildDarwinPkgCommands(
     ) ?? `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
   const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
   const payloadDir = `${installPaths.installRootDir}/python-pkg-payload`
+  const standaloneFrameworksDir = `${installPaths.standalonePythonDir}/Library/Frameworks`
   const majorMinor = extractPythonMajorMinor(input.pythonVersion)
   const payloadExtractCommand = [
     `PAYLOAD_DIR=${quoteShell(payloadDir)}`,
@@ -329,7 +388,12 @@ PY`,
   commands.push(
     `pkgutil --expand ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
     payloadExtractCommand,
-    `FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Python.framework/Versions/${majorMinor}`)} -type d | head -n 1); if [ -z "$FRAMEWORK_DIR" ]; then FRAMEWORK_DIR=$(find ${quoteShell(payloadDir)} -path ${quoteShell(`*/Versions/${majorMinor}`)} -type d | head -n 1); fi; if [ -z "$FRAMEWORK_DIR" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(installPaths.standalonePythonDir)} && cp -R "$FRAMEWORK_DIR"/. ${quoteShell(installPaths.standalonePythonDir)}/`,
+    `rm -rf ${quoteShell(installPaths.standalonePythonDir)}; mkdir -p ${quoteShell(standaloneFrameworksDir)}; PYTHON_FRAMEWORK_SOURCE=$(find ${quoteShell(payloadDir)} -path '*/Python.framework' -type d | head -n 1); if [ -z "$PYTHON_FRAMEWORK_SOURCE" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; cp -R "$PYTHON_FRAMEWORK_SOURCE" ${quoteShell(standaloneFrameworksDir)}/; PYTHONT_FRAMEWORK_SOURCE=$(find ${quoteShell(payloadDir)} -path '*/PythonT.framework' -type d | head -n 1); if [ -n "$PYTHONT_FRAMEWORK_SOURCE" ]; then cp -R "$PYTHONT_FRAMEWORK_SOURCE" ${quoteShell(standaloneFrameworksDir)}/; fi; if [ ! -x ${quoteShell(`${standaloneFrameworksDir}/Python.framework/Versions/${majorMinor}/bin/python${majorMinor}`)} ]; then echo 'Failed to locate the Python executable inside the copied framework bundle.' >&2; exit 1; fi`,
+    buildDarwinPythonWrappersCommand(
+      installPaths.standalonePythonDir,
+      installPaths.standalonePythonBinDir,
+      majorMinor,
+    ),
     `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)}${resolvedDownloads ? '' : ` ${quoteShell(installerPath)}`}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
   )

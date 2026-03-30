@@ -67,17 +67,14 @@ describe('maven env plugin', () => {
     })
 
     expect(result.version).toBe('3.9.11')
-    expect(result.commands.join('\n')).toContain('version-install "$MAVEN_FORMULA"')
-    expect(result.commands.join('\n')).toContain("MAVEN_FORMULA='maven@3.9.11'")
+    expect(result.commands.join('\n')).toContain('install --formula "$MAVEN_FORMULA"')
+    expect(result.commands.join('\n')).toContain("MAVEN_FORMULA='maven'")
     expect(result.commands.join('\n')).not.toContain('mkdir -p')
-    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula maven@3.9.11')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula maven')
     expect(result.envChanges).toEqual([
       expect.objectContaining({
         key: 'PATH',
-        value:
-          process.arch === 'x64'
-            ? '/usr/local/opt/maven@3.9.11/bin'
-            : '/opt/homebrew/opt/maven@3.9.11/bin',
+        value: process.arch === 'x64' ? '/usr/local/opt/maven/bin' : '/opt/homebrew/opt/maven/bin',
       }),
     ])
   })
@@ -105,7 +102,7 @@ describe('maven env plugin', () => {
     })
 
     expect(result.version).toBe('3.9.11')
-    expect(result.commands.join('\n')).toContain('scoop install maven@3.9.11')
+    expect(result.commands.join('\n')).toContain('scoop install maven')
     expect(result.commands.join('\n')).not.toContain('New-Item -ItemType Directory -Force')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall maven')
     expect(result.envChanges).toEqual([

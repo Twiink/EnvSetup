@@ -68,18 +68,18 @@ describe('mysql env plugin', () => {
     })
 
     expect(result.version).toBe('8.4.8')
-    expect(result.commands.join('\n')).toContain('version-install "$MYSQL_FORMULA"')
-    expect(result.commands.join('\n')).toContain("MYSQL_FORMULA='mysql@8.4.8'")
+    expect(result.commands.join('\n')).toContain('install --formula "$MYSQL_FORMULA"')
+    expect(result.commands.join('\n')).toContain("MYSQL_FORMULA='mysql@8.4'")
     expect(result.commands.join('\n')).not.toContain('mkdir -p')
-    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula mysql@8.4.8')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula mysql@8.4')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           key: 'PATH',
           value:
             process.arch === 'x64'
-              ? '/usr/local/opt/mysql@8.4.8/bin'
-              : '/opt/homebrew/opt/mysql@8.4.8/bin',
+              ? '/usr/local/opt/mysql@8.4/bin'
+              : '/opt/homebrew/opt/mysql@8.4/bin',
         }),
       ]),
     )

@@ -76,8 +76,8 @@ function resolveMemuraiRelease(redisVersion: string) {
   return MEMURAI_LTS_RELEASES[redisVersion as keyof typeof MEMURAI_LTS_RELEASES]
 }
 
-function resolveRedisHomebrewFormula(input: RedisPluginParams): string {
-  return `redis@${resolveSelectedRedisVersion(input)}`
+function resolveRedisHomebrewFormula(_input: RedisPluginParams): string {
+  return 'redis'
 }
 
 function resolveRedisScoopPackage(input: RedisPluginParams): string {
@@ -301,7 +301,7 @@ function buildDarwinPackageCommands(
   const resolveBrewCmd = buildResolveHomebrewCommand()
   const formula = resolveRedisHomebrewFormula(input)
   return [
-    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; REDIS_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$REDIS_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$REDIS_FORMULA"; fi`,
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; REDIS_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$REDIS_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install --formula "$REDIS_FORMULA"; fi`,
   ]
 }
 
