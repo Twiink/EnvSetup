@@ -57,6 +57,7 @@
 
 - **官方直装流**: Node.js、Java、Python、Git、MySQL、Redis、Maven
 - **管理器流**: Node.js（nvm / nvm-windows）、Java（SDKMAN）、Python（Conda）、Git（Homebrew / Scoop）、MySQL（Homebrew / Scoop）、Redis（Homebrew / Scoop）、Maven（Homebrew / Scoop）
+- **版本选择**: Node / Java / Python / Git / MySQL / Redis / Maven 都会根据模板暴露版本选择；其中 Git / MySQL / Redis / Maven 的包管理器流也会按所选版本安装与回滚
 
 ### Node.js
 
@@ -81,38 +82,38 @@
 
 ### Git
 
-|              | macOS                                                                                                                                  | Windows                                                                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **直接安装** | 从 `sourceforge.net/git-osx-installer` 下载 `.dmg`，`hdiutil attach` → `pkgutil --expand-full` 解包（跳过 `.Trashes`）                 | 从 GitHub `git-for-windows` 下载 `Git-2.47.1-64-bit.tar.bz2`（非 exe 安装器），`tar -xjf` 解压                                           |
-| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install git`；回滚用 `brew uninstall --formula git` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，shadow `Get-ExecutionPolicy` 后执行，`scoop install git`；回滚用 `scoop uninstall git` |
+|              | macOS                                                                                                                                              | Windows                                                                                                                                          |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **直接安装** | 从 `sourceforge.net/git-osx-installer` 下载 `.dmg`，`hdiutil attach` → `pkgutil --expand-full` 解包（跳过 `.Trashes`）                             | 从 GitHub `git-for-windows` 下载 `Git-<version>-64-bit.tar.bz2`（非 exe 安装器），`tar -xjf` 解压                                                |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，按所选版本执行 `brew version-install git@<version>`；回滚卸载对应公式 | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，shadow `Get-ExecutionPolicy` 后执行，按所选版本安装对应 Scoop 包；回滚用 `scoop uninstall git` |
 
 ### MySQL
 
-|              | macOS                                                                                                                                      | Windows                                                                                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **直接安装** | 从 `dev.mysql.com/get/Downloads/MySQL-8.4` 下载 `MySQL Community Server` 官方 `.tar.gz` 归档，解压到用户目录并校验 `mysql --version`       | 从 `dev.mysql.com/get/Downloads/MySQL-8.4` 下载 `MySQL Community Server` 官方 `noinstall` `.zip`，`Expand-Archive` 解压到用户目录并校验 `mysql.exe --version` |
-| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install mysql`；回滚用 `brew uninstall --formula mysql` | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install mysql`；回滚用 `scoop uninstall mysql`                                     |
+|              | macOS                                                                                                                                                | Windows                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `dev.mysql.com/get/Downloads/MySQL-8.4` 下载 `MySQL Community Server` 官方 `.tar.gz` 归档，解压到用户目录并校验 `mysql --version`                 | 从 `dev.mysql.com/get/Downloads/MySQL-8.4` 下载 `MySQL Community Server` 官方 `noinstall` `.zip`，`Expand-Archive` 解压到用户目录并校验 `mysql.exe --version` |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，按所选版本执行 `brew version-install mysql@<version>`；回滚卸载对应公式 | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后按所选版本执行 `scoop install mysql@<version>`；回滚用 `scoop uninstall mysql`             |
 
 ### Redis
 
-|              | macOS                                                                                                                                            | Windows                                                                                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **直接安装** | 从 `download.redis.io/releases` 下载官方源码包 `redis-7.4.7.tar.gz`，解压后执行 `make BUILD_TLS=no MALLOC=libc`，并校验 `redis-server --version` | 从 Redis 官方合作方 `Memurai` 下载 `Memurai Developer` MSI，静默安装到用户目录并使用 MSI 卸载链路回滚；安装后校验 `Memurai for Redis` 二进制是否存在 |
-| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install redis`；回滚用 `brew uninstall --formula redis`       | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install redis`；回滚用 `scoop uninstall redis`                            |
+|              | macOS                                                                                                                                                | Windows                                                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `download.redis.io/releases` 下载官方源码包 `redis-7.4.7.tar.gz`，解压后执行 `make BUILD_TLS=no MALLOC=libc`，并校验 `redis-server --version`     | 从 Redis 官方合作方 `Memurai` 下载 `Memurai Developer` MSI，静默安装到用户目录并使用 MSI 卸载链路回滚；安装后校验 `Memurai for Redis` 二进制是否存在 |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，按所选版本执行 `brew version-install redis@<version>`；回滚卸载对应公式 | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后按所选版本执行 `scoop install redis@<version>`；回滚用 `scoop uninstall redis`    |
 
 ### Maven
 
-|              | macOS                                                                                                                                          | Windows                                                                                                                                                          |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **直接安装** | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.tar.gz`，解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn -version` | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.zip`，`Expand-Archive` 解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn.cmd -version` |
-| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，`brew install maven`；回滚用 `brew uninstall --formula maven`     | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后 `scoop install maven`；回滚用 `scoop uninstall maven`                                        |
+|              | macOS                                                                                                                                                | Windows                                                                                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **直接安装** | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.tar.gz`，解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn -version`       | 从 `archive.apache.org/dist/maven/maven-3` 下载 `apache-maven-<version>-bin.zip`，`Expand-Archive` 解压后设置 `MAVEN_HOME` / `M2_HOME` 并校验 `mvn.cmd -version` |
+| **管理器**   | **Homebrew** — 下载官方 `install.sh`，`NONINTERACTIVE=1 bash` 安装 Homebrew，按所选版本执行 `brew version-install maven@<version>`；回滚卸载对应公式 | **Scoop** — 下载 `get.scoop.sh` 的 `install.ps1`，完成 bootstrap 后按所选版本执行 `scoop install maven@<version>`；回滚用 `scoop uninstall maven`                |
 
 > **设计原则**: 直装流优先使用官方归档或便携包并落到用户目录；管理器流复用官方 Homebrew / Scoop / SDKMAN / Conda / nvm 生态，并在真实清理时优先调用官方卸载命令。
 
 ## 功能概览
 
 - 内置 `Node.js / Java / Python / Git / MySQL / Redis / Maven` 七套模板
-- 版本通过官方源动态获取（Node LTS、Java Adoptium、Python、Git、Maven）；Maven 直装保留版本选择，MySQL / Redis 当前不暴露版本选择
+- 版本通过官方源动态获取或维护（Node LTS、Java Adoptium、Python、Git、MySQL LTS、Redis LTS、Maven）；Git / MySQL / Redis / Maven 的包管理器流也支持版本选择
 - 安装目录支持文件夹选择器自定义
 - 预检阶段检测已安装的 Node / Java / Python / Git / MySQL / Redis / Maven 环境，提供一键清理入口
 - 清理前自动创建快照，清理失败可一键回滚
@@ -177,6 +178,158 @@ fixtures/
 └── plugins/            # 外部插件与内置示例 manifest
 ```
 
+## 如何开发模板插件
+
+新增一套模板插件，通常要同时落四个位置：
+
+1. 在 `src/main/plugins/` 实现真实插件逻辑。
+2. 在 `fixtures/plugins/<plugin-id>/manifest.json` 定义插件参数和权限。
+3. 在 `fixtures/plugins/<plugin-id>/index.ts` 暴露插件入口。
+4. 在 `fixtures/templates/<template-id>.json` 把模板字段和插件绑定起来。
+
+下面是一个最小示例，演示如何新增一个 `acme-env` 模板插件。
+
+### 1. 插件 manifest
+
+`fixtures/plugins/acme-env/manifest.json`
+
+```json
+{
+  "id": "acme-env",
+  "name": {
+    "zh-CN": "Acme 工具环境",
+    "en": "Acme Environment"
+  },
+  "version": "0.1.0",
+  "mainAppVersion": "^0.1.0",
+  "platforms": ["darwin", "win32"],
+  "permissions": ["download", "write_path", "modify_env"],
+  "parameters": {
+    "acmeVersion": {
+      "type": "version",
+      "required": true
+    },
+    "installRootDir": {
+      "type": "path",
+      "required": true
+    }
+  },
+  "dependencies": [],
+  "entry": "index.ts"
+}
+```
+
+### 2. 插件入口
+
+`fixtures/plugins/acme-env/index.ts`
+
+```ts
+export { default } from '../../../src/main/plugins/acmeEnvPlugin'
+```
+
+### 3. 模板定义
+
+`fixtures/templates/acme-template.json`
+
+```json
+{
+  "id": "acme-template",
+  "name": {
+    "zh-CN": "Acme 环境",
+    "en": "Acme Environment"
+  },
+  "version": "0.1.0",
+  "platforms": ["darwin", "win32"],
+  "description": {
+    "zh-CN": "演示如何把模板字段映射到插件参数。",
+    "en": "Shows how template fields map to plugin parameters."
+  },
+  "plugins": [
+    {
+      "pluginId": "acme-env",
+      "version": "0.1.0"
+    }
+  ],
+  "defaults": {
+    "acme.acmeVersion": "1.0.0",
+    "acme.installRootDir": "./.envsetup-data/acme"
+  },
+  "overrides": {
+    "acme.acmeVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "affects": ["acme-env"]
+    },
+    "acme.installRootDir": {
+      "type": "path",
+      "editable": true,
+      "required": true,
+      "affects": ["acme-env"]
+    }
+  },
+  "checks": ["acme"],
+  "recommended": false
+}
+```
+
+### 4. 真实插件实现
+
+`src/main/plugins/acmeEnvPlugin.ts`
+
+```ts
+import type { PluginInstallResult, PluginLifecycle, PluginVerifyResult } from '../core/contracts'
+
+const acmeEnvPlugin: PluginLifecycle = {
+  async install(input): Promise<PluginInstallResult> {
+    const installRootDir = String(input.installRootDir)
+    const version = String(input.acmeVersion)
+
+    return {
+      status: 'installed_unverified',
+      executionMode: input.dryRun ? 'dry_run' : 'real_run',
+      version,
+      paths: {
+        installRootDir,
+      },
+      envChanges: [
+        {
+          kind: 'path',
+          key: 'PATH',
+          value: `${installRootDir}/bin`,
+          scope: 'user',
+          description: 'Expose Acme binary directory in PATH.',
+        },
+      ],
+      downloads: [],
+      commands: input.dryRun
+        ? [`echo install acme ${version} to ${installRootDir}`]
+        : [`mkdir -p ${installRootDir}/bin`, `touch ${installRootDir}/bin/acme`],
+      logs: [`acme version=${version}`],
+      summary: `Installed Acme ${version}`,
+    }
+  },
+
+  async verify(input): Promise<PluginVerifyResult> {
+    return {
+      status: 'verified_success',
+      checks: [`verified ${String(input.installRootDir)}`],
+    }
+  },
+}
+
+export default acmeEnvPlugin
+```
+
+### 5. 开发约定
+
+- 模板字段 key 使用 `<prefix>.<field>` 形式，例如 `acme.acmeVersion`。
+- `defaults`、`overrides`、插件 `parameters` 三处字段要保持一致。
+- 如果版本列表要动态获取，需要在 `src/main/core/` 增加对应的版本源模块，并在 IPC bootstrap 中暴露给渲染层。
+- 新插件至少补单元测试；如果改到模板选择、真实安装或回滚链路，需要继续补 renderer / integration / E2E。
+- 内置插件推荐继续采用 `fixtures/plugins/<id>/index.ts` 代理到 `src/main/plugins/*.ts` 的方式，避免逻辑分叉。
+
 ## 开发
 
 ```bash
@@ -212,12 +365,12 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 ### 测试体系
 
-项目采用四层测试体系，共 **55 个测试文件**（39 单元 + 7 集成 + 7 渲染 + 2 E2E）：
+项目采用四层测试体系，当前包含 **58 个测试文件 + 1 个共享 setup 文件**：
 
 | 层级             | 文件数 | 说明                                                                                                                                              |
 | ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **单元测试**     | 39     | 核心逻辑全覆盖：任务状态机、预检、7 个插件、快照、回滚、故障分析、执行模式、下载安全、环境变量持久化、跨平台策略、版本列表、网络探测、IPC、国际化 |
-| **集成测试**     | 7      | 快照-回滚完整流程、环境变量还原、全工具安装/清理/回滚流程，以及 7 工具真实安装+回滚矩阵                                                           |
+| **单元测试**     | 41     | 核心逻辑全覆盖：任务状态机、预检、7 个插件、快照、回滚、故障分析、执行模式、下载安全、环境变量持久化、跨平台策略、版本列表、网络探测、IPC、国际化 |
+| **集成测试**     | 8      | 快照-回滚完整流程、环境变量还原、全工具安装/清理/回滚流程，以及 7 工具真实安装、清理后重装、回滚恢复矩阵                                          |
 | **渲染进程测试** | 7      | React 组件交互（模板/参数/预检/任务/快照/回滚面板）、全应用流程、国际化切换                                                                       |
 | **E2E 测试**     | 2      | Electron 应用启动、模板选择→预检→创建→执行完整路径、dry-run 回滚、打包应用真实安装+回滚烟雾测试                                                   |
 
@@ -231,15 +384,16 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 ### 工具×平台×场景覆盖矩阵
 
-对每个支持的工具流，在 macOS 和 Windows 上覆盖三大核心场景：
+对每个支持的工具流，在 macOS 和 Windows 上覆盖四类核心场景：
 
-| 场景                     | 说明                                                       |
-| ------------------------ | ---------------------------------------------------------- |
-| **无环境 → 安装 → 回滚** | 全新安装成功后执行回滚，验证安装目录被移除、环境变量被还原 |
-| **已有环境处理**         | 检测已存在的环境并正确处理                                 |
-| **清理 → 重装 → 回滚**   | 先清理已有环境（含快照保护），再重新安装，验证完整流程     |
+| 场景                       | 说明                                                           |
+| -------------------------- | -------------------------------------------------------------- |
+| **无环境 → 安装 → 回滚**   | 全新安装成功后执行回滚，验证安装目录被移除、环境变量被还原     |
+| **已有环境处理**           | 检测已存在的环境并正确处理                                     |
+| **清理 → 重装**            | 先清理已有环境（含快照保护），再重新安装，验证完整流程         |
+| **清理 → 安装 → 回滚恢复** | 安装前先对清理后的基线做快照，安装后回滚，验证恢复到清理后状态 |
 
-完整覆盖矩阵（✅ = 已纳入真实安装/回滚测试矩阵）：
+完整覆盖矩阵（✅ = 已纳入真实安装/清理/回滚测试矩阵）：
 
 | 工具    | 安装流                   | macOS | Windows |
 | ------- | ------------------------ | ----- | ------- |
@@ -269,15 +423,16 @@ npm run test:e2e         # E2E 测试（需先构建，Playwright）
 
 ## CI/CD
 
-GitHub Actions 工作流 `e2e-real-install.yml`，push 到 `master` 或 PR 时触发：
+GitHub Actions 主要包含两条工作流：
 
-| Job              | 平台                     | 说明                                                                |
-| ---------------- | ------------------------ | ------------------------------------------------------------------- |
-| **unit**         | macOS + Windows          | 运行全部单元和集成测试（mock 模式）                                 |
-| **real-install** | macOS + Windows × 7 工具 | 真实安装+回滚集成测试矩阵（`ENVSETUP_REAL_RUN=1`），含下载/解包缓存 |
-| **e2e**          | macOS + Windows          | 打包应用后通过 Playwright 执行代表性真实安装+回滚烟雾测试           |
+- `e2e-real-install.yml`：push 到 `master` 或 PR 时触发
+- `release.yml`：推送 `v*` 标签时执行真实矩阵、打包并发布 Release
 
-Release 工作流：推送 `v*` 标签时自动构建并发布 GitHub Release（macOS + Windows 产物）。
+| Job              | 平台                     | 说明                                                                         |
+| ---------------- | ------------------------ | ---------------------------------------------------------------------------- |
+| **unit**         | macOS + Windows          | 运行全部单元和集成测试（mock 模式）                                          |
+| **real-install** | macOS + Windows × 7 工具 | 真实安装、清理后重装、回滚恢复矩阵（`ENVSETUP_REAL_RUN=1`），含下载/解包缓存 |
+| **e2e**          | macOS + Windows          | 打包应用后通过 Playwright 执行代表性真实安装+回滚烟雾测试                    |
 
 ## 代码质量
 
