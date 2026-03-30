@@ -50,18 +50,65 @@ describe('downloadArtifacts', () => {
       {
         kind: 'archive',
         tool: 'mysql',
-        url: 'https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.8-winx64.zip',
+        url: 'https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.8-macos15-arm64.tar.gz',
         official: true,
       },
       {
         kind: 'installer',
         tool: 'redis',
-        url: 'https://download.memurai.com/Memurai-Developer/4.2.2/Memurai-for-Redis-v4.2.2.msi',
+        url: 'https://www.memurai.com/api/request-download-link?version=windows-redis',
         official: true,
       },
     ]
 
     expect(() => validateOfficialDownloads(downloads)).not.toThrow()
+  })
+
+  it('resolves official JSON download indirection before caching the installer', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'envsetup-download-'))
+    const downloads: DownloadArtifact[] = [
+      {
+        kind: 'installer',
+        tool: 'redis',
+        url: 'https://www.memurai.com/api/request-download-link?version=windows-redis',
+        official: true,
+        fileName: 'Memurai-for-Redis-v4.2.2.msi',
+      },
+    ]
+
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://download.memurai.com/Memurai-Developer/4.2.2/Memurai-for-Redis-v4.2.2.msi?Expires=123',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(Buffer.from('signed-installer-content'), {
+          status: 200,
+          headers: { 'content-type': 'application/octet-stream' },
+        }),
+      )
+
+    const [download] = await downloadArtifacts({ downloads, cacheDir, fetchImpl })
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      'https://www.memurai.com/api/request-download-link?version=windows-redis',
+    )
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://download.memurai.com/Memurai-Developer/4.2.2/Memurai-for-Redis-v4.2.2.msi?Expires=123',
+    )
+    expect(download.cacheHit).toBe(false)
+    const cached = await readFile(download.localPath)
+    expect(cached.toString()).toBe('signed-installer-content')
   })
 
   it('rejects untrusted download host', async () => {

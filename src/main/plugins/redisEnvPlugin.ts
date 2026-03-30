@@ -25,7 +25,8 @@ const REDIS_DIRECT_VERSION = '7.4.7'
 const REDIS_DIRECT_ARCHIVE_URL = `https://download.redis.io/releases/redis-${REDIS_DIRECT_VERSION}.tar.gz`
 const MEMURAI_WINDOWS_VERSION = '4.2.2'
 const MEMURAI_REDIS_API_VERSION = '7.4.7'
-const MEMURAI_INSTALLER_URL = `https://download.memurai.com/Memurai-Developer/${MEMURAI_WINDOWS_VERSION}/Memurai-for-Redis-v${MEMURAI_WINDOWS_VERSION}.msi`
+const MEMURAI_SIGNED_DOWNLOAD_API_URL =
+  'https://www.memurai.com/api/request-download-link?version=windows-redis'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -58,7 +59,7 @@ function buildResolveHomebrewCommand(): string {
 }
 
 function buildResolveScoopCommand(): string {
-  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if ($scoop -and -not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }"
 }
 
 function buildDirectArchiveFileName(input: RedisPluginParams): string {
@@ -97,7 +98,8 @@ function buildDownloadPlan(input: RedisPluginParams): DownloadArtifact[] {
       {
         kind: input.platform === 'win32' ? 'installer' : 'archive',
         tool: 'redis',
-        url: input.platform === 'win32' ? MEMURAI_INSTALLER_URL : REDIS_DIRECT_ARCHIVE_URL,
+        url:
+          input.platform === 'win32' ? MEMURAI_SIGNED_DOWNLOAD_API_URL : REDIS_DIRECT_ARCHIVE_URL,
         official: true,
         fileName: buildDirectArchiveFileName(input),
         note:
@@ -213,7 +215,6 @@ function buildDarwinPackageCommands(
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
   return [
-    `mkdir -p ${quoteShell(input.installRootDir)}`,
     `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install redis`,
   ]
 }
@@ -245,7 +246,6 @@ function buildWin32PackageCommands(
 
   const resolveScoopCmd = buildResolveScoopCommand()
   return [
-    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.installRootDir)} | Out-Null`,
     `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install redis`,
   ]
 }

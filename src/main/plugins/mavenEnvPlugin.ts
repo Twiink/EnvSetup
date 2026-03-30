@@ -54,7 +54,35 @@ function buildResolveHomebrewCommand(): string {
 }
 
 function buildResolveScoopCommand(): string {
-  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if ($scoop -and -not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }"
+}
+
+function buildResolveScoopMavenCommandFunction(): string {
+  return [
+    'function Get-ScoopMavenCommand {',
+    'param([string]$ScoopPath)',
+    '$rawPrefix = & $ScoopPath prefix maven 2>$null | Select-Object -First 1',
+    'if ($rawPrefix) {',
+    '$prefix = $rawPrefix.ToString().Trim()',
+    'if ($prefix -and [System.IO.Path]::IsPathRooted($prefix) -and (Test-Path $prefix)) {',
+    "$candidates = @((Join-Path $prefix 'bin\\mvn.cmd'), (Join-Path $prefix 'bin\\mvn'), (Join-Path $prefix 'mvn.cmd'))",
+    '$command = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1',
+    'if ($command) { return [System.IO.Path]::GetFullPath($command) }',
+    '}',
+    '}',
+    '$shimDirs = @()',
+    '$shimDirs += Split-Path $ScoopPath -Parent',
+    "if ($env:SCOOP) { $shimDirs += Join-Path $env:SCOOP 'shims' }",
+    "$shimDirs += Join-Path (Join-Path $env:USERPROFILE 'scoop') 'shims'",
+    '$shimDirs = $shimDirs | Where-Object { $_ } | Select-Object -Unique',
+    'foreach ($shimDir in $shimDirs) {',
+    "$candidates = @((Join-Path $shimDir 'mvn.cmd'), (Join-Path $shimDir 'mvn'))",
+    '$command = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1',
+    'if ($command) { return [System.IO.Path]::GetFullPath($command) }',
+    '}',
+    'return $null',
+    '}',
+  ].join('; ')
 }
 
 function buildArchiveFileName(input: MavenPluginParams): string {
@@ -200,7 +228,6 @@ function buildDarwinPackageCommands(
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
   return [
-    `mkdir -p ${quoteShell(input.installRootDir)}`,
     `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install maven`,
   ]
 }
@@ -235,7 +262,6 @@ function buildWin32PackageCommands(
 
   const resolveScoopCmd = buildResolveScoopCommand()
   return [
-    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.installRootDir)} | Out-Null`,
     `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install maven`,
   ]
 }
@@ -261,7 +287,7 @@ function buildVerifyCommands(input: MavenPluginParams): string[] {
   if (input.mavenManager === 'package') {
     if (input.platform === 'win32') {
       return [
-        `${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $shimDir = Split-Path $scoop -Parent; $mvnCmd = Join-Path $shimDir 'mvn.cmd'; if (-not (Test-Path $mvnCmd)) { throw 'Failed to locate Maven shim.' }; & $mvnCmd -version`,
+        `${buildResolveScoopMavenCommandFunction()}; ${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $mvnCmd = Get-ScoopMavenCommand $scoop; if (-not $mvnCmd) { throw 'Failed to locate Maven command from Scoop install.' }; & $mvnCmd -version`,
       ]
     }
 

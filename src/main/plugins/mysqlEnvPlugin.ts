@@ -22,7 +22,8 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 const execFileAsync = promisify(execFile)
 
 const MYSQL_DIRECT_VERSION = '8.4.8'
-const MYSQL_ARCHIVE_BASE_URL = 'https://dev.mysql.com/get/Downloads/MySQL-8.4'
+const MYSQL_MACOS_ARCHIVE_BASE_URL = 'https://cdn.mysql.com/Downloads/MySQL-8.4'
+const MYSQL_WINDOWS_ARCHIVE_BASE_URL = 'https://dev.mysql.com/get/Downloads/MySQL-8.4'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -55,7 +56,7 @@ function buildResolveHomebrewCommand(): string {
 }
 
 function buildResolveScoopCommand(): string {
-  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }"
+  return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if ($scoop -and -not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }"
 }
 
 function buildDirectArchiveFileName(input: MysqlPluginParams): string {
@@ -68,7 +69,10 @@ function buildDirectArchiveFileName(input: MysqlPluginParams): string {
 }
 
 function buildDirectArchiveUrl(input: MysqlPluginParams): string {
-  return `${MYSQL_ARCHIVE_BASE_URL}/${buildDirectArchiveFileName(input)}`
+  const baseUrl =
+    input.platform === 'darwin' ? MYSQL_MACOS_ARCHIVE_BASE_URL : MYSQL_WINDOWS_ARCHIVE_BASE_URL
+
+  return `${baseUrl}/${buildDirectArchiveFileName(input)}`
 }
 
 function buildDirectExtractedDirName(input: MysqlPluginParams): string {
@@ -197,7 +201,6 @@ function buildDarwinPackageCommands(
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
   return [
-    `mkdir -p ${quoteShell(input.installRootDir)}`,
     `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install mysql`,
   ]
 }
@@ -232,7 +235,6 @@ function buildWin32PackageCommands(
 
   const resolveScoopCmd = buildResolveScoopCommand()
   return [
-    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.installRootDir)} | Out-Null`,
     `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install mysql`,
   ]
 }

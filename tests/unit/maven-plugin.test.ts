@@ -66,6 +66,7 @@ describe('maven env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('install maven')
+    expect(result.commands.join('\n')).not.toContain('mkdir -p')
     expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula maven')
     expect(result.envChanges).toEqual([
       expect.objectContaining({
@@ -97,6 +98,7 @@ describe('maven env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('scoop install maven')
+    expect(result.commands.join('\n')).not.toContain('New-Item -ItemType Directory -Force')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall maven')
     expect(result.envChanges).toEqual([
       expect.objectContaining({ key: 'PATH', value: '%USERPROFILE%\\scoop\\shims' }),
@@ -144,6 +146,34 @@ describe('maven env plugin', () => {
         expect.stringContaining('mode=real-run'),
         expect.stringContaining('download_cache_hit=true'),
       ]),
+    )
+  })
+
+  it('verifies Scoop installs by resolving the Maven command from the Scoop prefix', async () => {
+    execFileMock.mockClear()
+
+    await mavenEnvPlugin.verify({
+      mavenManager: 'package',
+      installRootDir: 'C:\\envsetup\\maven',
+      dryRun: false,
+      platform: 'win32',
+      installResult: {
+        status: 'installed_unverified',
+        executionMode: 'real_run',
+        version: 'latest',
+        paths: {},
+        envChanges: [],
+        downloads: [],
+        commands: [],
+        logs: [],
+        summary: 'installed',
+      },
+    })
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      'powershell',
+      expect.arrayContaining(['-Command', expect.stringContaining('Get-ScoopMavenCommand')]),
+      expect.any(Function),
     )
   })
 })

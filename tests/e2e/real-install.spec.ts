@@ -371,7 +371,16 @@ async function runMavenInstallFlow(page: Page, managerLabel?: string, selectVers
   })
 }
 
-const realRollbackCases = [
+type RealRollbackCase = {
+  name: string
+  templateId: string
+  buildOverrides: (installRoot: string) => Record<string, string>
+  expectInstallRootAfterInstall?: boolean
+  verifyInstalledState?: (installRoot: string) => Promise<void>
+  verifyRolledBackState?: (installRoot: string) => Promise<void>
+}
+
+const realRollbackCases: RealRollbackCase[] = [
   {
     name: 'node direct',
     templateId: 'node-template',
@@ -464,6 +473,7 @@ const realRollbackCases = [
       'maven.mavenManager': 'package',
       'maven.installRootDir': installRoot,
     }),
+    expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
         expect(await isHomebrewFormulaInstalled('maven')).toBe(true)
@@ -503,6 +513,7 @@ const realRollbackCases = [
             'mysql.mysqlManager': 'package',
             'mysql.installRootDir': installRoot,
           }),
+          expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
             expect(await isHomebrewFormulaInstalled('mysql')).toBe(true)
           },
@@ -517,6 +528,7 @@ const realRollbackCases = [
             'redis.redisManager': 'package',
             'redis.installRootDir': installRoot,
           }),
+          expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
             expect(await isHomebrewFormulaInstalled('redis')).toBe(true)
           },
@@ -578,6 +590,7 @@ const realRollbackCases = [
             'mysql.mysqlManager': 'package',
             'mysql.installRootDir': installRoot,
           }),
+          expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
             expect(await isScoopPackageInstalled('mysql')).toBe(true)
           },
@@ -592,6 +605,7 @@ const realRollbackCases = [
             'redis.redisManager': 'package',
             'redis.installRootDir': installRoot,
           }),
+          expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
             expect(await isScoopPackageInstalled('redis')).toBe(true)
           },
@@ -601,7 +615,7 @@ const realRollbackCases = [
         },
       ]
     : []),
-] as const
+]
 
 test.describe('real install', () => {
   test.skip(!isRealRun, 'Only runs when ENVSETUP_REAL_RUN=1')
@@ -884,7 +898,9 @@ test.describe('real rollback via built Electron app IPC', () => {
 
         expect(rollbackResult.success).toBe(true)
         expect(rollbackResult.executionMode).toBe('real_run')
-        expect(rollbackResult.directoriesRemoved).toBeGreaterThanOrEqual(1)
+        if (testCase.expectInstallRootAfterInstall !== false) {
+          expect(rollbackResult.directoriesRemoved).toBeGreaterThanOrEqual(1)
+        }
         await expect(fs.access(installRoot)).rejects.toThrow()
         await testCase.verifyRolledBackState?.(installRoot)
       } finally {

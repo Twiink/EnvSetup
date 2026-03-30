@@ -65,6 +65,7 @@ describe('redis env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('install redis')
+    expect(result.commands.join('\n')).not.toContain('mkdir -p')
     expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula redis')
   })
 
@@ -76,6 +77,14 @@ describe('redis env plugin', () => {
       platform: 'win32',
     })
 
+    expect(result.downloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool: 'redis',
+          url: 'https://www.memurai.com/api/request-download-link?version=windows-redis',
+        }),
+      ]),
+    )
     expect(result.commands.join('\n')).toContain('msiexec.exe')
     expect(result.commands.join('\n')).toContain('Memurai for Redis installed')
     expect(result.rollbackCommands?.join('\n')).toContain('DisplayName -like')
@@ -95,6 +104,7 @@ describe('redis env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('scoop install redis')
+    expect(result.commands.join('\n')).not.toContain('New-Item -ItemType Directory -Force')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall redis')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([

@@ -43,7 +43,7 @@ describe('mysql env plugin', () => {
       expect.arrayContaining([
         expect.objectContaining({
           tool: 'mysql',
-          url: expect.stringContaining('dev.mysql.com/get/Downloads/MySQL-8.4'),
+          url: expect.stringContaining('cdn.mysql.com/Downloads/MySQL-8.4'),
         }),
       ]),
     )
@@ -66,6 +66,7 @@ describe('mysql env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('install mysql')
+    expect(result.commands.join('\n')).not.toContain('mkdir -p')
     expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula mysql')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([
@@ -103,6 +104,7 @@ describe('mysql env plugin', () => {
     })
 
     expect(result.commands.join('\n')).toContain('scoop install mysql')
+    expect(result.commands.join('\n')).not.toContain('New-Item -ItemType Directory -Force')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall mysql')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([
@@ -131,7 +133,7 @@ describe('mysql env plugin', () => {
 
     expect(verifyResult.status).toBe('verified_success')
     expect(verifyResult.checks[0]).toContain('Planned MySQL manager: mysql')
-    expect(verifyResult.checks[2]).toContain('dev.mysql.com')
+    expect(verifyResult.checks[2]).toContain('cdn.mysql.com')
   })
 
   it('runs real-run install commands when dryRun is false', async () => {

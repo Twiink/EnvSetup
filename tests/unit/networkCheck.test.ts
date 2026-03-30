@@ -53,7 +53,7 @@ describe('networkCheck', () => {
     expect(targets).toEqual([
       expect.objectContaining({
         tool: 'mysql',
-        host: 'dev.mysql.com',
+        host: 'cdn.mysql.com',
       }),
     ])
   })
@@ -71,7 +71,7 @@ describe('networkCheck', () => {
     expect(targets).toEqual([
       expect.objectContaining({
         tool: 'redis',
-        host: 'download.memurai.com',
+        host: 'www.memurai.com',
       }),
     ])
   })

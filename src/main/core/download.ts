@@ -21,7 +21,7 @@ const OFFICIAL_DOWNLOAD_HOSTS: Record<DownloadArtifact['tool'], Set<string>> = {
   git: new Set(['sourceforge.net', 'git-scm.com']),
   'git-for-windows': new Set(['github.com', 'gitforwindows.org']),
   mysql: new Set(['dev.mysql.com', 'cdn.mysql.com']),
-  redis: new Set(['download.redis.io', 'download.memurai.com']),
+  redis: new Set(['download.redis.io', 'download.memurai.com', 'www.memurai.com']),
   maven: new Set(['archive.apache.org', 'downloads.apache.org', 'dlcdn.apache.org']),
   homebrew: new Set(['github.com', 'brew.sh', 'raw.githubusercontent.com']),
   scoop: new Set(['github.com', 'raw.githubusercontent.com', 'get.scoop.sh']),
@@ -61,20 +61,24 @@ function getDownloadableArtifacts(downloads: DownloadArtifact[]): DownloadArtifa
 }
 
 function ensureOfficialHost(download: DownloadArtifact): void {
-  const allowedHosts = OFFICIAL_DOWNLOAD_HOSTS[download.tool]
   const host = new URL(download.url).host
-  if (!allowedHosts.has(host)) {
-    throw makeError('DOWNLOAD_HOST_UNTRUSTED', `Unofficial download host: ${download.url}`)
-  }
+  ensureOfficialHostForTool(download.tool, host, download.url)
 
   if (download.checksumUrl) {
     const checksumHost = new URL(download.checksumUrl).host
-    if (!allowedHosts.has(checksumHost)) {
-      throw makeError(
-        'DOWNLOAD_HOST_UNTRUSTED',
-        `Unofficial checksum host: ${download.checksumUrl}`,
-      )
-    }
+    ensureOfficialHostForTool(download.tool, checksumHost, download.checksumUrl, 'checksum')
+  }
+}
+
+function ensureOfficialHostForTool(
+  tool: DownloadArtifact['tool'],
+  host: string,
+  url: string,
+  kind: 'download' | 'checksum' = 'download',
+): void {
+  const allowedHosts = OFFICIAL_DOWNLOAD_HOSTS[tool]
+  if (!allowedHosts.has(host)) {
+    throw makeError('DOWNLOAD_HOST_UNTRUSTED', `Unofficial ${kind} host: ${url}`)
   }
 }
 
@@ -238,8 +242,8 @@ async function downloadArtifact(options: {
     }
   }
 
-  const response = await fetchWithRetry({
-    url: options.download.url,
+  const response = await fetchDownloadPayload({
+    download: options.download,
     fetchImpl: options.fetchImpl,
     retryCount: options.retryCount,
   })
@@ -259,6 +263,46 @@ async function downloadArtifact(options: {
     localPath: options.cacheFile,
     cacheHit: false,
   }
+}
+
+async function fetchDownloadPayload(options: {
+  download: DownloadArtifact
+  fetchImpl: typeof fetch
+  retryCount: number
+}): Promise<Response> {
+  const initialResponse = await fetchWithRetry({
+    url: options.download.url,
+    fetchImpl: options.fetchImpl,
+    retryCount: options.retryCount,
+  })
+
+  const contentType = initialResponse.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    return initialResponse
+  }
+
+  const payload = await initialResponse.json().catch(() => undefined)
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    !('url' in payload) ||
+    typeof payload.url !== 'string' ||
+    payload.url.length === 0
+  ) {
+    throw makeError(
+      'DOWNLOAD_FAILED',
+      `Download indirection did not return a valid url: ${options.download.url}`,
+    )
+  }
+
+  const resolvedUrl = payload.url
+  ensureOfficialHostForTool(options.download.tool, new URL(resolvedUrl).host, resolvedUrl)
+
+  return fetchWithRetry({
+    url: resolvedUrl,
+    fetchImpl: options.fetchImpl,
+    retryCount: options.retryCount,
+  })
 }
 
 async function verifyChecksumIfNeeded(
