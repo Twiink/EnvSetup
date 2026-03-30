@@ -42,7 +42,8 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).toContain('.Trashes')
     expect(result.commands.join('\n')).toContain('pkgutil --expand')
     expect(result.commands.join('\n')).toContain('pkgutil --expand-full')
-    expect(result.commands.join('\n')).toContain('Payload/usr/local/git')
+    expect(result.commands.join('\n')).toContain('Payload/git')
+    expect(result.commands.join('\n')).toContain('usr/local/git')
     expect(result.commands.join('\n')).not.toContain("python3 - <<'PY'")
   })
 

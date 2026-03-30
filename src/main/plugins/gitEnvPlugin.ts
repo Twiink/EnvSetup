@@ -342,7 +342,7 @@ function buildDarwinDirectCommands(
     `rm -rf ${quoteShell(paths.gitDir)}`,
     `PKG_PATH=$(find ${quoteShell(mountPoint)} -path '*/.Trashes' -prune -o -name '*.pkg' -print | head -n 1); if [ -z "$PKG_PATH" ]; then echo 'Failed to locate Git installer pkg inside mounted dmg.' >&2; exit 1; fi; rm -rf ${quoteShell(expandDir)}; pkgutil --expand-full "$PKG_PATH" ${quoteShell(expandDir)}`,
     `hdiutil detach ${quoteShell(mountPoint)} || true`,
-    `GIT_PAYLOAD_DIR=$(find ${quoteShell(expandDir)} \\( -path '*/Payload/usr/local/git' -o -path '*/usr/local/git' \\) -type d | head -n 1); if [ -z "$GIT_PAYLOAD_DIR" ]; then echo 'Failed to locate usr/local/git in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(paths.gitDir)}; cp -R "$GIT_PAYLOAD_DIR"/. ${quoteShell(paths.gitDir)}/`,
+    `GIT_PAYLOAD_DIR=$(find ${quoteShell(expandDir)} \\( -path '*/Payload/git' -o -path '*/usr/local/git' \\) -type d | head -n 1); if [ -z "$GIT_PAYLOAD_DIR" ]; then echo 'Failed to locate git payload directory in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(paths.gitDir)}; cp -R "$GIT_PAYLOAD_DIR"/. ${quoteShell(paths.gitDir)}/`,
     ...(resolvedDownloads ? [] : [`rm -f ${quoteShell(dmgPath)}`]),
     `rm -rf ${quoteShell(mountPoint)} ${quoteShell(expandDir)}`,
   )

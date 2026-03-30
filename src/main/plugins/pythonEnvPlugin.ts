@@ -237,9 +237,9 @@ function buildDarwinPythonWrappersCommand(
   majorMinor: string,
 ): string {
   return [
-    `PYTHON_ROOT=${quoteShell(standalonePythonDir)}`,
-    `PYTHON_BIN_DIR=${quoteShell(standalonePythonBinDir)}`,
-    `PYTHON_MAJOR_MINOR=${quoteShell(majorMinor)}`,
+    `export PYTHON_ROOT=${quoteShell(standalonePythonDir)}`,
+    `export PYTHON_BIN_DIR=${quoteShell(standalonePythonBinDir)}`,
+    `export PYTHON_MAJOR_MINOR=${quoteShell(majorMinor)}`,
     `python3 - <<'PY'
 import os
 from pathlib import Path
