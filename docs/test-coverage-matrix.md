@@ -27,7 +27,7 @@
 | Mock 回滚恢复      | Node / Java / Python / Git / MySQL / Redis / Maven | 当前运行平台    | 每个工具全部支持方式              | `清理或恢复中途失败 -> 走回滚恢复路径`，验证快照建议、恢复结果、任务持久化                           |
 | 真实安装矩阵       | Node / Java / Python / Git / MySQL / Redis / Maven | macOS + Windows | 每个平台支持的真实安装方式        | `无现有环境 -> 真实安装 -> 校验 -> 真实回滚`                                                         |
 | 真实清理后重装矩阵 | Node / Java / Python / Git / MySQL / Redis / Maven | macOS + Windows | 每个平台支持的真实安装方式        | `已有环境 -> 检测 -> 真实清理 -> 重装成功`                                                           |
-| 真实回滚恢复矩阵   | MySQL / Redis / Maven                              | macOS + Windows | 直装 + 包管理器                   | `已有环境 -> 清理 -> 安装 -> 回滚恢复到清理后快照状态`                                               |
+| 真实回滚恢复矩阵   | Node / Java / Python / Git / MySQL / Redis / Maven | macOS + Windows | 每个平台支持的真实安装方式        | `已有环境 -> 清理 -> 安装 -> 回滚恢复到清理后快照状态`                                               |
 | 打包应用 E2E 冒烟  | Node / MySQL / Redis / Maven                       | macOS + Windows | 代表性真实安装方式                | 验证打包后的 Electron 应用能真实安装、创建任务并执行代表性回滚；不是全矩阵，完整矩阵在真实集成测试里 |
 
 ## 真实 CI 版本矩阵
@@ -46,10 +46,10 @@
 
 | 工具   | macOS 支持方式         | Windows 支持方式    | 真实全新安装 | 真实已有环境清理后重装 | 真实回滚恢复 |
 | ------ | ---------------------- | ------------------- | ------------ | ---------------------- | ------------ |
-| Node   | 直装、nvm              | 直装、nvm           | 是           | 是                     | 否           |
-| Java   | 直装 JDK、SDKMAN       | 直装 JDK、SDKMAN    | 是           | 是                     | 否           |
-| Python | 直装、Conda            | 直装、Conda         | 是           | 是                     | 否           |
-| Git    | 直装、Homebrew         | 直装、Scoop         | 是           | 是                     | 否           |
+| Node   | 直装、nvm              | 直装、nvm           | 是           | 是                     | 是           |
+| Java   | 直装 JDK、SDKMAN       | 直装 JDK、SDKMAN    | 是           | 是                     | 是           |
+| Python | 直装、Conda            | 直装、Conda         | 是           | 是                     | 是           |
+| Git    | 直装、Homebrew         | 直装、Scoop         | 是           | 是                     | 是           |
 | MySQL  | 直装、Homebrew package | 直装、Scoop package | 是           | 是                     | 是           |
 | Redis  | 直装、Homebrew package | 直装、Scoop package | 是           | 是                     | 是           |
 | Maven  | 直装、Homebrew package | 直装、Scoop package | 是           | 是                     | 是           |
@@ -57,6 +57,6 @@
 ## 补充说明
 
 - GitHub Actions 的 `real-install` job 在 `e2e-real-install.yml` 与 `release.yml` 中都按 `os + tool + tool_version` 矩阵运行真实集成测试。
+- `action-real-rollback-matrix.test.ts` 现在覆盖 Node、Java、Python、Git、MySQL、Redis、Maven 的真实回滚恢复链路；每个 CI job 会通过 `ENVSETUP_CI_TOOL` 只运行当前工具对应的 case。
 - 打包应用 E2E 不是全量矩阵，只保留代表性 smoke case；完整 manager/tool 覆盖由 `action-real-cycle-matrix.test.ts` 和 `action-real-rollback-matrix.test.ts` 承担。
 - Windows 的 Redis 当前只有 `7.4.7` 一档真实版本覆盖，因为上游可用的 Memurai LTS 安装器目前只对应这一版。
-- 当前真实回滚恢复矩阵只覆盖 MySQL / Redis / Maven；其他工具已覆盖真实安装回滚和清理后重装，但没有单独的“恢复到清理后快照状态”矩阵文件。

@@ -1,5 +1,5 @@
 /**
- * Real rollback coverage for MySQL / Redis / Maven.
+ * Real rollback coverage for Node / Java / Python / Git / MySQL / Redis / Maven.
  *
  * These cases complement action-real-cycle-matrix by proving that the
  * post-cleanup snapshot can be restored after a real install mutates the
@@ -22,8 +22,12 @@ import { cleanupDetectedEnvironment } from '../../src/main/core/environment'
 import { executeRollback } from '../../src/main/core/rollback'
 import { createSnapshot, updateSnapshotMeta } from '../../src/main/core/snapshot'
 import { createTask, executeTask, loadTask } from '../../src/main/core/task'
+import gitEnvPlugin from '../../src/main/plugins/gitEnvPlugin'
+import javaEnvPlugin from '../../src/main/plugins/javaEnvPlugin'
 import mavenEnvPlugin from '../../src/main/plugins/mavenEnvPlugin'
 import mysqlEnvPlugin from '../../src/main/plugins/mysqlEnvPlugin'
+import nodeEnvPlugin from '../../src/main/plugins/nodeEnvPlugin'
+import pythonEnvPlugin from '../../src/main/plugins/pythonEnvPlugin'
 import redisEnvPlugin from '../../src/main/plugins/redisEnvPlugin'
 
 const execFileAsync = promisify(execFile)
@@ -33,7 +37,7 @@ const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 const platform = process.platform as AppPlatform
 
-type RealRollbackTool = 'mysql' | 'redis' | 'maven'
+type RealRollbackTool = 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
 
 function selectCiVersion(tool: RealRollbackTool, fallback: string): string {
   return process.env.ENVSETUP_CI_TOOL === tool && process.env.ENVSETUP_CI_VERSION
@@ -41,6 +45,10 @@ function selectCiVersion(tool: RealRollbackTool, fallback: string): string {
     : fallback
 }
 
+const nodeTestVersion = selectCiVersion('node', '20.20.1')
+const javaTestVersion = selectCiVersion('java', '21.0.6+7')
+const pythonTestVersion = selectCiVersion('python', '3.12.10')
+const gitTestVersion = selectCiVersion('git', isMac ? '2.33.0' : '2.49.1')
 const mysqlTestVersion = selectCiVersion('mysql', '8.4.8')
 const redisTestVersion = selectCiVersion('redis', '7.4.7')
 const mavenTestVersion = selectCiVersion('maven', '3.9.11')
@@ -48,9 +56,9 @@ const mavenTestVersion = selectCiVersion('maven', '3.9.11')
 type RealRollbackCase = {
   name: string
   tool: RealRollbackTool
-  pluginId: 'mysql-env' | 'redis-env' | 'maven-env'
+  pluginId: string
   plugin: PluginLifecycle
-  templateId: 'mysql-template' | 'redis-template' | 'maven-template'
+  templateId: string
   timeout: number
   buildParams: (installRootDir: string, downloadCacheDir: string) => Record<string, string>
   verifyInstalledState?: (installRootDir: string) => Promise<void>
@@ -151,6 +159,10 @@ async function isHomebrewFormulaInstalled(formula: string): Promise<boolean> {
   }
 }
 
+async function isHomebrewGitInstalled(version?: string): Promise<boolean> {
+  return isHomebrewFormulaInstalled(version ? `git@${version}` : 'git')
+}
+
 async function isScoopPackageInstalled(packageName: string): Promise<boolean> {
   try {
     await execFileAsync('powershell', [
@@ -174,6 +186,130 @@ function shouldRunCaseInCi(testCase: RealRollbackCase): boolean {
 }
 
 const allRealRollbackCases: RealRollbackCase[] = [
+  {
+    name: 'Node.js direct',
+    tool: 'node',
+    pluginId: 'node-env',
+    plugin: nodeEnvPlugin,
+    templateId: 'node-template',
+    timeout: 300_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      nodeManager: 'node',
+      nodeVersion: nodeTestVersion,
+      npmCacheDir: join(installRootDir, 'npm-cache'),
+      npmGlobalPrefix: join(installRootDir, 'npm-global'),
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, `node-v${nodeTestVersion}`))).toBe(true)
+    },
+  },
+  {
+    name: 'Node.js nvm',
+    tool: 'node',
+    pluginId: 'node-env',
+    plugin: nodeEnvPlugin,
+    templateId: 'node-template',
+    timeout: 300_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      nodeManager: 'nvm',
+      nodeVersion: nodeTestVersion,
+      npmCacheDir: join(installRootDir, 'npm-cache'),
+      npmGlobalPrefix: join(installRootDir, 'npm-global'),
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, 'nvm'))).toBe(true)
+    },
+  },
+  {
+    name: 'Java JDK',
+    tool: 'java',
+    pluginId: 'java-env',
+    plugin: javaEnvPlugin,
+    templateId: 'java-template',
+    timeout: 300_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      javaManager: 'jdk',
+      javaVersion: javaTestVersion,
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, `java-${javaTestVersion}`))).toBe(true)
+    },
+  },
+  {
+    name: 'Java SDKMAN',
+    tool: 'java',
+    pluginId: 'java-env',
+    plugin: javaEnvPlugin,
+    templateId: 'java-template',
+    timeout: 600_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      javaManager: 'sdkman',
+      javaVersion: javaTestVersion,
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, 'sdkman'))).toBe(true)
+    },
+  },
+  {
+    name: 'Python direct',
+    tool: 'python',
+    pluginId: 'python-env',
+    plugin: pythonEnvPlugin,
+    templateId: 'python-template',
+    timeout: 300_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      pythonManager: 'python',
+      pythonVersion: pythonTestVersion,
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, `python-${pythonTestVersion}`))).toBe(true)
+    },
+  },
+  {
+    name: 'Python conda',
+    tool: 'python',
+    pluginId: 'python-env',
+    plugin: pythonEnvPlugin,
+    templateId: 'python-template',
+    timeout: 600_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      pythonManager: 'conda',
+      pythonVersion: pythonTestVersion,
+      condaEnvName: 'base',
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, 'miniconda3'))).toBe(true)
+    },
+  },
+  {
+    name: 'Git direct',
+    tool: 'git',
+    pluginId: 'git-env',
+    plugin: gitEnvPlugin,
+    templateId: 'git-template',
+    timeout: 300_000,
+    buildParams: (installRootDir, cacheDir) => ({
+      installRootDir,
+      gitManager: 'git',
+      gitVersion: gitTestVersion,
+      downloadCacheDir: cacheDir,
+    }),
+    verifyInstalledState: async (installRootDir) => {
+      expect(await pathExists(join(installRootDir, 'git'))).toBe(true)
+    },
+  },
   {
     name: 'Maven direct',
     tool: 'maven',
@@ -228,7 +364,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
     plugin: mysqlEnvPlugin,
     templateId: 'mysql-template',
     timeout: 300_000,
-    buildParams: (installRootDir: string, cacheDir: string) => ({
+    buildParams: (installRootDir, cacheDir) => ({
       installRootDir,
       mysqlManager: 'mysql',
       mysqlVersion: mysqlTestVersion,
@@ -245,7 +381,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
     plugin: redisEnvPlugin,
     templateId: 'redis-template',
     timeout: isWindows ? 600_000 : 300_000,
-    buildParams: (installRootDir: string, cacheDir: string) => ({
+    buildParams: (installRootDir, cacheDir) => ({
       installRootDir,
       redisManager: 'redis',
       redisVersion: redisTestVersion,
@@ -262,6 +398,26 @@ const allRealRollbackCases: RealRollbackCase[] = [
   },
   ...(isMac
     ? [
+        {
+          name: 'Git Homebrew',
+          tool: 'git',
+          pluginId: 'git-env',
+          plugin: gitEnvPlugin,
+          templateId: 'git-template',
+          timeout: 600_000,
+          buildParams: (installRootDir: string, cacheDir: string) => ({
+            installRootDir,
+            gitManager: 'homebrew',
+            gitVersion: gitTestVersion,
+            downloadCacheDir: cacheDir,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isHomebrewGitInstalled(gitTestVersion)).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isHomebrewGitInstalled(gitTestVersion)).toBe(false)
+          },
+        } satisfies RealRollbackCase,
         {
           name: 'MySQL package',
           tool: 'mysql',
@@ -306,6 +462,26 @@ const allRealRollbackCases: RealRollbackCase[] = [
     : []),
   ...(isWindows
     ? [
+        {
+          name: 'Git Scoop',
+          tool: 'git',
+          pluginId: 'git-env',
+          plugin: gitEnvPlugin,
+          templateId: 'git-template',
+          timeout: 300_000,
+          buildParams: (installRootDir: string, cacheDir: string) => ({
+            installRootDir,
+            gitManager: 'scoop',
+            gitVersion: gitTestVersion,
+            downloadCacheDir: cacheDir,
+          }),
+          verifyInstalledState: async () => {
+            expect(await isScoopPackageInstalled('git')).toBe(true)
+          },
+          verifyRolledBackState: async () => {
+            expect(await isScoopPackageInstalled('git')).toBe(false)
+          },
+        } satisfies RealRollbackCase,
         {
           name: 'MySQL package',
           tool: 'mysql',
@@ -352,72 +528,69 @@ const allRealRollbackCases: RealRollbackCase[] = [
 
 const realRollbackCases = allRealRollbackCases.filter(shouldRunCaseInCi)
 
-describe.skipIf(!isRealRun || realRollbackCases.length === 0)(
-  'action real rollback matrix — mysql redis maven',
-  () => {
-    describe.each(realRollbackCases)('$name', (testCase) => {
-      it(
-        'cleanup existing -> install -> rollback restores post-cleanup state',
-        async () => {
-          const installRootDir = join(
-            tmpDir,
-            `${testCase.tool}-${testCase.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-full-cycle`,
-          )
+describe.skipIf(!isRealRun || realRollbackCases.length === 0)('action real rollback matrix', () => {
+  describe.each(realRollbackCases)('$name', (testCase) => {
+    it(
+      'cleanup existing -> install -> rollback restores post-cleanup state',
+      async () => {
+        const installRootDir = join(
+          tmpDir,
+          `${testCase.tool}-${testCase.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-full-cycle`,
+        )
 
-          await mkdir(installRootDir, { recursive: true })
-          await writeFile(join(installRootDir, 'old.txt'), 'stale')
+        await mkdir(installRootDir, { recursive: true })
+        await writeFile(join(installRootDir, 'old.txt'), 'stale')
 
-          await cleanupDetectedEnvironment(makeDetection(testCase.tool, installRootDir))
-          expect(await pathExists(installRootDir)).toBe(false)
+        await cleanupDetectedEnvironment(makeDetection(testCase.tool, installRootDir))
+        expect(await pathExists(installRootDir)).toBe(false)
 
-          await mkdir(installRootDir, { recursive: true })
-          const trackedFile = join(installRootDir, 'fresh.txt')
-          await writeFile(trackedFile, `after-${testCase.tool}-cleanup`)
+        await mkdir(installRootDir, { recursive: true })
+        const trackedFile = join(installRootDir, 'fresh.txt')
+        await writeFile(trackedFile, `after-${testCase.tool}-cleanup`)
 
-          const snapshot = await createSnapshot({
-            baseDir: snapshotsDir,
-            taskId: `post-${testCase.tool}-cleanup`,
-            type: 'auto',
-            trackedPaths: [trackedFile],
-          })
-          await updateSnapshotMeta(snapshotsDir, snapshot)
+        const snapshot = await createSnapshot({
+          baseDir: snapshotsDir,
+          taskId: `post-${testCase.tool}-cleanup`,
+          type: 'auto',
+          trackedPaths: [trackedFile],
+        })
+        await updateSnapshotMeta(snapshotsDir, snapshot)
 
-          const params = testCase.buildParams(installRootDir, downloadCacheDir)
-          const task = createTask({
-            templateId: testCase.templateId,
-            templateVersion: '1.0.0',
-            params,
-            plugins: [{ pluginId: testCase.pluginId, version: '1.0.0', params }],
-          })
+        const params = testCase.buildParams(installRootDir, downloadCacheDir)
+        const task = createTask({
+          templateId: testCase.templateId,
+          templateVersion: '1.0.0',
+          params,
+          plugins: [{ pluginId: testCase.pluginId, version: '1.0.0', params }],
+        })
 
-          const result = await executeTask({
-            task,
-            registry: { [testCase.pluginId]: testCase.plugin },
-            platform,
-            tasksDir,
-            dryRun: false,
-          })
-          expect(result.status).toBe('succeeded')
-          expect(result.plugins[0].status).toBe('verified_success')
-          await testCase.verifyInstalledState?.(installRootDir)
+        const result = await executeTask({
+          task,
+          registry: { [testCase.pluginId]: testCase.plugin },
+          platform,
+          tasksDir,
+          dryRun: false,
+        })
+        expect(result.status).toBe('succeeded')
+        expect(result.plugins[0].status).toBe('verified_success')
+        await testCase.verifyInstalledState?.(installRootDir)
 
-          await writeFile(trackedFile, 'corrupted-after-install')
+        await writeFile(trackedFile, 'corrupted-after-install')
 
-          const rollbackResult = await executePersistedTaskRollback(
-            task.id,
-            snapshot.id,
-            [trackedFile],
-            [installRootDir],
-          )
-          expect(rollbackResult.success).toBe(true)
-          expect(rollbackResult.executionMode).toBe('real_run')
-          expect(rollbackResult.envVariablesRestored).toBeGreaterThanOrEqual(0)
-          expect(rollbackResult.directoriesRemoved).toBeGreaterThanOrEqual(1)
-          expect(await pathExists(installRootDir)).toBe(false)
-          await testCase.verifyRolledBackState?.(installRootDir)
-        },
-        testCase.timeout,
-      )
-    })
-  },
-)
+        const rollbackResult = await executePersistedTaskRollback(
+          task.id,
+          snapshot.id,
+          [trackedFile],
+          [installRootDir],
+        )
+        expect(rollbackResult.success).toBe(true)
+        expect(rollbackResult.executionMode).toBe('real_run')
+        expect(rollbackResult.envVariablesRestored).toBeGreaterThanOrEqual(0)
+        expect(rollbackResult.directoriesRemoved).toBeGreaterThanOrEqual(1)
+        expect(await pathExists(installRootDir)).toBe(false)
+        await testCase.verifyRolledBackState?.(installRootDir)
+      },
+      testCase.timeout,
+    )
+  })
+})
