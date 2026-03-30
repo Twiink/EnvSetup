@@ -172,7 +172,10 @@ describe('maven env plugin', () => {
 
     expect(execFileMock).toHaveBeenCalledWith(
       'powershell',
-      expect.arrayContaining(['-Command', expect.stringContaining('Get-ScoopMavenCommand')]),
+      expect.arrayContaining([
+        '-Command',
+        expect.stringMatching(/function Get-ScoopMavenCommand \{\nparam/),
+      ]),
       expect.any(Function),
     )
   })

@@ -82,7 +82,7 @@ function buildResolveScoopMavenCommandFunction(): string {
     '}',
     'return $null',
     '}',
-  ].join('; ')
+  ].join('\n')
 }
 
 function buildArchiveFileName(input: MavenPluginParams): string {
@@ -287,7 +287,7 @@ function buildVerifyCommands(input: MavenPluginParams): string[] {
   if (input.mavenManager === 'package') {
     if (input.platform === 'win32') {
       return [
-        `${buildResolveScoopMavenCommandFunction()}; ${buildResolveScoopCommand()}; if (-not $scoop) { throw 'Scoop not found.' }; $mvnCmd = Get-ScoopMavenCommand $scoop; if (-not $mvnCmd) { throw 'Failed to locate Maven command from Scoop install.' }; & $mvnCmd -version`,
+        `${buildResolveScoopMavenCommandFunction()}\n${buildResolveScoopCommand()}\nif (-not $scoop) { throw 'Scoop not found.' }\n$mvnCmd = Get-ScoopMavenCommand $scoop\nif (-not $mvnCmd) { throw 'Failed to locate Maven command from Scoop install.' }\n& $mvnCmd -version`,
       ]
     }
 

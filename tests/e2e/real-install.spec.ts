@@ -92,6 +92,42 @@ async function dumpTaskLogs(dataDir: string): Promise<void> {
   }
 }
 
+async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefined> {
+  const tasksDir = path.join(dataDir, 'tasks')
+
+  try {
+    const taskFiles = (await fs.readdir(tasksDir))
+      .filter((file) => file.endsWith('.json'))
+      .sort()
+      .reverse()
+
+    for (const taskFile of taskFiles) {
+      const raw = JSON.parse(await fs.readFile(path.join(tasksDir, taskFile), 'utf8')) as {
+        params?: Record<string, unknown>
+        plugins?: Array<{ params?: { installRootDir?: unknown } }>
+      }
+
+      const pluginInstallRoot = raw.plugins?.find(
+        (plugin) => typeof plugin.params?.installRootDir === 'string',
+      )?.params?.installRootDir
+      if (typeof pluginInstallRoot === 'string' && pluginInstallRoot.length > 0) {
+        return path.resolve(process.cwd(), pluginInstallRoot)
+      }
+
+      const taskInstallRoot = Object.entries(raw.params ?? {}).find(
+        ([key, value]) => key.endsWith('.installRootDir') && typeof value === 'string',
+      )?.[1]
+      if (typeof taskInstallRoot === 'string' && taskInstallRoot.length > 0) {
+        return path.resolve(process.cwd(), taskInstallRoot)
+      }
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
 function makeInstallRoot(name: string): string {
   return process.env.RUNNER_TEMP
     ? path.join(process.env.RUNNER_TEMP, `envsetup-e2e-${name}`)
@@ -771,7 +807,8 @@ test.describe('real install', () => {
       await runMysqlInstallFlow(page, '直接安装 MySQL 官方归档')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
-      await expect(fs.access(path.join(installRoot, 'mysql'))).resolves.toBeUndefined()
+      const actualInstallRoot = (await resolveTaskInstallRoot(dataDir)) ?? installRoot
+      await expect(fs.access(path.join(actualInstallRoot, 'mysql'))).resolves.toBeUndefined()
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()
@@ -802,7 +839,8 @@ test.describe('real install', () => {
       await runRedisInstallFlow(page, '直接安装 Redis 官方发行版')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
-      await expect(fs.access(path.join(installRoot, 'redis'))).resolves.toBeUndefined()
+      const actualInstallRoot = (await resolveTaskInstallRoot(dataDir)) ?? installRoot
+      await expect(fs.access(path.join(actualInstallRoot, 'redis'))).resolves.toBeUndefined()
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()
@@ -849,7 +887,8 @@ test.describe('real install', () => {
       await runMavenInstallFlow(page)
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
-      await expect(fs.access(path.join(installRoot, 'maven-3.9.11'))).resolves.toBeUndefined()
+      const actualInstallRoot = (await resolveTaskInstallRoot(dataDir)) ?? installRoot
+      await expect(fs.access(path.join(actualInstallRoot, 'maven-3.9.11'))).resolves.toBeUndefined()
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()

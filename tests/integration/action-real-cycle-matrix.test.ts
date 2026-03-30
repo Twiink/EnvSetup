@@ -736,6 +736,10 @@ function isHomebrewRedisPath(candidatePath: string | undefined): boolean {
   return isHomebrewFormulaPath(candidatePath, 'redis', ['redis-server', 'redis-cli'])
 }
 
+function isHomebrewMavenPath(candidatePath: string | undefined): boolean {
+  return isHomebrewFormulaPath(candidatePath, 'maven', ['mvn'])
+}
+
 function isScoopManagedToolPath(candidatePath: string | undefined): boolean {
   return Boolean(candidatePath && resolve(candidatePath).toLowerCase().includes('\\scoop\\'))
 }
@@ -777,6 +781,12 @@ function isRelevantCleanupDetection(
   if (testCase.tool === 'redis') {
     return isMac
       ? isHomebrewRedisPath(detection.path) || isHomebrewRedisPath(detection.cleanupPath)
+      : isScoopManagedToolPath(detection.path) || isScoopManagedToolPath(detection.cleanupPath)
+  }
+
+  if (testCase.tool === 'maven') {
+    return isMac
+      ? isHomebrewMavenPath(detection.path) || isHomebrewMavenPath(detection.cleanupPath)
       : isScoopManagedToolPath(detection.path) || isScoopManagedToolPath(detection.cleanupPath)
   }
 

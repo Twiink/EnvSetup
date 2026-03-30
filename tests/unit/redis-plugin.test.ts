@@ -85,7 +85,7 @@ describe('redis env plugin', () => {
         }),
       ]),
     )
-    expect(result.commands.join('\n')).toContain('msiexec.exe')
+    expect(result.commands.join('\n')).toContain('& msiexec.exe /quiet /i')
     expect(result.commands.join('\n')).toContain('Memurai for Redis installed')
     expect(result.rollbackCommands?.join('\n')).toContain('DisplayName -like')
     expect(result.envChanges).toEqual(
@@ -152,6 +152,37 @@ describe('redis env plugin', () => {
         expect.stringContaining('mode=real-run'),
         expect.stringContaining('download_cache_hit=true'),
       ]),
+    )
+  })
+
+  it('verifies Scoop installs by resolving the Redis command from the Scoop prefix', async () => {
+    execFileMock.mockClear()
+
+    await redisEnvPlugin.verify({
+      redisManager: 'package',
+      installRootDir: 'C:\\envsetup\\redis',
+      dryRun: false,
+      platform: 'win32',
+      installResult: {
+        status: 'installed_unverified',
+        executionMode: 'real_run',
+        version: 'latest',
+        paths: {},
+        envChanges: [],
+        downloads: [],
+        commands: [],
+        logs: [],
+        summary: 'installed',
+      },
+    })
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      'powershell',
+      expect.arrayContaining([
+        '-Command',
+        expect.stringMatching(/function Get-ScoopRedisCommand \{\nparam/),
+      ]),
+      expect.any(Function),
     )
   })
 })
