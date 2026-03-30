@@ -41,8 +41,9 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).toContain('hdiutil attach')
     expect(result.commands.join('\n')).toContain('.Trashes')
     expect(result.commands.join('\n')).toContain('pkgutil --expand')
-    expect(result.commands.join('\n')).toContain("python3 - <<'PY'")
-    expect(result.commands.join('\n')).toContain('usr/local/git')
+    expect(result.commands.join('\n')).toContain('pkgutil --expand-full')
+    expect(result.commands.join('\n')).toContain('Payload/usr/local/git')
+    expect(result.commands.join('\n')).not.toContain("python3 - <<'PY'")
   })
 
   it('returns dry-run result for direct git install on win32', async () => {

@@ -90,82 +90,6 @@ function buildResolveScoopCommand(): string {
   return "$scoop = $null; $candidate = Join-Path $env:USERPROFILE 'scoop\\shims\\scoop.cmd'; if (Test-Path $candidate) { $scoop = $candidate }; if (-not $scoop) { $scoop = Get-Command 'scoop.cmd' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if (-not $scoop) { $scoop = Get-Command 'scoop' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path -First 1 }; if ($scoop -and -not $env:SCOOP) { $env:SCOOP = Split-Path (Split-Path $scoop -Parent) -Parent }"
 }
 
-function buildPkgPayloadExtractionCommand(payloadDir: string, expandDir: string): string {
-  return [
-    `PAYLOAD_DIR=${quoteShell(payloadDir)}`,
-    `EXPAND_DIR=${quoteShell(expandDir)}`,
-    'rm -rf "$PAYLOAD_DIR"',
-    'mkdir -p "$PAYLOAD_DIR"',
-    'export PAYLOAD_DIR EXPAND_DIR',
-    `python3 - <<'PY'
-import gzip
-import lzma
-import os
-import struct
-import subprocess
-from pathlib import Path
-
-payload_dir = Path(os.environ['PAYLOAD_DIR'])
-expand_dir = Path(os.environ['EXPAND_DIR'])
-
-
-def decode_pbzx(payload_bytes: bytes) -> bytes:
-    offset = 12
-    chunks = []
-    while offset < len(payload_bytes):
-        if offset + 16 > len(payload_bytes):
-            raise ValueError('truncated pbzx chunk header')
-        offset += 8
-        chunk_length = struct.unpack_from('>Q', payload_bytes, offset)[0]
-        offset += 8
-        chunk = payload_bytes[offset : offset + chunk_length]
-        if len(chunk) != chunk_length:
-            raise ValueError('truncated pbzx chunk payload')
-        offset += chunk_length
-        if chunk.startswith(b'\\xfd7zXZ\\x00'):
-            chunks.append(lzma.decompress(chunk))
-        else:
-            chunks.append(chunk)
-    return b''.join(chunks)
-
-
-def decode_payload(payload_path: Path) -> bytes:
-    payload_bytes = payload_path.read_bytes()
-    if payload_bytes[:4] == b'pbzx':
-        return decode_pbzx(payload_bytes)
-    try:
-        return gzip.decompress(payload_bytes)
-    except OSError:
-        return payload_bytes
-
-
-payloads = sorted(expand_dir.rglob('Payload'))
-if not payloads:
-    raise SystemExit('Failed to locate any Payload files in expanded pkg.')
-
-extracted_payloads = 0
-for payload in payloads:
-    try:
-        decoded_payload = decode_payload(payload)
-    except Exception:
-        continue
-    extraction = subprocess.run(
-        ['cpio', '-idm'],
-        cwd=payload_dir,
-        input=decoded_payload,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if extraction.returncode == 0:
-        extracted_payloads += 1
-
-if extracted_payloads == 0:
-    raise SystemExit('Failed to extract any pkg Payload archives.')
-PY`,
-  ].join('; ')
-}
-
 function buildResolveScoopGitPrefixFunction(): string {
   return [
     'function Get-ScoopGitPrefix {',
@@ -404,7 +328,6 @@ function buildDarwinDirectCommands(
     `${paths.installRootDir}/${buildGitMacosDmgFileName(selectedVersion)}`
   const mountPoint = `${paths.installRootDir}/git-installer-mount`
   const expandDir = `${paths.installRootDir}/git-pkg-expanded`
-  const payloadDir = `${paths.installRootDir}/git-pkg-payload`
 
   const commands = [`mkdir -p ${quoteShell(paths.installRootDir)}`]
 
@@ -417,12 +340,11 @@ function buildDarwinDirectCommands(
   commands.push(
     `hdiutil attach ${quoteShell(dmgPath)} -mountpoint ${quoteShell(mountPoint)}`,
     `rm -rf ${quoteShell(paths.gitDir)}`,
-    `PKG_PATH=$(find ${quoteShell(mountPoint)} -path '*/.Trashes' -prune -o -name '*.pkg' -print | head -n 1); if [ -z "$PKG_PATH" ]; then echo 'Failed to locate Git installer pkg inside mounted dmg.' >&2; exit 1; fi; rm -rf ${quoteShell(expandDir)} ${quoteShell(payloadDir)}; pkgutil --expand-full "$PKG_PATH" ${quoteShell(expandDir)}`,
+    `PKG_PATH=$(find ${quoteShell(mountPoint)} -path '*/.Trashes' -prune -o -name '*.pkg' -print | head -n 1); if [ -z "$PKG_PATH" ]; then echo 'Failed to locate Git installer pkg inside mounted dmg.' >&2; exit 1; fi; rm -rf ${quoteShell(expandDir)}; pkgutil --expand-full "$PKG_PATH" ${quoteShell(expandDir)}`,
     `hdiutil detach ${quoteShell(mountPoint)} || true`,
-    buildPkgPayloadExtractionCommand(payloadDir, expandDir),
-    `GIT_PAYLOAD_DIR=$(find ${quoteShell(payloadDir)} -path '*/usr/local/git' -type d | head -n 1); if [ -z "$GIT_PAYLOAD_DIR" ]; then echo 'Failed to locate usr/local/git in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(paths.gitDir)}; cp -R "$GIT_PAYLOAD_DIR"/. ${quoteShell(paths.gitDir)}/`,
+    `GIT_PAYLOAD_DIR=$(find ${quoteShell(expandDir)} \\( -path '*/Payload/usr/local/git' -o -path '*/usr/local/git' \\) -type d | head -n 1); if [ -z "$GIT_PAYLOAD_DIR" ]; then echo 'Failed to locate usr/local/git in expanded pkg payload.' >&2; exit 1; fi; mkdir -p ${quoteShell(paths.gitDir)}; cp -R "$GIT_PAYLOAD_DIR"/. ${quoteShell(paths.gitDir)}/`,
     ...(resolvedDownloads ? [] : [`rm -f ${quoteShell(dmgPath)}`]),
-    `rm -rf ${quoteShell(mountPoint)} ${quoteShell(expandDir)} ${quoteShell(payloadDir)}`,
+    `rm -rf ${quoteShell(mountPoint)} ${quoteShell(expandDir)}`,
   )
 
   return commands

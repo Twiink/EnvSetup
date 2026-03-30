@@ -302,82 +302,8 @@ function buildDarwinPkgCommands(
       `python-${input.pythonVersion}-macos11.pkg`,
     ) ?? `${installPaths.installRootDir}/python-${input.pythonVersion}.pkg`
   const expandDir = `${installPaths.installRootDir}/python-pkg-expanded`
-  const payloadDir = `${installPaths.installRootDir}/python-pkg-payload`
   const standaloneFrameworksDir = `${installPaths.standalonePythonDir}/Library/Frameworks`
   const majorMinor = extractPythonMajorMinor(input.pythonVersion)
-  const payloadExtractCommand = [
-    `PAYLOAD_DIR=${quoteShell(payloadDir)}`,
-    `EXPAND_DIR=${quoteShell(expandDir)}`,
-    'rm -rf "$PAYLOAD_DIR"',
-    'mkdir -p "$PAYLOAD_DIR"',
-    'export PAYLOAD_DIR EXPAND_DIR',
-    `python3 - <<'PY'
-import gzip
-import lzma
-import os
-import struct
-import subprocess
-from pathlib import Path
-
-payload_dir = Path(os.environ['PAYLOAD_DIR'])
-expand_dir = Path(os.environ['EXPAND_DIR'])
-
-
-def decode_pbzx(payload_bytes: bytes) -> bytes:
-    offset = 12
-    chunks: list[bytes] = []
-    while offset < len(payload_bytes):
-        if offset + 16 > len(payload_bytes):
-            raise ValueError('truncated pbzx chunk header')
-        offset += 8  # 每个 chunk 的标志位
-        chunk_length = struct.unpack_from('>Q', payload_bytes, offset)[0]
-        offset += 8
-        chunk = payload_bytes[offset : offset + chunk_length]
-        if len(chunk) != chunk_length:
-            raise ValueError('truncated pbzx chunk payload')
-        offset += chunk_length
-        if chunk.startswith(b'\\xfd7zXZ\\x00'):
-            chunks.append(lzma.decompress(chunk))
-        else:
-            chunks.append(chunk)
-    return b''.join(chunks)
-
-
-def decode_payload(payload_path: Path) -> bytes:
-    payload_bytes = payload_path.read_bytes()
-    if payload_bytes[:4] == b'pbzx':
-        return decode_pbzx(payload_bytes)
-    try:
-        return gzip.decompress(payload_bytes)
-    except OSError:
-        return payload_bytes
-
-
-payloads = sorted(expand_dir.rglob('Payload'))
-if not payloads:
-    raise SystemExit('Failed to locate any Payload files in expanded pkg.')
-
-extracted_payloads = 0
-for payload in payloads:
-    try:
-        decoded_payload = decode_payload(payload)
-    except Exception:
-        continue
-    extraction = subprocess.run(
-        ['cpio', '-idm'],
-        cwd=payload_dir,
-        input=decoded_payload,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if extraction.returncode == 0:
-        extracted_payloads += 1
-
-if extracted_payloads == 0:
-    raise SystemExit('Failed to extract any pkg Payload archives.')
-PY`,
-  ].join('; ')
 
   const commands = [`mkdir -p ${quoteShell(installPaths.installRootDir)}`]
 
@@ -386,15 +312,14 @@ PY`,
   }
 
   commands.push(
-    `pkgutil --expand ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
-    payloadExtractCommand,
-    `rm -rf ${quoteShell(installPaths.standalonePythonDir)}; mkdir -p ${quoteShell(standaloneFrameworksDir)}; PYTHON_FRAMEWORK_SOURCE=$(find ${quoteShell(payloadDir)} -path '*/Python.framework' -type d | head -n 1); if [ -z "$PYTHON_FRAMEWORK_SOURCE" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; cp -R "$PYTHON_FRAMEWORK_SOURCE" ${quoteShell(standaloneFrameworksDir)}/; PYTHONT_FRAMEWORK_SOURCE=$(find ${quoteShell(payloadDir)} -path '*/PythonT.framework' -type d | head -n 1); if [ -n "$PYTHONT_FRAMEWORK_SOURCE" ]; then cp -R "$PYTHONT_FRAMEWORK_SOURCE" ${quoteShell(standaloneFrameworksDir)}/; fi; if [ ! -x ${quoteShell(`${standaloneFrameworksDir}/Python.framework/Versions/${majorMinor}/bin/python${majorMinor}`)} ]; then echo 'Failed to locate the Python executable inside the copied framework bundle.' >&2; exit 1; fi`,
+    `pkgutil --expand-full ${quoteShell(installerPath)} ${quoteShell(expandDir)}`,
+    `rm -rf ${quoteShell(installPaths.standalonePythonDir)}; mkdir -p ${quoteShell(`${standaloneFrameworksDir}/Python.framework`)}; PYTHON_FRAMEWORK_SOURCE=$(find ${quoteShell(expandDir)} \\( -path '*/Python_Framework.pkg/Payload' -o -path '*/Python.framework' \\) -type d | head -n 1); if [ -z "$PYTHON_FRAMEWORK_SOURCE" ]; then echo 'Failed to locate Python.framework in expanded pkg payload.' >&2; exit 1; fi; cp -R "$PYTHON_FRAMEWORK_SOURCE"/. ${quoteShell(`${standaloneFrameworksDir}/Python.framework`)}/; PYTHONT_FRAMEWORK_SOURCE=$(find ${quoteShell(expandDir)} \\( -path '*/PythonT_Framework.pkg/Payload' -o -path '*/PythonT.framework' \\) -type d | head -n 1); if [ -n "$PYTHONT_FRAMEWORK_SOURCE" ]; then mkdir -p ${quoteShell(`${standaloneFrameworksDir}/PythonT.framework`)}; cp -R "$PYTHONT_FRAMEWORK_SOURCE"/. ${quoteShell(`${standaloneFrameworksDir}/PythonT.framework`)}/; fi; if [ ! -x ${quoteShell(`${standaloneFrameworksDir}/Python.framework/Versions/${majorMinor}/bin/python${majorMinor}`)} ]; then echo 'Failed to locate the Python executable inside the copied framework bundle.' >&2; exit 1; fi`,
     buildDarwinPythonWrappersCommand(
       installPaths.standalonePythonDir,
       installPaths.standalonePythonBinDir,
       majorMinor,
     ),
-    `rm -rf ${quoteShell(payloadDir)} ${quoteShell(expandDir)}${resolvedDownloads ? '' : ` ${quoteShell(installerPath)}`}`,
+    `rm -rf ${quoteShell(expandDir)}${resolvedDownloads ? '' : ` ${quoteShell(installerPath)}`}`,
     `${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} --version && ${quoteShell(`${installPaths.standalonePythonBinDir}/python3`)} -m ensurepip --upgrade`,
   )
 

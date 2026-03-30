@@ -136,8 +136,8 @@ jobs:
             version_id: 2-49-1
           - os: windows-latest
             tool: git
-            tool_version: 2.48.2
-            version_id: 2-48-2
+            tool_version: 2.50.1
+            version_id: 2-50-1
           - os: windows-latest
             tool: mysql
             tool_version: 8.4.8
