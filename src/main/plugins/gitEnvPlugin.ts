@@ -58,6 +58,17 @@ function resolveSelectedGitVersion(input: GitPluginParams): string {
   return input.gitVersion ?? resolveDefaultGitVersion(input.platform)
 }
 
+function resolveGitHomebrewFormula(input: GitPluginParams): string {
+  return `git@${resolveSelectedGitVersion(input)}`
+}
+
+function resolveGitScoopPackage(input: GitPluginParams): string {
+  const selectedVersion = resolveSelectedGitVersion(input)
+  return /^\d+\.\d+\.\d+\.\d+$/.test(selectedVersion)
+    ? `git@${selectedVersion}`
+    : `git@${selectedVersion}.1`
+}
+
 function buildGitMacosDmgFileName(version: string): string {
   return `git-${version}-intel-universal-mavericks.dmg`
 }
@@ -340,14 +351,18 @@ function buildDarwinDirectCommands(
   return commands
 }
 
-function buildDarwinHomebrewCommands(resolvedDownloads?: DownloadResolvedArtifact[]): string[] {
+function buildDarwinHomebrewCommands(
+  input: GitPluginParams,
+  resolvedDownloads?: DownloadResolvedArtifact[],
+): string[] {
   const resolveBrewCommand = buildResolveHomebrewCommand()
   const installerPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'homebrew') ?? '/tmp/homebrew-install.sh'
+  const formula = resolveGitHomebrewFormula(input)
   return [
     resolvedDownloads
-      ? `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install git || HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" upgrade git`
-      : `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install git || HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" upgrade git`,
+      ? `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; GIT_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$GIT_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$GIT_FORMULA"; fi`
+      : `${resolveBrewCommand}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"; ${resolveBrewCommand}; fi; [ -n "$BREW_BIN" ] || { echo "brew not found after installation" >&2; exit 1; }; GIT_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$GIT_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$GIT_FORMULA"; fi`,
   ]
 }
 
@@ -398,6 +413,7 @@ function buildScoopBootstrapCommands(resolvedDownloads?: DownloadResolvedArtifac
 }
 
 function buildWindowsScoopCommands(
+  input: GitPluginParams,
   resolvedDownloads?: DownloadResolvedArtifact[],
   options: { allowBootstrapReset?: boolean } = {},
 ): string[] {
@@ -409,6 +425,7 @@ function buildWindowsScoopCommands(
   const cleanupInstallerCommands = resolvedDownloads
     ? []
     : ['Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue']
+  const packageToken = resolveGitScoopPackage(input)
 
   return [
     [
@@ -432,9 +449,9 @@ function buildWindowsScoopCommands(
       "  if (-not $scoop) { throw 'Failed to locate Scoop.' }",
       '  if ($retrySevenZipExplicitly) {',
       '    Write-Output "Retrying Scoop git install with an explicit 7zip dependency bootstrap."',
-      '    & $scoop install 7zip git',
+      `    & $scoop install 7zip ${packageToken}`,
       '  } else {',
-      '    & $scoop install git',
+      `    & $scoop install ${packageToken}`,
       '  }',
       '  $installExitCode = $LASTEXITCODE',
       `  ${buildScoopGitRootCleanupCommand()}`,
@@ -487,18 +504,19 @@ function buildInstallCommands(
   }
 
   if (input.gitManager === 'homebrew') {
-    return buildDarwinHomebrewCommands(resolvedDownloads)
+    return buildDarwinHomebrewCommands(input, resolvedDownloads)
   }
 
-  return buildWindowsScoopCommands(resolvedDownloads, {
+  return buildWindowsScoopCommands(input, resolvedDownloads, {
     allowBootstrapReset: options.allowScoopBootstrapReset,
   })
 }
 
 function buildRollbackCommands(input: GitPluginParams): string[] {
   if (input.gitManager === 'homebrew') {
+    const formula = resolveGitHomebrewFormula(input)
     return [
-      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions git >/dev/null 2>&1 && "$BREW_BIN" uninstall --formula git || true; fi`,
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1 && "$BREW_BIN" uninstall --formula ${formula} || true; fi`,
     ]
   }
 
@@ -538,8 +556,9 @@ function buildVerifyCommands(input: GitPluginParams): string[] {
 
   if (input.gitManager === 'homebrew') {
     const resolveBrewCommand = buildResolveHomebrewCommand()
+    const formula = resolveGitHomebrewFormula(input)
     return [
-      `${resolveBrewCommand}; [ -n "$BREW_BIN" ] || exit 1; BREW_PREFIX="$("$BREW_BIN" --prefix git)"; printf '%s\n' "$BREW_PREFIX"; "$BREW_PREFIX/bin/git" --version`,
+      `${resolveBrewCommand}; [ -n "$BREW_BIN" ] || exit 1; BREW_PREFIX="$("$BREW_BIN" --prefix ${formula})"; printf '%s\n' "$BREW_PREFIX"; "$BREW_PREFIX/bin/git" --version`,
     ]
   }
 
@@ -616,7 +635,7 @@ const gitEnvPlugin = {
 
     const logs = [
       `manager=${params.gitManager}`,
-      `version=${params.gitManager === 'git' ? resolveSelectedGitVersion(params) : 'latest'}`,
+      `version=${resolveSelectedGitVersion(params)}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -668,7 +687,7 @@ const gitEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.gitManager === 'git' ? resolveSelectedGitVersion(params) : 'latest',
+      version: resolveSelectedGitVersion(params),
       paths: {
         installRootDir: params.installRootDir,
         gitDir: paths.gitDir,
@@ -684,7 +703,7 @@ const gitEnvPlugin = {
         : 'Completed the official-source Git environment install commands.',
       context: {
         gitManager: params.gitManager,
-        gitVersion: params.gitManager === 'git' ? resolveSelectedGitVersion(params) : 'latest',
+        gitVersion: resolveSelectedGitVersion(params),
         ...(preExistingScoopRoot ? { preExistingScoopRoot } : {}),
       },
     }

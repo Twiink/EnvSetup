@@ -430,6 +430,26 @@ async function resolveHomebrewFormulaPrefix(
   }
 }
 
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractHomebrewFormulaToken(
+  targetPath: string | undefined,
+  formula: string,
+): string | undefined {
+  if (!targetPath) {
+    return undefined
+  }
+
+  const normalizedPath = resolve(targetPath)
+  const pattern = new RegExp(
+    `/(?:opt|Cellar)/(${escapeForRegex(formula)}(?:@\\d+(?:\\.\\d+)+)?)(?:/|$)`,
+  )
+  const match = normalizedPath.match(pattern)
+  return match?.[1]
+}
+
 function resolveScoopPackagePath(scoopRoot: string, packageName: string): string {
   const normalizedPath = resolve(scoopRoot)
   const lowerPath = normalizedPath.toLowerCase()
@@ -448,22 +468,6 @@ function resolveSdkmanJavaPath(sdkmanPath: string): string {
   return normalizedPath.endsWith(javaSuffix)
     ? normalizedPath
     : join(normalizedPath, 'candidates', 'java')
-}
-
-function buildHomebrewGitCleanupCommand(): string {
-  return buildHomebrewFormulaCleanupCommand('git')
-}
-
-function buildHomebrewMysqlCleanupCommand(): string {
-  return buildHomebrewFormulaCleanupCommand('mysql')
-}
-
-function buildHomebrewRedisCleanupCommand(): string {
-  return buildHomebrewFormulaCleanupCommand('redis')
-}
-
-function buildHomebrewMavenCleanupCommand(): string {
-  return buildHomebrewFormulaCleanupCommand('maven')
 }
 
 function buildHomebrewFormulaCleanupCommand(formula: string): string {
@@ -770,9 +774,13 @@ async function buildCleanupPlan(detection: DetectedEnvironment): Promise<Cleanup
       addProfileSubstrings(scoopRoot, scoopGitPath)
     } else if (isHomebrewGitExecutable(resolvedCleanupPath)) {
       const homebrewGitPrefix = await resolveHomebrewGitPrefix(resolvedCleanupPath)
+      const gitFormula =
+        extractHomebrewFormulaToken(homebrewGitPrefix, 'git') ??
+        extractHomebrewFormulaToken(resolvedCleanupPath, 'git') ??
+        'git'
       addTrackedPaths(homebrewGitPrefix)
       addRemovePaths(homebrewGitPrefix, resolvedCleanupPath)
-      addCommands(buildHomebrewGitCleanupCommand())
+      addCommands(buildHomebrewFormulaCleanupCommand(gitFormula))
     } else {
       const gitRoot = inferGitInstallRootFromExecutable(resolvedCleanupPath)
       addTrackedPaths(gitRoot)
@@ -802,9 +810,13 @@ async function buildCleanupPlan(detection: DetectedEnvironment): Promise<Cleanup
       addProfileSubstrings(scoopRoot, scoopMysqlPath)
     } else if (isHomebrewMysqlExecutable(resolvedCleanupPath)) {
       const mysqlPrefix = await resolveHomebrewMysqlPrefix(resolvedCleanupPath)
+      const mysqlFormula =
+        extractHomebrewFormulaToken(mysqlPrefix, 'mysql') ??
+        extractHomebrewFormulaToken(resolvedCleanupPath, 'mysql') ??
+        'mysql'
       addTrackedPaths(mysqlPrefix)
       addRemovePaths(mysqlPrefix, resolvedCleanupPath)
-      addCommands(buildHomebrewMysqlCleanupCommand())
+      addCommands(buildHomebrewFormulaCleanupCommand(mysqlFormula))
     } else {
       const mysqlRoot = inferMysqlInstallRootFromExecutable(resolvedCleanupPath)
       addTrackedPaths(mysqlRoot)
@@ -848,9 +860,13 @@ async function buildCleanupPlan(detection: DetectedEnvironment): Promise<Cleanup
       addProfileSubstrings(scoopRoot, scoopRedisPath)
     } else if (isHomebrewRedisExecutable(resolvedCleanupPath)) {
       const redisPrefix = await resolveHomebrewRedisPrefix(resolvedCleanupPath)
+      const redisFormula =
+        extractHomebrewFormulaToken(redisPrefix, 'redis') ??
+        extractHomebrewFormulaToken(resolvedCleanupPath, 'redis') ??
+        'redis'
       addTrackedPaths(redisPrefix)
       addRemovePaths(redisPrefix, resolvedCleanupPath)
-      addCommands(buildHomebrewRedisCleanupCommand())
+      addCommands(buildHomebrewFormulaCleanupCommand(redisFormula))
     } else {
       const redisRoot = inferRedisInstallRootFromExecutable(resolvedCleanupPath)
       addTrackedPaths(redisRoot)
@@ -880,9 +896,13 @@ async function buildCleanupPlan(detection: DetectedEnvironment): Promise<Cleanup
       addProfileSubstrings(scoopRoot, scoopMavenPath)
     } else if (isHomebrewMavenExecutable(resolvedCleanupPath)) {
       const mavenPrefix = await resolveHomebrewMavenPrefix(resolvedCleanupPath)
+      const mavenFormula =
+        extractHomebrewFormulaToken(mavenPrefix, 'maven') ??
+        extractHomebrewFormulaToken(resolvedCleanupPath, 'maven') ??
+        'maven'
       addTrackedPaths(mavenPrefix)
       addRemovePaths(mavenPrefix, resolvedCleanupPath)
-      addCommands(buildHomebrewMavenCleanupCommand())
+      addCommands(buildHomebrewFormulaCleanupCommand(mavenFormula))
     } else {
       const mavenRoot = inferMavenInstallRootFromExecutable(resolvedCleanupPath)
       addTrackedPaths(mavenRoot)

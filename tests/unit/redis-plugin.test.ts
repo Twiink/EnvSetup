@@ -61,14 +61,17 @@ describe('redis env plugin', () => {
   it('builds a Homebrew dry-run install plan on darwin', async () => {
     const result = await redisEnvPlugin.install({
       redisManager: 'package',
+      redisVersion: '7.4.7',
       installRootDir: '/tmp/redis-toolchain',
       dryRun: true,
       platform: 'darwin',
     })
 
-    expect(result.commands.join('\n')).toContain('install redis')
+    expect(result.version).toBe('7.4.7')
+    expect(result.commands.join('\n')).toContain('version-install "$REDIS_FORMULA"')
+    expect(result.commands.join('\n')).toContain("REDIS_FORMULA='redis@7.4.7'")
     expect(result.commands.join('\n')).not.toContain('mkdir -p')
-    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula redis')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula redis@7.4.7')
   })
 
   it('builds a Memurai-based direct dry-run install plan on win32', async () => {
@@ -110,12 +113,14 @@ describe('redis env plugin', () => {
   it('builds a Scoop dry-run install plan on win32', async () => {
     const result = await redisEnvPlugin.install({
       redisManager: 'package',
+      redisVersion: '7.4.7',
       installRootDir: 'C:\\envsetup\\redis',
       dryRun: true,
       platform: 'win32',
     })
 
-    expect(result.commands.join('\n')).toContain('scoop install redis')
+    expect(result.version).toBe('7.4.7')
+    expect(result.commands.join('\n')).toContain('scoop install redis@7.4.7')
     expect(result.commands.join('\n')).not.toContain('New-Item -ItemType Directory -Force')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall redis')
     expect(result.envChanges).toEqual(

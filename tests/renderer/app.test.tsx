@@ -210,10 +210,6 @@ const mysqlTemplateFixture = {
       value: '8.4.8',
       editable: true,
       required: true,
-      dependsOn: {
-        field: 'mysql.mysqlManager',
-        equals: 'mysql',
-      },
     },
     'mysql.installRootDir': {
       key: 'mysql.installRootDir',
@@ -256,10 +252,6 @@ const redisTemplateFixture = {
       value: '7.4.7',
       editable: true,
       required: true,
-      dependsOn: {
-        field: 'redis.redisManager',
-        equals: 'redis',
-      },
     },
     'redis.installRootDir': {
       key: 'redis.installRootDir',
@@ -628,44 +620,52 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: '一键清理' })).toBeInTheDocument()
   })
 
-  it('renders git version as selectable option after switching template', async () => {
+  it('renders git version and keeps it visible after switching to homebrew', async () => {
     render(<App />)
 
     fireEvent.click(await screen.findByText('Git 开发环境'))
+    fireEvent.change(screen.getByDisplayValue('直接安装 Git'), {
+      target: { value: 'homebrew' },
+    })
 
     expect(await screen.findByDisplayValue('2.49.1')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('直接安装 Git')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('使用 Homebrew 安装 Git')).toBeInTheDocument()
   })
 
-  it('renders mysql version only after switching to direct install', async () => {
+  it('renders mysql version in package mode and keeps it visible after switching manager', async () => {
     render(<App />)
 
     fireEvent.click(await screen.findByText('MySQL 数据库环境'))
+    expect(await screen.findByDisplayValue('8.4.8')).toBeInTheDocument()
     fireEvent.change(screen.getByDisplayValue('使用平台包管理器安装'), {
       target: { value: 'mysql' },
     })
 
-    expect(await screen.findByDisplayValue('8.4.8')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('8.4.8')).toBeInTheDocument()
   })
 
-  it('renders redis version only after switching to direct install', async () => {
+  it('renders redis version in package mode and keeps it visible after switching manager', async () => {
     render(<App />)
 
     fireEvent.click(await screen.findByText('Redis 缓存环境'))
+    expect(await screen.findByDisplayValue('7.4.7')).toBeInTheDocument()
     fireEvent.change(screen.getByDisplayValue('使用平台包管理器安装'), {
       target: { value: 'redis' },
     })
 
-    expect(await screen.findByDisplayValue('7.4.7')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('7.4.7')).toBeInTheDocument()
   })
 
-  it('renders maven version as selectable option after switching template', async () => {
+  it('renders maven version and keeps it visible after switching to package manager', async () => {
     render(<App />)
 
     fireEvent.click(await screen.findByText('Maven 构建环境'))
+    fireEvent.change(screen.getByDisplayValue('直接安装 Maven'), {
+      target: { value: 'package' },
+    })
 
     expect(await screen.findByDisplayValue('3.9.11')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('直接安装 Maven')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('使用平台包管理器安装')).toBeInTheDocument()
   })
 
   it('switches visible copy to english', async () => {

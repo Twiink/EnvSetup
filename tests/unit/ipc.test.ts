@@ -752,18 +752,19 @@ describe('registerIpcHandlers', () => {
   })
 
   describe.each([
-    ['node', 'node'],
-    ['node', 'nvm'],
-    ['java', 'jdk'],
-    ['java', 'sdkman'],
-    ['python', 'python'],
-    ['python', 'conda'],
-    ['git', 'git'],
-    ['git', 'homebrew'],
-    ['mysql', 'package'],
-    ['redis', 'package'],
-    ['maven', 'maven'],
-  ])('task:create action matrix for %s via %s', (tool, manager) => {
+    ['node', 'node', 'nodeVersion'],
+    ['node', 'nvm', 'nodeVersion'],
+    ['java', 'jdk', 'javaVersion'],
+    ['java', 'sdkman', 'javaVersion'],
+    ['python', 'python', 'pythonVersion'],
+    ['python', 'conda', 'pythonVersion'],
+    ['git', 'git', 'gitVersion'],
+    ['git', 'homebrew', 'gitVersion'],
+    ['mysql', 'package', 'mysqlVersion'],
+    ['redis', 'package', 'redisVersion'],
+    ['maven', 'maven', 'mavenVersion'],
+    ['maven', 'package', 'mavenVersion'],
+  ])('task:create action matrix for %s via %s', (tool, manager, versionKey) => {
     it('passes manager-specific values through mapping and task creation', async () => {
       const taskMod = await import('../../src/main/core/task')
       const payload = {
@@ -771,7 +772,7 @@ describe('registerIpcHandlers', () => {
         values: {
           [`${tool}.${tool}Manager`]: manager,
           installRootDir: `/tmp/${tool}`,
-          ...(!['mysql', 'redis'].includes(tool) ? { [`${tool}.${tool}Version`]: '1.0.0' } : {}),
+          [`${tool}.${versionKey}`]: '1.0.0',
         },
         locale: 'zh-CN',
       }

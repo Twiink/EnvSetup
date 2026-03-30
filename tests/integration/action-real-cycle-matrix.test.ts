@@ -221,12 +221,13 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         mavenManager: 'package',
+        mavenVersion: mavenTestVersion,
       }),
-    verifyPattern: /Apache Maven/i,
+    verifyPattern: new RegExp(`Apache Maven\\s+${escapeRegExp(mavenTestVersion)}`, 'i'),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('maven')).toBe(true)
+        expect(await isHomebrewFormulaInstalled(`maven@${mavenTestVersion}`)).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(true)
@@ -234,7 +235,7 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('maven')).toBe(false)
+        expect(await isHomebrewFormulaInstalled(`maven@${mavenTestVersion}`)).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(false)
@@ -279,12 +280,13 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         mysqlManager: 'package',
+        mysqlVersion: mysqlTestVersion,
       }),
-    verifyPattern: /(mysql|ver)/i,
+    verifyPattern: new RegExp(escapeRegExp(mysqlTestVersion), 'i'),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('mysql')).toBe(true)
+        expect(await isHomebrewFormulaInstalled(`mysql@${mysqlTestVersion}`)).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('mysql')).toBe(true)
@@ -292,7 +294,7 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('mysql')).toBe(false)
+        expect(await isHomebrewFormulaInstalled(`mysql@${mysqlTestVersion}`)).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('mysql')).toBe(false)
@@ -323,12 +325,13 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         redisManager: 'package',
+        redisVersion: redisTestVersion,
       }),
-    verifyPattern: /redis/i,
+    verifyPattern: new RegExp(escapeRegExp(redisTestVersion), 'i'),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('redis')).toBe(true)
+        expect(await isHomebrewFormulaInstalled(`redis@${redisTestVersion}`)).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('redis')).toBe(true)
@@ -336,7 +339,7 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('redis')).toBe(false)
+        expect(await isHomebrewFormulaInstalled(`redis@${redisTestVersion}`)).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('redis')).toBe(false)
@@ -355,14 +358,15 @@ const allRealCycleCases: RealCycleCase[] = [
             withSharedCaches({
               installRootDir,
               gitManager: 'homebrew',
+              gitVersion: gitTestVersion,
             }),
-          verifyPattern: /git version/i,
+          verifyPattern: new RegExp(`git version\\s+${escapeRegExp(gitTestVersion)}`, 'i'),
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
-            expect(await isHomebrewGitInstalled()).toBe(true)
+            expect(await isHomebrewGitInstalled(gitTestVersion)).toBe(true)
           },
           verifyRolledBackState: async () => {
-            expect(await isHomebrewGitInstalled()).toBe(false)
+            expect(await isHomebrewGitInstalled(gitTestVersion)).toBe(false)
           },
         } satisfies RealCycleCase,
       ]
@@ -379,8 +383,9 @@ const allRealCycleCases: RealCycleCase[] = [
             withSharedCaches({
               installRootDir,
               gitManager: 'scoop',
+              gitVersion: gitTestVersion,
             }),
-          verifyPattern: /git version/i,
+          verifyPattern: new RegExp(`git version\\s+${escapeRegExp(gitTestVersion)}`, 'i'),
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
             expect(await isScoopGitInstalled()).toBe(true)
@@ -577,8 +582,8 @@ async function isHomebrewFormulaInstalled(formula: string): Promise<boolean> {
   ])
 }
 
-async function isHomebrewGitInstalled(): Promise<boolean> {
-  return isHomebrewFormulaInstalled('git')
+async function isHomebrewGitInstalled(version?: string): Promise<boolean> {
+  return isHomebrewFormulaInstalled(version ? `git@${version}` : 'git')
 }
 
 async function isScoopPackageInstalled(packageName: string): Promise<boolean> {
@@ -666,9 +671,10 @@ async function hydrateDetectionEnvironment(
 
   if (testCase.name === 'Git Homebrew') {
     try {
+      const gitFormula = params.gitVersion ? `git@${params.gitVersion}` : 'git'
       const { stdout } = await execFileAsync('sh', [
         '-c',
-        'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" --prefix git; fi',
+        `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" --prefix ${gitFormula}; fi`,
       ])
       const prefix = stdout.trim()
       if (prefix.length > 0) {
@@ -679,8 +685,24 @@ async function hydrateDetectionEnvironment(
     }
   }
 
-  if (isMac && (testCase.tool === 'mysql' || testCase.tool === 'redis')) {
-    const formula = testCase.tool
+  if (
+    isMac &&
+    ((testCase.tool === 'mysql' && params.mysqlManager === 'package') ||
+      (testCase.tool === 'redis' && params.redisManager === 'package') ||
+      (testCase.tool === 'maven' && params.mavenManager === 'package'))
+  ) {
+    const formula =
+      testCase.tool === 'mysql'
+        ? params.mysqlVersion
+          ? `mysql@${params.mysqlVersion}`
+          : 'mysql'
+        : testCase.tool === 'redis'
+          ? params.redisVersion
+            ? `redis@${params.redisVersion}`
+            : 'redis'
+          : params.mavenVersion
+            ? `maven@${params.mavenVersion}`
+            : 'maven'
     try {
       const { stdout } = await execFileAsync('sh', [
         '-c',
@@ -741,16 +763,16 @@ function isHomebrewFormulaPath(
   }
 
   const normalizedPath = resolve(candidatePath)
+  const escapedFormula = formula.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const formulaPattern = new RegExp(
+    `/(?:opt/homebrew/opt|usr/local/opt|opt/homebrew/Cellar|usr/local/Cellar|Cellar|Homebrew/Cellar|homebrew/opt|homebrew/Cellar)/${escapedFormula}(?:@\\d+(?:\\.\\d+)+)?(?:/|$)`,
+  )
   return (
     binaries.some(
       (binary) =>
         normalizedPath === `/opt/homebrew/bin/${binary}` ||
         normalizedPath === `/usr/local/bin/${binary}`,
-    ) ||
-    normalizedPath.includes(`/Cellar/${formula}/`) ||
-    normalizedPath.includes(`/Homebrew/Cellar/${formula}/`) ||
-    normalizedPath.includes(`/homebrew/opt/${formula}/`) ||
-    normalizedPath.includes(`/usr/local/opt/${formula}/`)
+    ) || formulaPattern.test(normalizedPath)
   )
 }
 

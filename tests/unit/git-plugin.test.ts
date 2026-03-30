@@ -63,6 +63,7 @@ describe('git env plugin', () => {
   it('returns dry-run result for homebrew mode on darwin', async () => {
     const result = await gitPlugin.install({
       gitManager: 'homebrew',
+      gitVersion: '2.33.0',
       installRootDir: '/tmp/toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -71,13 +72,15 @@ describe('git env plugin', () => {
     expect(result.downloads[0].url).toContain('raw.githubusercontent.com/Homebrew/install')
     expect(result.commands).toHaveLength(1)
     expect(result.commands.join('\n')).toContain('NONINTERACTIVE=1')
-    expect(result.commands.join('\n')).toContain('"$BREW_BIN" install git')
-    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula git')
+    expect(result.commands.join('\n')).toContain('version-install "$GIT_FORMULA"')
+    expect(result.commands.join('\n')).toContain("GIT_FORMULA='git@2.33.0'")
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula git@2.33.0')
   })
 
   it('returns dry-run result for scoop mode on win32', async () => {
     const result = await gitPlugin.install({
       gitManager: 'scoop',
+      gitVersion: '2.49.1',
       installRootDir: 'C:\\toolchain',
       dryRun: true,
       platform: 'win32',
@@ -97,7 +100,7 @@ describe('git env plugin', () => {
     expect(result.commands.join('\n')).not.toContain(
       '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer',
     )
-    expect(result.commands.join('\n')).toContain('& $scoop install git')
+    expect(result.commands.join('\n')).toContain('& $scoop install git@2.49.1.1')
     expect(result.commands.join('\n')).toContain('Scoop git install failed with exit code')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall git')
     expect(result.rollbackCommands?.join('\n')).toContain(
@@ -175,6 +178,7 @@ describe('git env plugin', () => {
 
     const result = await gitPlugin.install({
       gitManager: 'scoop',
+      gitVersion: '2.49.1',
       installRootDir: 'C:\\toolchain',
       downloadCacheDir: 'C:\\download-cache',
       dryRun: false,
@@ -222,6 +226,7 @@ describe('git env plugin', () => {
   it('returns english verify copy in dry-run mode', async () => {
     const installResult = await gitPlugin.install({
       gitManager: 'git',
+      gitVersion: '2.33.0',
       installRootDir: '/tmp/toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -230,6 +235,7 @@ describe('git env plugin', () => {
 
     const verifyResult = await gitPlugin.verify({
       gitManager: 'git',
+      gitVersion: '2.33.0',
       installRootDir: '/tmp/toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -244,6 +250,7 @@ describe('git env plugin', () => {
   it('returns real-run result when dryRun is false', async () => {
     const result = await gitPlugin.install({
       gitManager: 'git',
+      gitVersion: '2.33.0',
       installRootDir: '/tmp/toolchain',
       downloadCacheDir: '/tmp/download-cache',
       dryRun: false,

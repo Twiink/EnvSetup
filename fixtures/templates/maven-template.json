@@ -33,11 +33,7 @@
       "type": "version",
       "editable": true,
       "required": true,
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "dependsOn": {
-        "field": "maven.mavenManager",
-        "equals": "maven"
-      }
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "maven.installRootDir": {
       "type": "path",

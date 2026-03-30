@@ -114,11 +114,11 @@ const cases: Case[] = [
   { tool: 'git', managerKey: 'gitManager', manager: 'homebrew', versionKey: 'gitVersion' },
   { tool: 'git', managerKey: 'gitManager', manager: 'scoop', versionKey: 'gitVersion' },
   { tool: 'mysql', managerKey: 'mysqlManager', manager: 'mysql', versionKey: 'mysqlVersion' },
-  { tool: 'mysql', managerKey: 'mysqlManager', manager: 'package' },
+  { tool: 'mysql', managerKey: 'mysqlManager', manager: 'package', versionKey: 'mysqlVersion' },
   { tool: 'redis', managerKey: 'redisManager', manager: 'redis', versionKey: 'redisVersion' },
-  { tool: 'redis', managerKey: 'redisManager', manager: 'package' },
+  { tool: 'redis', managerKey: 'redisManager', manager: 'package', versionKey: 'redisVersion' },
   { tool: 'maven', managerKey: 'mavenManager', manager: 'maven', versionKey: 'mavenVersion' },
-  { tool: 'maven', managerKey: 'mavenManager', manager: 'package' },
+  { tool: 'maven', managerKey: 'mavenManager', manager: 'package', versionKey: 'mavenVersion' },
 ].filter((c) => {
   if (c.manager === 'homebrew' && process.platform !== 'darwin') return false
   if (c.manager === 'scoop' && process.platform !== 'win32') return false

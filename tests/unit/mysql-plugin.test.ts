@@ -61,19 +61,25 @@ describe('mysql env plugin', () => {
   it('builds a Homebrew package dry-run install plan on darwin', async () => {
     const result = await mysqlEnvPlugin.install({
       mysqlManager: 'package',
+      mysqlVersion: '8.4.8',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
     })
 
-    expect(result.commands.join('\n')).toContain('install mysql')
+    expect(result.version).toBe('8.4.8')
+    expect(result.commands.join('\n')).toContain('version-install "$MYSQL_FORMULA"')
+    expect(result.commands.join('\n')).toContain("MYSQL_FORMULA='mysql@8.4.8'")
     expect(result.commands.join('\n')).not.toContain('mkdir -p')
-    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula mysql')
+    expect(result.rollbackCommands?.join('\n')).toContain('uninstall --formula mysql@8.4.8')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           key: 'PATH',
-          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+          value:
+            process.arch === 'x64'
+              ? '/usr/local/opt/mysql@8.4.8/bin'
+              : '/opt/homebrew/opt/mysql@8.4.8/bin',
         }),
       ]),
     )
@@ -102,12 +108,14 @@ describe('mysql env plugin', () => {
   it('builds a Scoop dry-run install plan on win32', async () => {
     const result = await mysqlEnvPlugin.install({
       mysqlManager: 'package',
+      mysqlVersion: '8.4.8',
       installRootDir: 'C:\\envsetup\\mysql',
       dryRun: true,
       platform: 'win32',
     })
 
-    expect(result.commands.join('\n')).toContain('scoop install mysql')
+    expect(result.version).toBe('8.4.8')
+    expect(result.commands.join('\n')).toContain('scoop install mysql@8.4.8')
     expect(result.commands.join('\n')).not.toContain('New-Item -ItemType Directory -Force')
     expect(result.rollbackCommands?.join('\n')).toContain('scoop uninstall mysql')
     expect(result.envChanges).toEqual(

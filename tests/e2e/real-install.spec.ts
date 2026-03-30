@@ -19,6 +19,10 @@ const isRealRun = process.env.ENVSETUP_REAL_RUN === '1'
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 const execFileAsync = promisify(execFile)
+const gitPackageVersion = isMac ? '2.33.0' : '2.49.1'
+const mysqlPackageVersion = '8.4.8'
+const redisPackageVersion = '7.4.7'
+const mavenPackageVersion = '3.9.11'
 
 async function walkFiles(rootDir: string, maxDepth = 5): Promise<string[]> {
   async function visit(currentDir: string, depth: number, acc: string[]) {
@@ -172,6 +176,15 @@ async function resolveTaskResultPath(
   return undefined
 }
 
+async function resolveTaskParamValue(
+  dataDir: string,
+  paramKey: string,
+): Promise<string | undefined> {
+  const raw = await resolveLatestTaskRecord(dataDir)
+  const value = raw?.params?.[paramKey]
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
 async function resolveTaskSnapshotId(dataDir: string): Promise<string | undefined> {
   const raw = await resolveLatestTaskRecord(dataDir)
   if (typeof raw?.snapshotId === 'string' && raw.snapshotId.length > 0) {
@@ -315,8 +328,8 @@ async function executeRollbackViaApp(page: Page, snapshotId: string, installRoot
   )
 }
 
-async function isHomebrewGitInstalled(): Promise<boolean> {
-  return isHomebrewFormulaInstalled('git')
+async function isHomebrewGitInstalled(version?: string): Promise<boolean> {
+  return isHomebrewFormulaInstalled(version ? `git@${version}` : 'git')
 }
 
 async function isHomebrewFormulaInstalled(formula: string): Promise<boolean> {
@@ -580,12 +593,13 @@ const realRollbackCases: RealRollbackCase[] = [
     templateId: 'maven-template',
     buildOverrides: (installRoot: string) => ({
       'maven.mavenManager': 'package',
+      'maven.mavenVersion': mavenPackageVersion,
       'maven.installRootDir': installRoot,
     }),
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('maven')).toBe(true)
+        expect(await isHomebrewFormulaInstalled(`maven@${mavenPackageVersion}`)).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(true)
@@ -593,7 +607,7 @@ const realRollbackCases: RealRollbackCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled('maven')).toBe(false)
+        expect(await isHomebrewFormulaInstalled(`maven@${mavenPackageVersion}`)).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('maven')).toBe(false)
@@ -620,14 +634,15 @@ const realRollbackCases: RealRollbackCase[] = [
           templateId: 'mysql-template',
           buildOverrides: (installRoot: string) => ({
             'mysql.mysqlManager': 'package',
+            'mysql.mysqlVersion': mysqlPackageVersion,
             'mysql.installRootDir': installRoot,
           }),
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
-            expect(await isHomebrewFormulaInstalled('mysql')).toBe(true)
+            expect(await isHomebrewFormulaInstalled(`mysql@${mysqlPackageVersion}`)).toBe(true)
           },
           verifyRolledBackState: async () => {
-            expect(await isHomebrewFormulaInstalled('mysql')).toBe(false)
+            expect(await isHomebrewFormulaInstalled(`mysql@${mysqlPackageVersion}`)).toBe(false)
           },
         },
         {
@@ -635,14 +650,15 @@ const realRollbackCases: RealRollbackCase[] = [
           templateId: 'redis-template',
           buildOverrides: (installRoot: string) => ({
             'redis.redisManager': 'package',
+            'redis.redisVersion': redisPackageVersion,
             'redis.installRootDir': installRoot,
           }),
           expectInstallRootAfterInstall: false,
           verifyInstalledState: async () => {
-            expect(await isHomebrewFormulaInstalled('redis')).toBe(true)
+            expect(await isHomebrewFormulaInstalled(`redis@${redisPackageVersion}`)).toBe(true)
           },
           verifyRolledBackState: async () => {
-            expect(await isHomebrewFormulaInstalled('redis')).toBe(false)
+            expect(await isHomebrewFormulaInstalled(`redis@${redisPackageVersion}`)).toBe(false)
           },
         },
       ]
@@ -654,13 +670,14 @@ const realRollbackCases: RealRollbackCase[] = [
           templateId: 'git-template',
           buildOverrides: (installRoot: string) => ({
             'git.gitManager': 'homebrew',
+            'git.gitVersion': gitPackageVersion,
             'git.installRootDir': installRoot,
           }),
           verifyInstalledState: async () => {
-            expect(await isHomebrewGitInstalled()).toBe(true)
+            expect(await isHomebrewGitInstalled(gitPackageVersion)).toBe(true)
           },
           verifyRolledBackState: async () => {
-            expect(await isHomebrewGitInstalled()).toBe(false)
+            expect(await isHomebrewGitInstalled(gitPackageVersion)).toBe(false)
           },
         },
       ]
@@ -683,6 +700,7 @@ const realRollbackCases: RealRollbackCase[] = [
           templateId: 'git-template',
           buildOverrides: (installRoot: string) => ({
             'git.gitManager': 'scoop',
+            'git.gitVersion': gitPackageVersion,
             'git.installRootDir': installRoot,
           }),
           verifyInstalledState: async () => {
@@ -697,6 +715,7 @@ const realRollbackCases: RealRollbackCase[] = [
           templateId: 'mysql-template',
           buildOverrides: (installRoot: string) => ({
             'mysql.mysqlManager': 'package',
+            'mysql.mysqlVersion': mysqlPackageVersion,
             'mysql.installRootDir': installRoot,
           }),
           expectInstallRootAfterInstall: false,
@@ -712,6 +731,7 @@ const realRollbackCases: RealRollbackCase[] = [
           templateId: 'redis-template',
           buildOverrides: (installRoot: string) => ({
             'redis.redisManager': 'package',
+            'redis.redisVersion': redisPackageVersion,
             'redis.installRootDir': installRoot,
           }),
           expectInstallRootAfterInstall: false,
@@ -895,8 +915,12 @@ test.describe('real install', () => {
       await runMysqlInstallFlow(page, '使用平台包管理器安装')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      const selectedVersion =
+        (await resolveTaskParamValue(dataDir, 'mysql.mysqlVersion')) ?? mysqlPackageVersion
       expect(
-        await (isMac ? isHomebrewFormulaInstalled('mysql') : isScoopPackageInstalled('mysql')),
+        await (isMac
+          ? isHomebrewFormulaInstalled(`mysql@${selectedVersion}`)
+          : isScoopPackageInstalled('mysql')),
       ).toBe(true)
     } finally {
       await dumpTaskLogs(dataDir)
@@ -936,8 +960,12 @@ test.describe('real install', () => {
       await runRedisInstallFlow(page, '使用平台包管理器安装')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      const selectedVersion =
+        (await resolveTaskParamValue(dataDir, 'redis.redisVersion')) ?? redisPackageVersion
       expect(
-        await (isMac ? isHomebrewFormulaInstalled('redis') : isScoopPackageInstalled('redis')),
+        await (isMac
+          ? isHomebrewFormulaInstalled(`redis@${selectedVersion}`)
+          : isScoopPackageInstalled('redis')),
       ).toBe(true)
     } finally {
       await dumpTaskLogs(dataDir)
@@ -949,11 +977,15 @@ test.describe('real install', () => {
     test.setTimeout(300_000)
     const { app, page, dataDir } = await launchRealRunApp(makeInstallRoot('maven-package'))
     try {
-      await runMavenInstallFlow(page, '使用平台包管理器安装', false)
+      await runMavenInstallFlow(page, '使用平台包管理器安装')
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
+      const selectedVersion =
+        (await resolveTaskParamValue(dataDir, 'maven.mavenVersion')) ?? mavenPackageVersion
       expect(
-        await (isMac ? isHomebrewFormulaInstalled('maven') : isScoopPackageInstalled('maven')),
+        await (isMac
+          ? isHomebrewFormulaInstalled(`maven@${selectedVersion}`)
+          : isScoopPackageInstalled('maven')),
       ).toBe(true)
     } finally {
       await dumpTaskLogs(dataDir)

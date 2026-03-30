@@ -32,11 +32,7 @@
       "type": "version",
       "editable": true,
       "required": true,
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "dependsOn": {
-        "field": "git.gitManager",
-        "equals": "git"
-      }
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "git.installRootDir": {
       "type": "path",

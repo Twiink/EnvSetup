@@ -34,10 +34,6 @@
       "editable": true,
       "required": true,
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "dependsOn": {
-        "field": "redis.redisManager",
-        "equals": "redis"
-      },
       "affects": ["redis-env"]
     },
     "redis.installRootDir": {

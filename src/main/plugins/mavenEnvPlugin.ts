@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import { buildMavenEnvChanges, resolveMavenInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { DEFAULT_MAVEN_VERSIONS } from '../core/mavenVersions'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -47,6 +48,18 @@ function resolveDownloadedArtifactPath(
 function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
   const suffix = detail ? ` ${detail}` : ''
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
+}
+
+function resolveSelectedMavenVersion(input: MavenPluginParams): string {
+  return input.mavenVersion ?? DEFAULT_MAVEN_VERSIONS[0]
+}
+
+function resolveMavenHomebrewFormula(input: MavenPluginParams): string {
+  return `maven@${resolveSelectedMavenVersion(input)}`
+}
+
+function resolveMavenScoopPackage(input: MavenPluginParams): string {
+  return `maven@${resolveSelectedMavenVersion(input)}`
 }
 
 function buildResolveHomebrewCommand(): string {
@@ -227,8 +240,9 @@ function buildDarwinPackageCommands(
     `${input.installRootDir}/homebrew-install.sh`
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
+  const formula = resolveMavenHomebrewFormula(input)
   return [
-    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install maven`,
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; MAVEN_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$MAVEN_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$MAVEN_FORMULA"; fi`,
   ]
 }
 
@@ -261,8 +275,9 @@ function buildWin32PackageCommands(
     `${input.installRootDir}\\install.ps1`
 
   const resolveScoopCmd = buildResolveScoopCommand()
+  const packageToken = resolveMavenScoopPackage(input)
   return [
-    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install maven`,
+    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install ${packageToken}`,
   ]
 }
 
@@ -291,8 +306,9 @@ function buildVerifyCommands(input: MavenPluginParams): string[] {
       ]
     }
 
+    const formula = resolveMavenHomebrewFormula(input)
     return [
-      `${buildResolveHomebrewCommand()}; [ -n "$BREW_BIN" ] || exit 1; MVN_BIN="$("$BREW_BIN" --prefix maven 2>/dev/null)/bin/mvn"; if [ -x "$MVN_BIN" ]; then "$MVN_BIN" -version; else mvn -version; fi`,
+      `${buildResolveHomebrewCommand()}; [ -n "$BREW_BIN" ] || exit 1; MVN_BIN="$("$BREW_BIN" --prefix ${formula} 2>/dev/null)/bin/mvn"; if [ -x "$MVN_BIN" ]; then "$MVN_BIN" -version; else mvn -version; fi`,
     ]
   }
 
@@ -313,8 +329,9 @@ function buildRollbackCommands(input: MavenPluginParams): string[] {
   }
 
   if (input.platform === 'darwin') {
+    const formula = resolveMavenHomebrewFormula(input)
     return [
-      'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions maven >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula maven || true; fi',
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula ${formula} || true; fi`,
     ]
   }
 
@@ -404,7 +421,7 @@ const mavenEnvPlugin = {
 
     const logs = [
       `manager=${params.mavenManager}`,
-      `version=${params.mavenManager === 'maven' ? params.mavenVersion : 'latest'}`,
+      `version=${resolveSelectedMavenVersion(params)}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -438,7 +455,7 @@ const mavenEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.mavenManager === 'maven' ? (params.mavenVersion ?? 'unknown') : 'latest',
+      version: resolveSelectedMavenVersion(params),
       paths: {
         installRootDir: params.installRootDir,
         mavenDir:
@@ -464,7 +481,7 @@ const mavenEnvPlugin = {
         : 'Completed the official-source Maven environment install commands.',
       context: {
         mavenManager: params.mavenManager,
-        ...(params.mavenVersion ? { mavenVersion: params.mavenVersion } : {}),
+        mavenVersion: resolveSelectedMavenVersion(params),
       },
     }
   },

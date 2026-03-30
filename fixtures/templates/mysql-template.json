@@ -34,10 +34,6 @@
       "editable": true,
       "required": true,
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "dependsOn": {
-        "field": "mysql.mysqlManager",
-        "equals": "mysql"
-      },
       "affects": ["mysql-env"]
     },
     "mysql.installRootDir": {

@@ -58,6 +58,36 @@ function resolveScoopShimsDir(platform: AppPlatform): string {
   return platform === 'win32' ? '%USERPROFILE%\\scoop\\shims' : ''
 }
 
+function resolveHomebrewOptDir(): string {
+  return process.arch === 'x64' ? '/usr/local/opt' : '/opt/homebrew/opt'
+}
+
+function resolveHomebrewFormulaBinDir(formula: string): string {
+  return posix.join(resolveHomebrewOptDir(), formula, 'bin')
+}
+
+function resolveGitHomebrewFormula(input: GitPluginParams): string {
+  return input.gitManager === 'homebrew' && input.gitVersion ? `git@${input.gitVersion}` : 'git'
+}
+
+function resolveMysqlHomebrewFormula(input: MysqlPluginParams): string {
+  return input.mysqlManager === 'package' && input.mysqlVersion
+    ? `mysql@${input.mysqlVersion}`
+    : 'mysql'
+}
+
+function resolveRedisHomebrewFormula(input: RedisPluginParams): string {
+  return input.redisManager === 'package' && input.redisVersion
+    ? `redis@${input.redisVersion}`
+    : 'redis'
+}
+
+function resolveMavenHomebrewFormula(input: MavenPluginParams): string {
+  return input.mavenManager === 'package' && input.mavenVersion
+    ? `maven@${input.mavenVersion}`
+    : 'maven'
+}
+
 export function resolveNodeInstallPaths(input: NodePluginParams): NodeInstallPaths {
   const pathApi = getPathApi(input.platform)
   const standaloneNodeDir = pathApi.join(input.installRootDir, `node-v${input.nodeVersion}`)
@@ -195,7 +225,7 @@ export function resolveGitInstallPaths(input: GitPluginParams): GitInstallPaths 
     gitDir,
     gitBinDir:
       input.platform === 'win32' ? pathApi.join(gitDir, 'cmd') : pathApi.join(gitDir, 'bin'),
-    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    homebrewDir: resolveHomebrewFormulaBinDir(resolveGitHomebrewFormula(input)),
     scoopDir: resolveScoopShimsDir(input.platform),
   }
 }
@@ -429,7 +459,7 @@ export function resolveMysqlInstallPaths(input: MysqlPluginParams): MysqlInstall
     installRootDir: input.installRootDir,
     standaloneMysqlDir,
     standaloneMysqlBinDir: pathApi.join(standaloneMysqlDir, 'bin'),
-    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    homebrewDir: resolveHomebrewFormulaBinDir(resolveMysqlHomebrewFormula(input)),
     scoopDir: resolveScoopShimsDir(input.platform),
   }
 }
@@ -491,7 +521,7 @@ export function resolveRedisInstallPaths(input: RedisPluginParams): RedisInstall
     standaloneRedisDir,
     standaloneRedisBinDir:
       input.platform === 'win32' ? standaloneRedisDir : pathApi.join(standaloneRedisDir, 'src'),
-    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    homebrewDir: resolveHomebrewFormulaBinDir(resolveRedisHomebrewFormula(input)),
     scoopDir: resolveScoopShimsDir(input.platform),
   }
 }
@@ -555,7 +585,7 @@ export function resolveMavenInstallPaths(input: MavenPluginParams): MavenInstall
     installRootDir: input.installRootDir,
     standaloneMavenDir,
     standaloneMavenBinDir: pathApi.join(standaloneMavenDir, 'bin'),
-    homebrewDir: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+    homebrewDir: resolveHomebrewFormulaBinDir(resolveMavenHomebrewFormula(input)),
     scoopDir: resolveScoopShimsDir(input.platform),
   }
 }

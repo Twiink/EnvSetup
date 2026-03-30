@@ -239,7 +239,10 @@ describe('buildGitEnvChanges', () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: 'PATH',
-          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+          value:
+            process.arch === 'x64'
+              ? '/usr/local/opt/git@2.47.1/bin'
+              : '/opt/homebrew/opt/git@2.47.1/bin',
         }),
       ]),
     )
@@ -509,6 +512,7 @@ describe('resolveMysqlInstallPaths', () => {
   const darwinMysql = {
     platform: 'darwin' as const,
     mysqlManager: 'package' as const,
+    mysqlVersion: '8.4.8',
     installRootDir: '/tools',
   }
 
@@ -520,7 +524,11 @@ describe('resolveMysqlInstallPaths', () => {
 
   it('uses Homebrew bin directory on darwin', () => {
     const paths = resolveMysqlInstallPaths(darwinMysql)
-    expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
+    expect(paths.homebrewDir).toBe(
+      process.arch === 'x64'
+        ? '/usr/local/opt/mysql@8.4.8/bin'
+        : '/opt/homebrew/opt/mysql@8.4.8/bin',
+    )
   })
 
   it('uses Scoop shims directory on win32', () => {
@@ -533,6 +541,7 @@ describe('buildMysqlEnvChanges', () => {
   const darwinMysql = {
     platform: 'darwin' as const,
     mysqlManager: 'package' as const,
+    mysqlVersion: '8.4.8',
     installRootDir: '/tools',
   }
 
@@ -548,7 +557,10 @@ describe('buildMysqlEnvChanges', () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: 'PATH',
-          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+          value:
+            process.arch === 'x64'
+              ? '/usr/local/opt/mysql@8.4.8/bin'
+              : '/opt/homebrew/opt/mysql@8.4.8/bin',
         }),
       ]),
     )
@@ -572,6 +584,7 @@ describe('resolveRedisInstallPaths', () => {
   const darwinRedis = {
     platform: 'darwin' as const,
     redisManager: 'package' as const,
+    redisVersion: '7.4.7',
     installRootDir: '/tools',
   }
 
@@ -583,7 +596,11 @@ describe('resolveRedisInstallPaths', () => {
 
   it('uses Homebrew bin directory on darwin', () => {
     const paths = resolveRedisInstallPaths(darwinRedis)
-    expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
+    expect(paths.homebrewDir).toBe(
+      process.arch === 'x64'
+        ? '/usr/local/opt/redis@7.4.7/bin'
+        : '/opt/homebrew/opt/redis@7.4.7/bin',
+    )
   })
 
   it('uses Scoop shims directory on win32', () => {
@@ -596,6 +613,7 @@ describe('buildRedisEnvChanges', () => {
   const darwinRedis = {
     platform: 'darwin' as const,
     redisManager: 'package' as const,
+    redisVersion: '7.4.7',
     installRootDir: '/tools',
   }
 
@@ -611,7 +629,10 @@ describe('buildRedisEnvChanges', () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: 'PATH',
-          value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+          value:
+            process.arch === 'x64'
+              ? '/usr/local/opt/redis@7.4.7/bin'
+              : '/opt/homebrew/opt/redis@7.4.7/bin',
         }),
       ]),
     )
@@ -659,9 +680,12 @@ describe('resolveMavenInstallPaths', () => {
     const paths = resolveMavenInstallPaths({
       ...darwinMaven,
       mavenManager: 'package' as const,
-      mavenVersion: undefined,
     })
-    expect(paths.homebrewDir).toBe(process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin')
+    expect(paths.homebrewDir).toBe(
+      process.arch === 'x64'
+        ? '/usr/local/opt/maven@3.9.11/bin'
+        : '/opt/homebrew/opt/maven@3.9.11/bin',
+    )
   })
 })
 
@@ -688,13 +712,15 @@ describe('buildMavenEnvChanges', () => {
     const darwinPackage = {
       ...darwinMaven,
       mavenManager: 'package' as const,
-      mavenVersion: undefined,
     }
     const changes = buildMavenEnvChanges(darwinPackage)
     expect(changes).toEqual([
       expect.objectContaining({
         key: 'PATH',
-        value: process.arch === 'x64' ? '/usr/local/bin' : '/opt/homebrew/bin',
+        value:
+          process.arch === 'x64'
+            ? '/usr/local/opt/maven@3.9.11/bin'
+            : '/opt/homebrew/opt/maven@3.9.11/bin',
       }),
     ])
   })

@@ -59,6 +59,14 @@ function resolveMysqlSeries(version: string): string {
   return version.split('.').slice(0, 2).join('.')
 }
 
+function resolveMysqlHomebrewFormula(input: MysqlPluginParams): string {
+  return `mysql@${resolveSelectedMysqlVersion(input)}`
+}
+
+function resolveMysqlScoopPackage(input: MysqlPluginParams): string {
+  return `mysql@${resolveSelectedMysqlVersion(input)}`
+}
+
 function buildResolveHomebrewCommand(): string {
   return 'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi'
 }
@@ -217,8 +225,9 @@ function buildDarwinPackageCommands(
     `${input.installRootDir}/homebrew-install.sh`
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
+  const formula = resolveMysqlHomebrewFormula(input)
   return [
-    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install mysql`,
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; MYSQL_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$MYSQL_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$MYSQL_FORMULA"; fi`,
   ]
 }
 
@@ -251,8 +260,9 @@ function buildWin32PackageCommands(
     `${input.installRootDir}\\install.ps1`
 
   const resolveScoopCmd = buildResolveScoopCommand()
+  const packageToken = resolveMysqlScoopPackage(input)
   return [
-    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install mysql`,
+    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install ${packageToken}`,
   ]
 }
 
@@ -280,8 +290,9 @@ function buildDarwinVerifyCommands(input: MysqlPluginParams): string[] {
     ]
   }
 
+  const formula = resolveMysqlHomebrewFormula(input)
   return [
-    `${buildResolveHomebrewCommand()}; if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi; MYSQL_BIN="$("$BREW_BIN" --prefix mysql 2>/dev/null)/bin/mysql"; if [ -x "$MYSQL_BIN" ]; then "$MYSQL_BIN" --version; else mysql --version; fi`,
+    `${buildResolveHomebrewCommand()}; if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi; MYSQL_BIN="$("$BREW_BIN" --prefix ${formula} 2>/dev/null)/bin/mysql"; if [ -x "$MYSQL_BIN" ]; then "$MYSQL_BIN" --version; else mysql --version; fi`,
   ]
 }
 
@@ -311,8 +322,9 @@ function buildRollbackCommands(input: MysqlPluginParams): string[] {
   }
 
   if (input.platform === 'darwin') {
+    const formula = resolveMysqlHomebrewFormula(input)
     return [
-      'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions mysql >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula mysql || true; fi',
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula ${formula} || true; fi`,
     ]
   }
 
@@ -402,7 +414,7 @@ const mysqlEnvPlugin = {
 
     const logs = [
       `manager=${params.mysqlManager}`,
-      `version=${params.mysqlManager === 'mysql' ? resolveSelectedMysqlVersion(params) : 'latest'}`,
+      `version=${resolveSelectedMysqlVersion(params)}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -436,7 +448,7 @@ const mysqlEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.mysqlManager === 'mysql' ? resolveSelectedMysqlVersion(params) : 'latest',
+      version: resolveSelectedMysqlVersion(params),
       paths: {
         installRootDir: params.installRootDir,
         mysqlDir: installPaths.standaloneMysqlDir,
@@ -452,8 +464,7 @@ const mysqlEnvPlugin = {
         : 'Completed the official-source MySQL environment install commands.',
       context: {
         mysqlManager: params.mysqlManager,
-        mysqlVersion:
-          params.mysqlManager === 'mysql' ? resolveSelectedMysqlVersion(params) : 'latest',
+        mysqlVersion: resolveSelectedMysqlVersion(params),
       },
     }
   },

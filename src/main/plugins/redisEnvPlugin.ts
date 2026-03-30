@@ -76,6 +76,14 @@ function resolveMemuraiRelease(redisVersion: string) {
   return MEMURAI_LTS_RELEASES[redisVersion as keyof typeof MEMURAI_LTS_RELEASES]
 }
 
+function resolveRedisHomebrewFormula(input: RedisPluginParams): string {
+  return `redis@${resolveSelectedRedisVersion(input)}`
+}
+
+function resolveRedisScoopPackage(input: RedisPluginParams): string {
+  return `redis@${resolveSelectedRedisVersion(input)}`
+}
+
 function buildRedisDirectArchiveUrl(input: RedisPluginParams): string {
   const selectedVersion = resolveSelectedRedisVersion(input)
 
@@ -291,8 +299,9 @@ function buildDarwinPackageCommands(
     `${input.installRootDir}/homebrew-install.sh`
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
+  const formula = resolveRedisHomebrewFormula(input)
   return [
-    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install redis`,
+    `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; REDIS_FORMULA=${quoteShell(formula)}; if ! "$BREW_BIN" list --versions "$REDIS_FORMULA" >/dev/null 2>&1; then HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" version-install "$REDIS_FORMULA"; fi`,
   ]
 }
 
@@ -322,8 +331,9 @@ function buildWin32PackageCommands(
     `${input.installRootDir}\\install.ps1`
 
   const resolveScoopCmd = buildResolveScoopCommand()
+  const packageToken = resolveRedisScoopPackage(input)
   return [
-    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install redis`,
+    `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install ${packageToken}`,
   ]
 }
 
@@ -351,8 +361,9 @@ function buildDarwinVerifyCommands(input: RedisPluginParams): string[] {
     ]
   }
 
+  const formula = resolveRedisHomebrewFormula(input)
   return [
-    `${buildResolveHomebrewCommand()}; if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi; REDIS_BIN="$("$BREW_BIN" --prefix redis 2>/dev/null)/bin/redis-server"; if [ -x "$REDIS_BIN" ]; then "$REDIS_BIN" --version; else redis-server --version; fi`,
+    `${buildResolveHomebrewCommand()}; if [ -z "$BREW_BIN" ]; then echo "Homebrew not found." >&2; exit 1; fi; REDIS_BIN="$("$BREW_BIN" --prefix ${formula} 2>/dev/null)/bin/redis-server"; if [ -x "$REDIS_BIN" ]; then "$REDIS_BIN" --version; else redis-server --version; fi`,
   ]
 }
 
@@ -384,8 +395,9 @@ function buildRollbackCommands(input: RedisPluginParams): string[] {
   }
 
   if (input.platform === 'darwin') {
+    const formula = resolveRedisHomebrewFormula(input)
     return [
-      'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions redis >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula redis || true; fi',
+      `BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi; if [ -n "$BREW_BIN" ]; then "$BREW_BIN" list --versions ${formula} >/dev/null 2>&1 && HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" uninstall --formula ${formula} || true; fi`,
     ]
   }
 
@@ -494,7 +506,7 @@ const redisEnvPlugin = {
 
     const logs = [
       `manager=${params.redisManager}`,
-      `version=${params.redisManager === 'redis' ? resolveSelectedRedisVersion(params) : 'latest'}`,
+      `version=${resolveSelectedRedisVersion(params)}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -528,7 +540,7 @@ const redisEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.redisManager === 'redis' ? resolveSelectedRedisVersion(params) : 'latest',
+      version: resolveSelectedRedisVersion(params),
       paths: {
         installRootDir: params.installRootDir,
         redisDir: installPaths.standaloneRedisDir,
@@ -544,8 +556,7 @@ const redisEnvPlugin = {
         : 'Completed the official-source Redis environment install commands.',
       context: {
         redisManager: params.redisManager,
-        redisVersion:
-          params.redisManager === 'redis' ? resolveSelectedRedisVersion(params) : 'latest',
+        redisVersion: resolveSelectedRedisVersion(params),
         ...(params.platform === 'win32' && params.redisManager === 'redis'
           ? {
               memuraiVersion: resolveMemuraiRelease(resolveSelectedRedisVersion(params))
