@@ -21,6 +21,8 @@ import { listNodeLtsVersions as fetchNodeLtsVersions } from '../core/nodeVersion
 import { listJavaLtsVersions as fetchJavaLtsVersions } from '../core/javaVersions'
 import { listPythonVersions as fetchPythonVersions } from '../core/pythonVersions'
 import { listGitVersions as fetchGitVersions } from '../core/gitVersions'
+import { listMysqlVersions as fetchMysqlVersions } from '../core/mysqlVersions'
+import { listRedisVersions as fetchRedisVersions } from '../core/redisVersions'
 import { listMavenVersions as fetchMavenVersions } from '../core/mavenVersions'
 import { importPluginFromDirectory, importPluginFromZip } from '../core/plugin'
 import { buildRuntimePrecheckInput, runPrecheck } from '../core/precheck'
@@ -140,7 +142,19 @@ async function listPythonVersionsCached(): Promise<string[]> {
 }
 
 async function listGitVersionsCached(): Promise<string[]> {
-  return versionsCache.getOrLoad('git', VERSION_CACHE_TTL_MS, () => fetchGitVersions())
+  return versionsCache.getOrLoad('git', VERSION_CACHE_TTL_MS, () =>
+    fetchGitVersions(process.platform === 'win32' ? 'win32' : 'darwin'),
+  )
+}
+
+async function listMysqlVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('mysql', VERSION_CACHE_TTL_MS, () => fetchMysqlVersions())
+}
+
+async function listRedisVersionsCached(): Promise<string[]> {
+  return versionsCache.getOrLoad('redis', VERSION_CACHE_TTL_MS, () =>
+    fetchRedisVersions(process.platform === 'win32' ? 'win32' : 'darwin'),
+  )
 }
 
 async function listMavenVersionsCached(): Promise<string[]> {
@@ -150,15 +164,25 @@ async function listMavenVersionsCached(): Promise<string[]> {
 async function loadBootstrap(): Promise<BootstrapData> {
   return bootstrapCache.getOrLoad('bootstrap', BOOTSTRAP_CACHE_TTL_MS, async () => {
     // 首屏把模板和版本列表一次性并发拉齐，减少 renderer 多次 IPC 往返。
-    const [templates, nodeLtsVersions, javaLtsVersions, pythonVersions, gitVersions, mavenVersions] =
-      await Promise.all([
-        listTemplates(),
-        listNodeLtsVersionsCached(),
-        listJavaLtsVersionsCached(),
-        listPythonVersionsCached(),
-        listGitVersionsCached(),
-        listMavenVersionsCached(),
-      ])
+    const [
+      templates,
+      nodeLtsVersions,
+      javaLtsVersions,
+      pythonVersions,
+      gitVersions,
+      mysqlVersions,
+      redisVersions,
+      mavenVersions,
+    ] = await Promise.all([
+      listTemplates(),
+      listNodeLtsVersionsCached(),
+      listJavaLtsVersionsCached(),
+      listPythonVersionsCached(),
+      listGitVersionsCached(),
+      listMysqlVersionsCached(),
+      listRedisVersionsCached(),
+      listMavenVersionsCached(),
+    ])
 
     return {
       templates,
@@ -166,6 +190,8 @@ async function loadBootstrap(): Promise<BootstrapData> {
       javaLtsVersions,
       pythonVersions,
       gitVersions,
+      mysqlVersions,
+      redisVersions,
       mavenVersions,
       loadedAt: new Date().toISOString(),
     }
@@ -222,6 +248,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('java:list-lts-versions', async () => listJavaLtsVersionsCached())
   ipcMain.handle('python:list-versions', async () => listPythonVersionsCached())
   ipcMain.handle('git:list-versions', async () => listGitVersionsCached())
+  ipcMain.handle('mysql:list-versions', async () => listMysqlVersionsCached())
+  ipcMain.handle('redis:list-versions', async () => listRedisVersionsCached())
   ipcMain.handle('maven:list-versions', async () => listMavenVersionsCached())
   ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) => {
     const result = await cleanupDetectedEnvironment(detection)

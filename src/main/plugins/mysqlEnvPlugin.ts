@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import { buildMysqlEnvChanges, resolveMysqlInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { DEFAULT_MYSQL_LTS_VERSIONS } from '../core/mysqlVersions'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -21,9 +22,8 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 
 const execFileAsync = promisify(execFile)
 
-const MYSQL_DIRECT_VERSION = '8.4.8'
-const MYSQL_MACOS_ARCHIVE_BASE_URL = 'https://cdn.mysql.com/Downloads/MySQL-8.4'
-const MYSQL_WINDOWS_ARCHIVE_BASE_URL = 'https://dev.mysql.com/get/Downloads/MySQL-8.4'
+const MYSQL_MACOS_ARCHIVE_BASE_URL = 'https://cdn.mysql.com/Downloads'
+const MYSQL_WINDOWS_ARCHIVE_BASE_URL = 'https://dev.mysql.com/get/Downloads'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -51,6 +51,14 @@ function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
 }
 
+function resolveSelectedMysqlVersion(input: MysqlPluginParams): string {
+  return input.mysqlVersion ?? DEFAULT_MYSQL_LTS_VERSIONS[0]
+}
+
+function resolveMysqlSeries(version: string): string {
+  return version.split('.').slice(0, 2).join('.')
+}
+
 function buildResolveHomebrewCommand(): string {
   return 'BREW_BIN="$(command -v brew || true)"; if [ -z "$BREW_BIN" ]; then for CANDIDATE in /opt/homebrew/bin/brew /usr/local/bin/brew; do if [ -x "$CANDIDATE" ]; then BREW_BIN="$CANDIDATE"; break; fi; done; fi'
 }
@@ -60,17 +68,22 @@ function buildResolveScoopCommand(): string {
 }
 
 function buildDirectArchiveFileName(input: MysqlPluginParams): string {
+  const selectedVersion = resolveSelectedMysqlVersion(input)
+
   if (input.platform === 'win32') {
-    return `mysql-${MYSQL_DIRECT_VERSION}-winx64.zip`
+    return `mysql-${selectedVersion}-winx64.zip`
   }
 
   const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64'
-  return `mysql-${MYSQL_DIRECT_VERSION}-macos15-${arch}.tar.gz`
+  return `mysql-${selectedVersion}-macos15-${arch}.tar.gz`
 }
 
 function buildDirectArchiveUrl(input: MysqlPluginParams): string {
+  const mysqlSeries = resolveMysqlSeries(resolveSelectedMysqlVersion(input))
   const baseUrl =
-    input.platform === 'darwin' ? MYSQL_MACOS_ARCHIVE_BASE_URL : MYSQL_WINDOWS_ARCHIVE_BASE_URL
+    input.platform === 'darwin'
+      ? `${MYSQL_MACOS_ARCHIVE_BASE_URL}/MySQL-${mysqlSeries}`
+      : `${MYSQL_WINDOWS_ARCHIVE_BASE_URL}/MySQL-${mysqlSeries}`
 
   return `${baseUrl}/${buildDirectArchiveFileName(input)}`
 }
@@ -161,6 +174,10 @@ function toMysqlParams(input: PluginExecutionInput): MysqlPluginParams {
 
   return {
     mysqlManager: input.mysqlManager,
+    mysqlVersion:
+      typeof input.mysqlVersion === 'string' && input.mysqlVersion.length > 0
+        ? input.mysqlVersion
+        : undefined,
     installRootDir,
     platform: input.platform,
     dryRun: input.dryRun,
@@ -385,7 +402,7 @@ const mysqlEnvPlugin = {
 
     const logs = [
       `manager=${params.mysqlManager}`,
-      `version=${params.mysqlManager === 'mysql' ? MYSQL_DIRECT_VERSION : 'latest'}`,
+      `version=${params.mysqlManager === 'mysql' ? resolveSelectedMysqlVersion(params) : 'latest'}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -419,7 +436,7 @@ const mysqlEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.mysqlManager === 'mysql' ? MYSQL_DIRECT_VERSION : 'latest',
+      version: params.mysqlManager === 'mysql' ? resolveSelectedMysqlVersion(params) : 'latest',
       paths: {
         installRootDir: params.installRootDir,
         mysqlDir: installPaths.standaloneMysqlDir,
@@ -435,7 +452,8 @@ const mysqlEnvPlugin = {
         : 'Completed the official-source MySQL environment install commands.',
       context: {
         mysqlManager: params.mysqlManager,
-        mysqlVersion: params.mysqlManager === 'mysql' ? MYSQL_DIRECT_VERSION : 'latest',
+        mysqlVersion:
+          params.mysqlManager === 'mysql' ? resolveSelectedMysqlVersion(params) : 'latest',
       },
     }
   },

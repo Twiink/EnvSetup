@@ -62,6 +62,16 @@ describe('preload', () => {
     expect(invoke).toHaveBeenCalledWith('maven:list-versions')
   })
 
+  it('maps mysql/redis version listing to IPC invokes', async () => {
+    const api = await getApi()
+
+    api.listMysqlVersions()
+    api.listRedisVersions()
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'mysql:list-versions')
+    expect(invoke).toHaveBeenNthCalledWith(2, 'redis:list-versions')
+  })
+
   it('maps task cancel and cleanup actions to IPC invokes', async () => {
     const api = await getApi()
     const detection = { id: 'node:1', tool: 'node' }

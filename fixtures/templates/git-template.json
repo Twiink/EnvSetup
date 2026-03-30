@@ -18,6 +18,7 @@
   ],
   "defaults": {
     "git.gitManager": "git",
+    "git.gitVersion": "2.51.1",
     "git.installRootDir": "./.envsetup-data/toolchain"
   },
   "overrides": {
@@ -26,6 +27,16 @@
       "editable": true,
       "required": true,
       "enum": ["git", "homebrew", "scoop"]
+    },
+    "git.gitVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "dependsOn": {
+        "field": "git.gitManager",
+        "equals": "git"
+      }
     },
     "git.installRootDir": {
       "type": "path",

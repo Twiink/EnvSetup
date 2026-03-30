@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import { buildRedisEnvChanges, resolveRedisInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
 import { executePlatformCommand, isPermissionError } from '../core/elevation'
+import { DEFAULT_REDIS_MACOS_VERSIONS, DEFAULT_REDIS_WINDOWS_VERSIONS } from '../core/redisVersions'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -22,12 +23,12 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 
 const execFileAsync = promisify(execFile)
 
-const REDIS_DIRECT_VERSION = '7.4.7'
-const REDIS_DIRECT_ARCHIVE_URL = `https://download.redis.io/releases/redis-${REDIS_DIRECT_VERSION}.tar.gz`
-const MEMURAI_WINDOWS_VERSION = '4.2.2'
-const MEMURAI_REDIS_API_VERSION = '7.4.7'
-const MEMURAI_SIGNED_DOWNLOAD_API_URL =
-  'https://www.memurai.com/api/request-download-link?version=windows-redis'
+const MEMURAI_LTS_RELEASES = {
+  '7.4.7': {
+    memuraiVersion: '4.2.2',
+    requestAlias: 'windows-redis',
+  },
+} as const
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -60,6 +61,34 @@ function resolveDownloadedArtifactPath(
 function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
   const suffix = detail ? ` ${detail}` : ''
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
+}
+
+function resolveSelectedRedisVersion(input: RedisPluginParams): string {
+  return (
+    input.redisVersion ??
+    (input.platform === 'win32'
+      ? DEFAULT_REDIS_WINDOWS_VERSIONS[0]
+      : DEFAULT_REDIS_MACOS_VERSIONS[0])
+  )
+}
+
+function resolveMemuraiRelease(redisVersion: string) {
+  return MEMURAI_LTS_RELEASES[redisVersion as keyof typeof MEMURAI_LTS_RELEASES]
+}
+
+function buildRedisDirectArchiveUrl(input: RedisPluginParams): string {
+  const selectedVersion = resolveSelectedRedisVersion(input)
+
+  if (input.platform === 'win32') {
+    const memuraiRelease = resolveMemuraiRelease(selectedVersion)
+    if (!memuraiRelease) {
+      throw new Error(`Unsupported Redis direct version for win32: ${selectedVersion}`)
+    }
+
+    return `https://www.memurai.com/api/request-download-link?version=${memuraiRelease.requestAlias}`
+  }
+
+  return `https://download.redis.io/releases/redis-${selectedVersion}.tar.gz`
 }
 
 function buildResolveHomebrewCommand(): string {
@@ -100,13 +129,15 @@ function buildResolveScoopRedisCommandFunction(): string {
 }
 
 function buildDirectArchiveFileName(input: RedisPluginParams): string {
+  const selectedVersion = resolveSelectedRedisVersion(input)
+
   return input.platform === 'win32'
-    ? `Memurai-for-Redis-v${MEMURAI_WINDOWS_VERSION}.msi`
-    : `redis-${REDIS_DIRECT_VERSION}.tar.gz`
+    ? `Memurai-for-Redis-v${resolveMemuraiRelease(selectedVersion)?.memuraiVersion ?? 'unknown'}.msi`
+    : `redis-${selectedVersion}.tar.gz`
 }
 
-function buildDirectExtractedDirName(): string {
-  return `redis-${REDIS_DIRECT_VERSION}`
+function buildDirectExtractedDirName(input: RedisPluginParams): string {
+  return `redis-${resolveSelectedRedisVersion(input)}`
 }
 
 function buildMemuraiCleanupCommand(installDir?: string): string {
@@ -125,7 +156,7 @@ function buildMemuraiCleanupCommand(installDir?: string): string {
     'foreach ($entry in $entries) {',
     '$command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }',
     'if (-not $command) { continue }',
-    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $uninstallCommand = ('msiexec.exe /quiet /x \"{0}\" /norestart' -f $productCode); & cmd.exe /d /s /c $uninstallCommand; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0 -and $uninstallExitCode -ne 1641 -and $uninstallExitCode -ne 3010) { throw \"Memurai uninstall failed with exit code $($uninstallExitCode).\" } }",
+    'if ($command -match \'\\{[A-Za-z0-9\\-]+\\}\') { $productCode = $matches[0]; $uninstallCommand = (\'msiexec.exe /quiet /x "{0}" /norestart\' -f $productCode); & cmd.exe /d /s /c $uninstallCommand; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0 -and $uninstallExitCode -ne 1641 -and $uninstallExitCode -ne 3010) { throw "Memurai uninstall failed with exit code $($uninstallExitCode)." } }',
     '}',
     removeInstallDir,
   ]
@@ -135,18 +166,19 @@ function buildMemuraiCleanupCommand(installDir?: string): string {
 
 function buildDownloadPlan(input: RedisPluginParams): DownloadArtifact[] {
   if (input.redisManager === 'redis') {
+    const selectedVersion = resolveSelectedRedisVersion(input)
+
     return [
       {
         kind: input.platform === 'win32' ? 'installer' : 'archive',
         tool: 'redis',
-        url:
-          input.platform === 'win32' ? MEMURAI_SIGNED_DOWNLOAD_API_URL : REDIS_DIRECT_ARCHIVE_URL,
+        url: buildRedisDirectArchiveUrl(input),
         official: true,
         fileName: buildDirectArchiveFileName(input),
         note:
           input.platform === 'win32'
-            ? 'Download the Memurai Developer installer for Redis-compatible Windows direct install.'
-            : 'Download the official Redis source archive for direct install.',
+            ? `Download the Memurai Developer installer compatible with Redis ${selectedVersion}.`
+            : `Download the official Redis ${selectedVersion} source archive for direct install.`,
       },
     ]
   }
@@ -216,6 +248,10 @@ function toRedisParams(input: PluginExecutionInput): RedisPluginParams {
 
   return {
     redisManager: input.redisManager,
+    redisVersion:
+      typeof input.redisVersion === 'string' && input.redisVersion.length > 0
+        ? input.redisVersion
+        : undefined,
     installRootDir,
     platform: input.platform,
     dryRun: input.dryRun,
@@ -234,7 +270,7 @@ function buildDarwinDirectCommands(
   const archivePath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'redis') ??
     `${installPaths.installRootDir}/${buildDirectArchiveFileName(input)}`
-  const extractedDir = `${installPaths.installRootDir}/${buildDirectExtractedDirName()}`
+  const extractedDir = `${installPaths.installRootDir}/${buildDirectExtractedDirName(input)}`
 
   return [
     `mkdir -p ${quoteShell(installPaths.installRootDir)}`,
@@ -458,7 +494,7 @@ const redisEnvPlugin = {
 
     const logs = [
       `manager=${params.redisManager}`,
-      `version=${params.redisManager === 'redis' ? (params.platform === 'win32' ? `memurai-${MEMURAI_WINDOWS_VERSION}` : REDIS_DIRECT_VERSION) : 'latest'}`,
+      `version=${params.redisManager === 'redis' ? resolveSelectedRedisVersion(params) : 'latest'}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -492,12 +528,7 @@ const redisEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version:
-        params.redisManager === 'redis'
-          ? params.platform === 'win32'
-            ? `memurai-${MEMURAI_WINDOWS_VERSION}`
-            : REDIS_DIRECT_VERSION
-          : 'latest',
+      version: params.redisManager === 'redis' ? resolveSelectedRedisVersion(params) : 'latest',
       paths: {
         installRootDir: params.installRootDir,
         redisDir: installPaths.standaloneRedisDir,
@@ -514,13 +545,13 @@ const redisEnvPlugin = {
       context: {
         redisManager: params.redisManager,
         redisVersion:
-          params.redisManager === 'redis'
-            ? params.platform === 'win32'
-              ? `memurai-${MEMURAI_WINDOWS_VERSION}`
-              : REDIS_DIRECT_VERSION
-            : 'latest',
+          params.redisManager === 'redis' ? resolveSelectedRedisVersion(params) : 'latest',
         ...(params.platform === 'win32' && params.redisManager === 'redis'
-          ? { redisApiVersion: MEMURAI_REDIS_API_VERSION }
+          ? {
+              memuraiVersion: resolveMemuraiRelease(resolveSelectedRedisVersion(params))
+                ?.memuraiVersion,
+              redisApiVersion: resolveSelectedRedisVersion(params),
+            }
           : {}),
       },
     }

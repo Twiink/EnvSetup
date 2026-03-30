@@ -31,6 +31,7 @@ describe('mysql env plugin', () => {
   it('builds an official direct dry-run install plan on darwin', async () => {
     const result = await mysqlEnvPlugin.install({
       mysqlManager: 'mysql',
+      mysqlVersion: '8.4.7',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -38,12 +39,12 @@ describe('mysql env plugin', () => {
 
     expect(result.status).toBe('installed_unverified')
     expect(result.executionMode).toBe('dry_run')
-    expect(result.version).toBe('8.4.8')
+    expect(result.version).toBe('8.4.7')
     expect(result.downloads).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           tool: 'mysql',
-          url: expect.stringContaining('cdn.mysql.com/Downloads/MySQL-8.4'),
+          url: expect.stringContaining('cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.7'),
         }),
       ]),
     )
@@ -81,11 +82,14 @@ describe('mysql env plugin', () => {
   it('builds a Windows direct dry-run install plan with Expand-Archive', async () => {
     const result = await mysqlEnvPlugin.install({
       mysqlManager: 'mysql',
+      mysqlVersion: '8.4.7',
       installRootDir: 'C:\\envsetup\\mysql',
       dryRun: true,
       platform: 'win32',
     })
 
+    expect(result.version).toBe('8.4.7')
+    expect(result.downloads[0].url).toContain('mysql-8.4.7-winx64.zip')
     expect(result.commands.join('\n')).toContain('Expand-Archive')
     expect(result.commands.join('\n')).toContain('mysql.exe')
     expect(result.envChanges).toEqual(
@@ -116,6 +120,7 @@ describe('mysql env plugin', () => {
   it('returns localized dry-run verify copy in english for direct installs', async () => {
     const installResult = await mysqlEnvPlugin.install({
       mysqlManager: 'mysql',
+      mysqlVersion: '8.4.7',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -124,6 +129,7 @@ describe('mysql env plugin', () => {
 
     const verifyResult = await mysqlEnvPlugin.verify({
       mysqlManager: 'mysql',
+      mysqlVersion: '8.4.7',
       installRootDir: '/tmp/mysql-toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -139,6 +145,7 @@ describe('mysql env plugin', () => {
   it('runs real-run install commands when dryRun is false', async () => {
     const result = await mysqlEnvPlugin.install({
       mysqlManager: 'mysql',
+      mysqlVersion: '8.4.7',
       installRootDir: '/tmp/mysql-toolchain',
       downloadCacheDir: '/tmp/download-cache',
       dryRun: false,

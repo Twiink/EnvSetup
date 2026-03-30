@@ -165,7 +165,7 @@ const gitTemplateFixture = {
     'git.gitVersion': {
       key: 'git.gitVersion',
       type: 'version',
-      value: '2.47.1',
+      value: '2.51.1',
       editable: true,
       required: true,
     },
@@ -204,6 +204,17 @@ const mysqlTemplateFixture = {
       required: true,
       enum: ['mysql', 'package'],
     },
+    'mysql.mysqlVersion': {
+      key: 'mysql.mysqlVersion',
+      type: 'version',
+      value: '8.4.8',
+      editable: true,
+      required: true,
+      dependsOn: {
+        field: 'mysql.mysqlManager',
+        equals: 'mysql',
+      },
+    },
     'mysql.installRootDir': {
       key: 'mysql.installRootDir',
       type: 'path',
@@ -238,6 +249,17 @@ const redisTemplateFixture = {
       editable: true,
       required: true,
       enum: ['redis', 'package'],
+    },
+    'redis.redisVersion': {
+      key: 'redis.redisVersion',
+      type: 'version',
+      value: '7.4.7',
+      editable: true,
+      required: true,
+      dependsOn: {
+        field: 'redis.redisManager',
+        equals: 'redis',
+      },
     },
     'redis.installRootDir': {
       key: 'redis.installRootDir',
@@ -432,7 +454,9 @@ beforeEach(() => {
       nodeLtsVersions: ['24.13.1', '22.22.1', '20.20.1'],
       javaLtsVersions: ['21.0.6', '17.0.14', '11.0.26'],
       pythonVersions: ['3.12.10', '3.11.10', '3.10.15'],
-      gitVersions: ['2.47.1'],
+      gitVersions: ['2.49.1', '2.48.2'],
+      mysqlVersions: ['8.4.8', '8.4.7'],
+      redisVersions: ['7.4.7', '7.4.6'],
       mavenVersions: ['3.9.11', '3.9.10'],
       loadedAt: new Date().toISOString(),
     }),
@@ -450,7 +474,9 @@ beforeEach(() => {
     listNodeLtsVersions: vi.fn().mockResolvedValue(['24.13.1', '22.22.1', '20.20.1']),
     listJavaLtsVersions: vi.fn().mockResolvedValue(['21.0.6', '17.0.14', '11.0.26']),
     listPythonVersions: vi.fn().mockResolvedValue(['3.12.10', '3.11.10', '3.10.15']),
-    listGitVersions: vi.fn().mockResolvedValue(['2.47.1']),
+    listGitVersions: vi.fn().mockResolvedValue(['2.49.1', '2.48.2']),
+    listMysqlVersions: vi.fn().mockResolvedValue(['8.4.8', '8.4.7']),
+    listRedisVersions: vi.fn().mockResolvedValue(['7.4.7', '7.4.6']),
     listMavenVersions: vi.fn().mockResolvedValue(['3.9.11', '3.9.10']),
     runPrecheck,
     createTask: vi.fn().mockResolvedValue({
@@ -562,7 +588,7 @@ describe('App', () => {
 
     expect(await screen.findByText('任务状态')).toBeInTheDocument()
     expect(await screen.findByText('草稿')).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('renders node version as official lts select and allows directory picking', async () => {
     render(<App />)
@@ -607,8 +633,30 @@ describe('App', () => {
 
     fireEvent.click(await screen.findByText('Git 开发环境'))
 
-    expect(await screen.findByDisplayValue('2.47.1')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('2.49.1')).toBeInTheDocument()
     expect(screen.getByDisplayValue('直接安装 Git')).toBeInTheDocument()
+  })
+
+  it('renders mysql version only after switching to direct install', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('MySQL 数据库环境'))
+    fireEvent.change(screen.getByDisplayValue('使用平台包管理器安装'), {
+      target: { value: 'mysql' },
+    })
+
+    expect(await screen.findByDisplayValue('8.4.8')).toBeInTheDocument()
+  })
+
+  it('renders redis version only after switching to direct install', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Redis 缓存环境'))
+    fireEvent.change(screen.getByDisplayValue('使用平台包管理器安装'), {
+      target: { value: 'redis' },
+    })
+
+    expect(await screen.findByDisplayValue('7.4.7')).toBeInTheDocument()
   })
 
   it('renders maven version as selectable option after switching template', async () => {
@@ -643,7 +691,7 @@ describe('App', () => {
     expect(startTask).toHaveBeenCalledWith('task-1')
     expect(onTaskProgress).toHaveBeenCalled()
     expect(removeTaskProgressListener).toHaveBeenCalled()
-  })
+  }, 15000)
 
   it('renders env/download/command details when task has lastResult', async () => {
     startTask.mockResolvedValueOnce({

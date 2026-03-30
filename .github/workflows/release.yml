@@ -11,13 +11,121 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
-        tool: [node, java, python, git, mysql, redis, maven]
+        include:
+          - os: macos-latest
+            tool: node
+            tool_version: 24.13.1
+            version_id: 24-13-1
+          - os: macos-latest
+            tool: node
+            tool_version: 22.22.1
+            version_id: 22-22-1
+          - os: macos-latest
+            tool: java
+            tool_version: 21.0.6+7
+            version_id: 21-0-6-7
+          - os: macos-latest
+            tool: java
+            tool_version: 17.0.14+7
+            version_id: 17-0-14-7
+          - os: macos-latest
+            tool: python
+            tool_version: 3.13.4
+            version_id: 3-13-4
+          - os: macos-latest
+            tool: python
+            tool_version: 3.12.10
+            version_id: 3-12-10
+          - os: macos-latest
+            tool: git
+            tool_version: 2.33.0
+            version_id: 2-33-0
+          - os: macos-latest
+            tool: git
+            tool_version: 2.32.0
+            version_id: 2-32-0
+          - os: macos-latest
+            tool: mysql
+            tool_version: 8.4.8
+            version_id: 8-4-8
+          - os: macos-latest
+            tool: mysql
+            tool_version: 8.4.7
+            version_id: 8-4-7
+          - os: macos-latest
+            tool: redis
+            tool_version: 7.4.7
+            version_id: 7-4-7
+          - os: macos-latest
+            tool: redis
+            tool_version: 7.4.6
+            version_id: 7-4-6
+          - os: macos-latest
+            tool: maven
+            tool_version: 3.9.11
+            version_id: 3-9-11
+          - os: macos-latest
+            tool: maven
+            tool_version: 3.9.10
+            version_id: 3-9-10
+          - os: windows-latest
+            tool: node
+            tool_version: 24.13.1
+            version_id: 24-13-1
+          - os: windows-latest
+            tool: node
+            tool_version: 22.22.1
+            version_id: 22-22-1
+          - os: windows-latest
+            tool: java
+            tool_version: 21.0.6+7
+            version_id: 21-0-6-7
+          - os: windows-latest
+            tool: java
+            tool_version: 17.0.14+7
+            version_id: 17-0-14-7
+          - os: windows-latest
+            tool: python
+            tool_version: 3.13.4
+            version_id: 3-13-4
+          - os: windows-latest
+            tool: python
+            tool_version: 3.12.10
+            version_id: 3-12-10
+          - os: windows-latest
+            tool: git
+            tool_version: 2.49.1
+            version_id: 2-49-1
+          - os: windows-latest
+            tool: git
+            tool_version: 2.48.2
+            version_id: 2-48-2
+          - os: windows-latest
+            tool: mysql
+            tool_version: 8.4.8
+            version_id: 8-4-8
+          - os: windows-latest
+            tool: mysql
+            tool_version: 8.4.7
+            version_id: 8-4-7
+          # Windows Redis 直装当前仅能从官方 Memurai LTS 页面拿到 7.4.7 对应安装器。
+          - os: windows-latest
+            tool: redis
+            tool_version: 7.4.7
+            version_id: 7-4-7
+          - os: windows-latest
+            tool: maven
+            tool_version: 3.9.11
+            version_id: 3-9-11
+          - os: windows-latest
+            tool: maven
+            tool_version: 3.9.10
+            version_id: 3-9-10
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     env:
-      ENVSETUP_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/downloads/${{ matrix.os }}-${{ matrix.tool }}
-      ENVSETUP_EXTRACTED_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/extracted/${{ matrix.os }}-${{ matrix.tool }}
+      ENVSETUP_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/downloads/${{ matrix.os }}-${{ matrix.tool }}-${{ matrix.version_id }}
+      ENVSETUP_EXTRACTED_CACHE_DIR: ${{ github.workspace }}/.envsetup-cache/extracted/${{ matrix.os }}-${{ matrix.tool }}-${{ matrix.version_id }}
     steps:
       - uses: actions/checkout@v6
 
@@ -32,8 +140,9 @@ jobs:
           path: |
             ${{ env.ENVSETUP_DOWNLOAD_CACHE_DIR }}
             ${{ env.ENVSETUP_EXTRACTED_CACHE_DIR }}
-          key: envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'src/main/plugins/mysqlEnvPlugin.ts', 'src/main/plugins/redisEnvPlugin.ts', 'src/main/plugins/mavenEnvPlugin.ts', 'tests/integration/action-real-cycle-matrix.test.ts', '.github/workflows/release.yml') }}
+          key: envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-${{ matrix.version_id }}-${{ hashFiles('package-lock.json', 'src/main/core/download.ts', 'src/main/core/archiveCache.ts', 'src/main/core/gitVersions.ts', 'src/main/core/mysqlVersions.ts', 'src/main/core/redisVersions.ts', 'src/main/plugins/nodeEnvPlugin.ts', 'src/main/plugins/javaEnvPlugin.ts', 'src/main/plugins/pythonEnvPlugin.ts', 'src/main/plugins/gitEnvPlugin.ts', 'src/main/plugins/mysqlEnvPlugin.ts', 'src/main/plugins/redisEnvPlugin.ts', 'src/main/plugins/mavenEnvPlugin.ts', 'tests/integration/action-real-cycle-matrix.test.ts', 'tests/integration/action-real-rollback-matrix.test.ts', '.github/workflows/release.yml') }}
           restore-keys: |
+            envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-${{ matrix.version_id }}-
             envsetup-artifacts-${{ matrix.os }}-${{ matrix.tool }}-
             envsetup-artifacts-${{ matrix.os }}-
 
@@ -43,6 +152,7 @@ jobs:
         env:
           ENVSETUP_REAL_RUN: '1'
           ENVSETUP_CI_TOOL: ${{ matrix.tool }}
+          ENVSETUP_CI_VERSION: ${{ matrix.tool_version }}
         run: npm run test:integration:real -- --reporter=verbose
         timeout-minutes: 80
 

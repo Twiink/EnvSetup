@@ -573,7 +573,7 @@ function buildMemuraiRedisCleanupCommand(installDir?: string): string {
     'foreach ($entry in $entries) {',
     '$command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }',
     'if (-not $command) { continue }',
-    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $uninstallCommand = ('msiexec.exe /quiet /x \"{0}\" /norestart' -f $productCode); & cmd.exe /d /s /c $uninstallCommand; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0 -and $uninstallExitCode -ne 1641 -and $uninstallExitCode -ne 3010) { throw \"Memurai uninstall failed with exit code $($uninstallExitCode).\" } }",
+    'if ($command -match \'\\{[A-Za-z0-9\\-]+\\}\') { $productCode = $matches[0]; $uninstallCommand = (\'msiexec.exe /quiet /x "{0}" /norestart\' -f $productCode); & cmd.exe /d /s /c $uninstallCommand; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0 -and $uninstallExitCode -ne 1641 -and $uninstallExitCode -ne 3010) { throw "Memurai uninstall failed with exit code $($uninstallExitCode)." } }',
     '}',
     removeInstallDir,
   ]

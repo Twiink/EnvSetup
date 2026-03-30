@@ -14,6 +14,10 @@
       "values": ["mysql", "package"],
       "required": true
     },
+    "mysqlVersion": {
+      "type": "version",
+      "required": false
+    },
     "installRootDir": {
       "type": "path",
       "required": true

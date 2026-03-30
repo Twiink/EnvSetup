@@ -79,6 +79,14 @@ async function createAndStartTask(
         values['git.gitVersion'] = bootstrap.gitVersions[0]
       }
 
+      if ('mysql.mysqlVersion' in values && bootstrap.mysqlVersions[0]) {
+        values['mysql.mysqlVersion'] = bootstrap.mysqlVersions[0]
+      }
+
+      if ('redis.redisVersion' in values && bootstrap.redisVersions[0]) {
+        values['redis.redisVersion'] = bootstrap.redisVersions[0]
+      }
+
       if ('maven.mavenVersion' in values && bootstrap.mavenVersions[0]) {
         values['maven.mavenVersion'] = bootstrap.mavenVersions[0]
       }
@@ -142,6 +150,7 @@ async function selectPythonTemplate(page: Page) {
 async function selectGitTemplate(page: Page) {
   await expect(page.getByRole('button', { name: 'Git 版本控制' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Git 版本控制' }).click()
+  await page.locator('select[id="git.gitVersion"]').selectOption({ index: 0 })
 }
 
 async function selectMysqlTemplate(page: Page) {

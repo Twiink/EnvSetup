@@ -18,6 +18,7 @@
   ],
   "defaults": {
     "redis.redisManager": "package",
+    "redis.redisVersion": "7.4.7",
     "redis.installRootDir": "./.envsetup-data/toolchain"
   },
   "overrides": {
@@ -26,6 +27,17 @@
       "editable": true,
       "required": true,
       "enum": ["redis", "package"],
+      "affects": ["redis-env"]
+    },
+    "redis.redisVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "dependsOn": {
+        "field": "redis.redisManager",
+        "equals": "redis"
+      },
       "affects": ["redis-env"]
     },
     "redis.installRootDir": {

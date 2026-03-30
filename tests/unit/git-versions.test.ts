@@ -5,45 +5,73 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  DEFAULT_GIT_VERSIONS,
-  fetchOfficialGitVersion,
+  DEFAULT_GIT_MACOS_VERSIONS,
+  DEFAULT_GIT_WINDOWS_VERSIONS,
+  fetchOfficialGitVersions,
   listGitVersions,
   normalizeGitVersion,
+  normalizeGitVersions,
 } from '../../src/main/core/gitVersions'
 
 describe('gitVersions', () => {
-  it('normalizes v-prefixed version strings', () => {
-    expect(normalizeGitVersion('v2.47.1')).toBe('2.47.1')
+  it('normalizes Git for Windows release tags', () => {
+    expect(normalizeGitVersion('v2.48.2.windows.1')).toBe('2.48.2')
   })
 
   it('returns undefined for invalid version strings', () => {
     expect(normalizeGitVersion('latest')).toBeUndefined()
   })
 
-  it('fetches official git version from GitHub release payload', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ tag_name: 'v2.48.0' }),
-    })
+  it('normalizes and sorts release payloads', () => {
+    const versions = normalizeGitVersions([
+      { tag_name: 'v2.48.2.windows.1' },
+      { tag_name: 'v2.49.1.windows.1' },
+      { tag_name: 'v2.49.1.windows.2' },
+      { tag_name: 'v2.50.0-rc0.windows.1', prerelease: true },
+      { tag_name: 'invalid' },
+    ])
 
-    await expect(fetchOfficialGitVersion(fetchImpl as typeof fetch)).resolves.toBe('2.48.0')
+    expect(versions).toEqual(['2.49.1', '2.48.2'])
   })
 
-  it('falls back to default versions when fetch fails', async () => {
-    const fetchImpl = vi.fn().mockRejectedValue(new Error('network error'))
+  it('fetches official Git for Windows versions from GitHub release payload', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { tag_name: 'v2.49.1.windows.1' },
+        { tag_name: 'v2.48.2.windows.1' },
+        { tag_name: 'v2.49.1.windows.2' },
+      ],
+    })
 
-    await expect(listGitVersions(fetchImpl as typeof fetch)).resolves.toEqual([
-      ...DEFAULT_GIT_VERSIONS,
+    await expect(fetchOfficialGitVersions(fetchImpl as typeof fetch)).resolves.toEqual([
+      '2.49.1',
+      '2.48.2',
     ])
   })
 
-  it('listGitVersions returns version from API on success', async () => {
+  it('falls back to default Windows versions when fetch fails on win32', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error('network error'))
+
+    await expect(listGitVersions('win32', fetchImpl as typeof fetch)).resolves.toEqual([
+      ...DEFAULT_GIT_WINDOWS_VERSIONS,
+    ])
+  })
+
+  it('returns curated macOS installer versions on darwin', async () => {
+    await expect(listGitVersions('darwin')).resolves.toEqual([...DEFAULT_GIT_MACOS_VERSIONS])
+  })
+
+  it('listGitVersions returns release list from API on win32 success', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ tag_name: 'v2.48.0' }),
+      json: async () => [{ tag_name: 'v2.49.1.windows.1' }, { tag_name: 'v2.48.2.windows.1' }],
     })
 
-    await expect(listGitVersions(fetchImpl as typeof fetch)).resolves.toEqual(['2.48.0'])
+    await expect(listGitVersions('win32', fetchImpl as typeof fetch)).resolves.toEqual([
+      '2.49.1',
+      '2.48.2',
+    ])
   })
 
   it('normalizeGitVersion handles non-string input', () => {
@@ -51,14 +79,14 @@ describe('gitVersions', () => {
     expect(normalizeGitVersion(123)).toBeUndefined()
   })
 
-  it('fetchOfficialGitVersion throws on non-ok response', async () => {
+  it('fetchOfficialGitVersions throws on non-ok response', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: false,
       status: 404,
     })
 
-    await expect(fetchOfficialGitVersion(fetchImpl as typeof fetch)).rejects.toThrow(
-      'Failed to load Git release',
+    await expect(fetchOfficialGitVersions(fetchImpl as typeof fetch)).rejects.toThrow(
+      'Failed to load Git releases',
     )
   })
 })

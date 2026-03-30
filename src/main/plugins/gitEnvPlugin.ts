@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import { buildGitEnvChanges, resolveGitInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { DEFAULT_GIT_MACOS_VERSIONS, DEFAULT_GIT_WINDOWS_VERSIONS } from '../core/gitVersions'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -21,9 +22,7 @@ import { DEFAULT_LOCALE } from '../../shared/locale'
 
 const execFileAsync = promisify(execFile)
 
-const GIT_MACOS_DMG_URL = 'https://sourceforge.net/projects/git-osx-installer/files/latest/download'
-const GIT_FOR_WINDOWS_VERSION = '2.47.1'
-const GIT_FOR_WINDOWS_ARCHIVE_URL = `https://github.com/git-for-windows/git/releases/download/v${GIT_FOR_WINDOWS_VERSION}.windows.1/Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.tar.bz2`
+const GIT_MACOS_INSTALLER_BASE_URL = 'https://sourceforge.net/projects/git-osx-installer/files'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
 const SCOOP_INSTALL_URL = 'https://get.scoop.sh'
 
@@ -49,6 +48,30 @@ function resolveDownloadedArtifactPath(
 function appendPhaseLog(logs: string[], phase: string, startedAt: number, detail?: string): void {
   const suffix = detail ? ` ${detail}` : ''
   logs.push(`phase=${phase} durationMs=${Date.now() - startedAt}${suffix}`)
+}
+
+function resolveDefaultGitVersion(platform: GitPluginParams['platform']): string {
+  return platform === 'win32' ? DEFAULT_GIT_WINDOWS_VERSIONS[0] : DEFAULT_GIT_MACOS_VERSIONS[0]
+}
+
+function resolveSelectedGitVersion(input: GitPluginParams): string {
+  return input.gitVersion ?? resolveDefaultGitVersion(input.platform)
+}
+
+function buildGitMacosDmgFileName(version: string): string {
+  return `git-${version}-intel-universal-mavericks.dmg`
+}
+
+function buildGitMacosDmgUrl(version: string): string {
+  return `${GIT_MACOS_INSTALLER_BASE_URL}/${buildGitMacosDmgFileName(version)}/download`
+}
+
+function buildGitForWindowsArchiveFileName(version: string): string {
+  return `Git-${version}-64-bit.tar.bz2`
+}
+
+function buildGitForWindowsArchiveUrl(version: string): string {
+  return `https://github.com/git-for-windows/git/releases/download/v${version}.windows.1/${buildGitForWindowsArchiveFileName(version)}`
 }
 
 function buildResolveHomebrewCommand(): string {
@@ -154,15 +177,17 @@ function buildVerifyScoopGitCommand(): string {
 
 function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
   if (input.gitManager === 'git') {
+    const selectedVersion = resolveSelectedGitVersion(input)
+
     if (input.platform === 'darwin') {
       return [
         {
           kind: 'installer',
           tool: 'git',
-          url: GIT_MACOS_DMG_URL,
+          url: buildGitMacosDmgUrl(selectedVersion),
           official: true,
-          fileName: 'git-macos-installer.dmg',
-          note: 'Download the official Git macOS installer DMG.',
+          fileName: buildGitMacosDmgFileName(selectedVersion),
+          note: 'Download the official Git macOS installer DMG for the selected version.',
         },
       ]
     }
@@ -171,10 +196,10 @@ function buildDownloadPlan(input: GitPluginParams): DownloadArtifact[] {
       {
         kind: 'archive',
         tool: 'git-for-windows',
-        url: GIT_FOR_WINDOWS_ARCHIVE_URL,
+        url: buildGitForWindowsArchiveUrl(selectedVersion),
         official: true,
-        fileName: `Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.tar.bz2`,
-        note: 'Download the official Git for Windows tarball for non-interactive extraction.',
+        fileName: buildGitForWindowsArchiveFileName(selectedVersion),
+        note: 'Download the official Git for Windows tarball for the selected version.',
       },
     ]
   }
@@ -289,15 +314,18 @@ function buildDarwinDirectCommands(
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
   const paths = resolveGitInstallPaths(input)
+  const selectedVersion = resolveSelectedGitVersion(input)
   const dmgPath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'git') ??
-    `${paths.installRootDir}/git-installer.dmg`
+    `${paths.installRootDir}/${buildGitMacosDmgFileName(selectedVersion)}`
   const mountPoint = `${paths.installRootDir}/git-installer-mount`
 
   const commands = [`mkdir -p ${quoteShell(paths.installRootDir)}`]
 
   if (!resolvedDownloads) {
-    commands.push(`curl -fL ${quoteShell(GIT_MACOS_DMG_URL)} -o ${quoteShell(dmgPath)}`)
+    commands.push(
+      `curl -fL ${quoteShell(buildGitMacosDmgUrl(selectedVersion))} -o ${quoteShell(dmgPath)}`,
+    )
   }
 
   commands.push(
@@ -328,9 +356,10 @@ function buildWindowsDirectCommands(
   resolvedDownloads?: DownloadResolvedArtifact[],
 ): string[] {
   const paths = resolveGitInstallPaths(input)
+  const selectedVersion = resolveSelectedGitVersion(input)
   const archivePath =
     resolveDownloadedArtifactPath(resolvedDownloads, 'git-for-windows') ??
-    `${paths.installRootDir}\\Git-${GIT_FOR_WINDOWS_VERSION}-64-bit.tar.bz2`
+    `${paths.installRootDir}\\${buildGitForWindowsArchiveFileName(selectedVersion)}`
 
   const commands = [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(paths.installRootDir)} | Out-Null`,
@@ -338,7 +367,7 @@ function buildWindowsDirectCommands(
 
   if (!resolvedDownloads) {
     commands.push(
-      `Invoke-WebRequest -Uri ${quotePowerShell(GIT_FOR_WINDOWS_ARCHIVE_URL)} -OutFile ${quotePowerShell(archivePath)}`,
+      `Invoke-WebRequest -Uri ${quotePowerShell(buildGitForWindowsArchiveUrl(selectedVersion))} -OutFile ${quotePowerShell(archivePath)}`,
     )
   }
 
@@ -587,7 +616,7 @@ const gitEnvPlugin = {
 
     const logs = [
       `manager=${params.gitManager}`,
-      `version=${params.gitVersion ?? 'latest'}`,
+      `version=${params.gitManager === 'git' ? resolveSelectedGitVersion(params) : 'latest'}`,
       `installRoot=${params.installRootDir}`,
       `mode=${params.dryRun ? 'dry-run' : 'real-run'}`,
     ]
@@ -639,7 +668,7 @@ const gitEnvPlugin = {
     return {
       status: 'installed_unverified',
       executionMode: params.dryRun ? 'dry_run' : 'real_run',
-      version: params.gitVersion ?? GIT_FOR_WINDOWS_VERSION,
+      version: params.gitManager === 'git' ? resolveSelectedGitVersion(params) : 'latest',
       paths: {
         installRootDir: params.installRootDir,
         gitDir: paths.gitDir,
@@ -655,7 +684,7 @@ const gitEnvPlugin = {
         : 'Completed the official-source Git environment install commands.',
       context: {
         gitManager: params.gitManager,
-        gitVersion: params.gitVersion ?? GIT_FOR_WINDOWS_VERSION,
+        gitVersion: params.gitManager === 'git' ? resolveSelectedGitVersion(params) : 'latest',
         ...(preExistingScoopRoot ? { preExistingScoopRoot } : {}),
       },
     }

@@ -269,6 +269,14 @@ async function createAndStartTask(
         values['git.gitVersion'] = bootstrap.gitVersions[0]
       }
 
+      if ('mysql.mysqlVersion' in values && bootstrap.mysqlVersions[0]) {
+        values['mysql.mysqlVersion'] = bootstrap.mysqlVersions[0]
+      }
+
+      if ('redis.redisVersion' in values && bootstrap.redisVersions[0]) {
+        values['redis.redisVersion'] = bootstrap.redisVersions[0]
+      }
+
       if ('maven.mavenVersion' in values && bootstrap.mavenVersions[0]) {
         values['maven.mavenVersion'] = bootstrap.mavenVersions[0]
       }
@@ -393,6 +401,10 @@ async function runGitInstallFlow(page: Page, managerLabel: string) {
   await expect(page.getByRole('button', { name: 'Git 版本控制' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Git 版本控制' }).click()
   await page.locator('select[id="git.gitManager"]').selectOption({ label: managerLabel })
+  const gitVersionSelect = page.locator('select[id="git.gitVersion"]')
+  if (await gitVersionSelect.isVisible().catch(() => false)) {
+    await gitVersionSelect.selectOption({ index: 0 })
+  }
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
@@ -411,6 +423,10 @@ async function runMysqlInstallFlow(page: Page, managerLabel?: string) {
   if (managerLabel) {
     await page.locator('select[id="mysql.mysqlManager"]').selectOption({ label: managerLabel })
   }
+  const mysqlVersionSelect = page.locator('select[id="mysql.mysqlVersion"]')
+  if (await mysqlVersionSelect.isVisible().catch(() => false)) {
+    await mysqlVersionSelect.selectOption({ index: 0 })
+  }
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: '创建任务' }).click()
@@ -428,6 +444,10 @@ async function runRedisInstallFlow(page: Page, managerLabel?: string) {
   await page.getByRole('button', { name: 'Redis 缓存环境' }).click()
   if (managerLabel) {
     await page.locator('select[id="redis.redisManager"]').selectOption({ label: managerLabel })
+  }
+  const redisVersionSelect = page.locator('select[id="redis.redisVersion"]')
+  if (await redisVersionSelect.isVisible().catch(() => false)) {
+    await redisVersionSelect.selectOption({ index: 0 })
   }
   await page.getByRole('button', { name: '运行预检' }).click()
   await expect(page.getByText(/通过|警告|阻塞/).first()).toBeVisible({ timeout: 30_000 })

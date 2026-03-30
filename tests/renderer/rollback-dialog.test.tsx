@@ -61,17 +61,13 @@ describe('RollbackDialog', () => {
     expect(screen.getByText('No rollback snapshots available.')).toBeInTheDocument()
   })
 
-  it(
-    'renders suggestion list with radio buttons',
-    () => {
-      render(<RollbackDialog suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />)
+  it('renders suggestion list with radio buttons', () => {
+    render(<RollbackDialog suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />)
 
-      expect(screen.getByText('Before install')).toBeInTheDocument()
-      expect(screen.getByText('Manual backup')).toBeInTheDocument()
-      expect(screen.getAllByRole('radio')).toHaveLength(2)
-    },
-    15_000,
-  )
+    expect(screen.getByText('Before install')).toBeInTheDocument()
+    expect(screen.getByText('Manual backup')).toBeInTheDocument()
+    expect(screen.getAllByRole('radio')).toHaveLength(2)
+  }, 15_000)
 
   it('first suggestion is pre-selected', () => {
     render(<RollbackDialog suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />)

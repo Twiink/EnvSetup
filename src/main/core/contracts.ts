@@ -340,12 +340,14 @@ export type GitPluginParams = PluginExecutionInput & {
 
 export type MysqlPluginParams = PluginExecutionInput & {
   mysqlManager: 'mysql' | 'package'
+  mysqlVersion?: string
   installRootDir: string
   downloadCacheDir?: string
 }
 
 export type RedisPluginParams = PluginExecutionInput & {
   redisManager: 'redis' | 'package'
+  redisVersion?: string
   installRootDir: string
   downloadCacheDir?: string
 }
@@ -567,6 +569,8 @@ export type BootstrapData = {
   javaLtsVersions: string[]
   pythonVersions: string[]
   gitVersions: string[]
+  mysqlVersions: string[]
+  redisVersions: string[]
   mavenVersions: string[]
   loadedAt: string
 }
@@ -585,6 +589,8 @@ export type EnvSetupApi = {
   listJavaLtsVersions: () => Promise<string[]>
   listPythonVersions: () => Promise<string[]>
   listGitVersions: () => Promise<string[]>
+  listMysqlVersions: () => Promise<string[]>
+  listRedisVersions: () => Promise<string[]>
   listMavenVersions: () => Promise<string[]>
   runPrecheck: (payload: {
     templateId: string

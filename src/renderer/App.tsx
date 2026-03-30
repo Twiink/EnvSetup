@@ -26,6 +26,8 @@ function buildInitialValues(
   javaLtsVersions: string[],
   pythonVersions: string[],
   gitVersions: string[],
+  mysqlVersions: string[],
+  redisVersions: string[],
   mavenVersions: string[],
 ): Record<string, Primitive> {
   // 先使用模板默认值，再用当前可用版本列表纠正已经失效的默认版本。
@@ -35,6 +37,7 @@ function buildInitialValues(
 
   const templateNodeVersion = values['node.nodeVersion']
   if (
+    'node.nodeVersion' in values &&
     nodeLtsVersions.length > 0 &&
     (typeof templateNodeVersion !== 'string' || !nodeLtsVersions.includes(templateNodeVersion))
   ) {
@@ -43,6 +46,7 @@ function buildInitialValues(
 
   const templateJavaVersion = values['java.javaVersion']
   if (
+    'java.javaVersion' in values &&
     javaLtsVersions.length > 0 &&
     (typeof templateJavaVersion !== 'string' || !javaLtsVersions.includes(templateJavaVersion))
   ) {
@@ -51,6 +55,7 @@ function buildInitialValues(
 
   const templatePythonVersion = values['python.pythonVersion']
   if (
+    'python.pythonVersion' in values &&
     pythonVersions.length > 0 &&
     (typeof templatePythonVersion !== 'string' || !pythonVersions.includes(templatePythonVersion))
   ) {
@@ -59,14 +64,34 @@ function buildInitialValues(
 
   const templateGitVersion = values['git.gitVersion']
   if (
+    'git.gitVersion' in values &&
     gitVersions.length > 0 &&
     (typeof templateGitVersion !== 'string' || !gitVersions.includes(templateGitVersion))
   ) {
     values['git.gitVersion'] = gitVersions[0]
   }
 
+  const templateMysqlVersion = values['mysql.mysqlVersion']
+  if (
+    'mysql.mysqlVersion' in values &&
+    mysqlVersions.length > 0 &&
+    (typeof templateMysqlVersion !== 'string' || !mysqlVersions.includes(templateMysqlVersion))
+  ) {
+    values['mysql.mysqlVersion'] = mysqlVersions[0]
+  }
+
+  const templateRedisVersion = values['redis.redisVersion']
+  if (
+    'redis.redisVersion' in values &&
+    redisVersions.length > 0 &&
+    (typeof templateRedisVersion !== 'string' || !redisVersions.includes(templateRedisVersion))
+  ) {
+    values['redis.redisVersion'] = redisVersions[0]
+  }
+
   const templateMavenVersion = values['maven.mavenVersion']
   if (
+    'maven.mavenVersion' in values &&
     mavenVersions.length > 0 &&
     (typeof templateMavenVersion !== 'string' || !mavenVersions.includes(templateMavenVersion))
   ) {
@@ -82,6 +107,8 @@ function buildFieldOptions(
   javaLtsVersions: string[],
   pythonVersions: string[],
   gitVersions: string[],
+  mysqlVersions: string[],
+  redisVersions: string[],
   mavenVersions: string[],
 ): Record<string, string[]> {
   const currentNodeVersion =
@@ -104,6 +131,16 @@ function buildFieldOptions(
   const gitVersionsList =
     gitVersions.length > 0 ? gitVersions : currentGitVersion ? [currentGitVersion] : []
 
+  const currentMysqlVersion =
+    typeof values['mysql.mysqlVersion'] === 'string' ? values['mysql.mysqlVersion'] : undefined
+  const mysqlVersionsList =
+    mysqlVersions.length > 0 ? mysqlVersions : currentMysqlVersion ? [currentMysqlVersion] : []
+
+  const currentRedisVersion =
+    typeof values['redis.redisVersion'] === 'string' ? values['redis.redisVersion'] : undefined
+  const redisVersionsList =
+    redisVersions.length > 0 ? redisVersions : currentRedisVersion ? [currentRedisVersion] : []
+
   const currentMavenVersion =
     typeof values['maven.mavenVersion'] === 'string' ? values['maven.mavenVersion'] : undefined
   const mavenVersionsList =
@@ -114,6 +151,8 @@ function buildFieldOptions(
     'java.javaVersion': javaVersionsList,
     'python.pythonVersion': pythonVersionsList,
     'git.gitVersion': gitVersionsList,
+    'mysql.mysqlVersion': mysqlVersionsList,
+    'redis.redisVersion': redisVersionsList,
     'maven.mavenVersion': mavenVersionsList,
   }
 }
@@ -148,6 +187,8 @@ export default function App() {
   const [javaLtsVersions, setJavaLtsVersions] = useState<string[]>([])
   const [pythonVersions, setPythonVersions] = useState<string[]>([])
   const [gitVersions, setGitVersions] = useState<string[]>([])
+  const [mysqlVersions, setMysqlVersions] = useState<string[]>([])
+  const [redisVersions, setRedisVersions] = useState<string[]>([])
   const [mavenVersions, setMavenVersions] = useState<string[]>([])
   const [values, setValues] = useState<Record<string, Primitive>>({})
   const [precheck, setPrecheck] = useState<PrecheckResult>()
@@ -176,6 +217,8 @@ export default function App() {
           javaLtsVersions: nextJavaLtsVersions,
           pythonVersions: nextPythonVersions,
           gitVersions: nextGitVersions,
+          mysqlVersions: nextMysqlVersions,
+          redisVersions: nextRedisVersions,
           mavenVersions: nextMavenVersions,
         } = await window.envSetup.loadBootstrap()
         if (!active) {
@@ -192,6 +235,8 @@ export default function App() {
         setJavaLtsVersions(nextJavaLtsVersions)
         setPythonVersions(nextPythonVersions)
         setGitVersions(nextGitVersions)
+        setMysqlVersions(nextMysqlVersions)
+        setRedisVersions(nextRedisVersions)
         setMavenVersions(nextMavenVersions)
         setSelectedTemplateId(firstTemplate.id)
         setValues(
@@ -201,6 +246,8 @@ export default function App() {
             nextJavaLtsVersions,
             nextPythonVersions,
             nextGitVersions,
+            nextMysqlVersions,
+            nextRedisVersions,
             nextMavenVersions,
           ),
         )
@@ -252,6 +299,8 @@ export default function App() {
         javaLtsVersions,
         pythonVersions,
         gitVersions,
+        mysqlVersions,
+        redisVersions,
         mavenVersions,
       ),
     )
@@ -738,6 +787,8 @@ export default function App() {
               javaLtsVersions,
               pythonVersions,
               gitVersions,
+              mysqlVersions,
+              redisVersions,
               mavenVersions,
             )}
             onChange={handleChange}

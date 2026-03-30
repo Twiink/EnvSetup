@@ -18,6 +18,7 @@
   ],
   "defaults": {
     "mysql.mysqlManager": "package",
+    "mysql.mysqlVersion": "8.4.8",
     "mysql.installRootDir": "./.envsetup-data/toolchain"
   },
   "overrides": {
@@ -26,6 +27,17 @@
       "editable": true,
       "required": true,
       "enum": ["mysql", "package"],
+      "affects": ["mysql-env"]
+    },
+    "mysql.mysqlVersion": {
+      "type": "version",
+      "editable": true,
+      "required": true,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "dependsOn": {
+        "field": "mysql.mysqlManager",
+        "equals": "mysql"
+      },
       "affects": ["mysql-env"]
     },
     "mysql.installRootDir": {

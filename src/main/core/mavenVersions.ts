@@ -45,15 +45,20 @@ export function normalizeMavenVersions(input: unknown): string[] {
     return []
   }
 
-  return [...new Set(
-    input
-      .filter(
-        (entry): entry is MavenReleaseEntry =>
-          typeof entry === 'object' && entry !== null && entry.draft !== true && entry.prerelease !== true,
-      )
-      .map((entry) => normalizeMavenVersion(entry.tag_name))
-      .filter((version): version is string => typeof version === 'string'),
-  )].sort(compareSemverDescending)
+  return [
+    ...new Set(
+      input
+        .filter(
+          (entry): entry is MavenReleaseEntry =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            entry.draft !== true &&
+            entry.prerelease !== true,
+        )
+        .map((entry) => normalizeMavenVersion(entry.tag_name))
+        .filter((version): version is string => typeof version === 'string'),
+    ),
+  ].sort(compareSemverDescending)
 }
 
 export async function fetchOfficialMavenVersions(

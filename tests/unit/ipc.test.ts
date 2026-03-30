@@ -125,7 +125,13 @@ vi.mock('../../src/main/core/pythonVersions', () => ({
   listPythonVersions: vi.fn(async () => ['3.12.1']),
 }))
 vi.mock('../../src/main/core/gitVersions', () => ({
-  listGitVersions: vi.fn(async () => ['2.47.1']),
+  listGitVersions: vi.fn(async () => ['2.49.1', '2.48.2']),
+}))
+vi.mock('../../src/main/core/mysqlVersions', () => ({
+  listMysqlVersions: vi.fn(async () => ['8.4.8', '8.4.7']),
+}))
+vi.mock('../../src/main/core/redisVersions', () => ({
+  listRedisVersions: vi.fn(async () => ['7.4.7', '7.4.6']),
 }))
 vi.mock('../../src/main/core/mavenVersions', () => ({
   listMavenVersions: vi.fn(async () => ['3.9.11']),
@@ -326,6 +332,9 @@ describe('registerIpcHandlers', () => {
   it('registers key channels', () => {
     expect(handlers.has('bootstrap:load')).toBe(true)
     expect(handlers.has('template:list')).toBe(true)
+    expect(handlers.has('git:list-versions')).toBe(true)
+    expect(handlers.has('mysql:list-versions')).toBe(true)
+    expect(handlers.has('redis:list-versions')).toBe(true)
     expect(handlers.has('task:create')).toBe(true)
     expect(handlers.has('task:start')).toBe(true)
     expect(handlers.has('task:cancel')).toBe(true)

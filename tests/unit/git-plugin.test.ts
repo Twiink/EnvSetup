@@ -28,7 +28,7 @@ describe('git env plugin', () => {
   it('returns dry-run result for direct git install on darwin', async () => {
     const result = await gitPlugin.install({
       gitManager: 'git',
-      gitVersion: '2.47.1',
+      gitVersion: '2.33.0',
       installRootDir: '/tmp/toolchain',
       dryRun: true,
       platform: 'darwin',
@@ -36,7 +36,8 @@ describe('git env plugin', () => {
 
     expect(result.status).toBe('installed_unverified')
     expect(result.executionMode).toBe('dry_run')
-    expect(result.downloads[0].url).toContain('sourceforge.net')
+    expect(result.downloads[0].url).toContain('sourceforge.net/projects/git-osx-installer/files')
+    expect(result.downloads[0].url).toContain('git-2.33.0-intel-universal-mavericks.dmg')
     expect(result.commands.join('\n')).toContain('hdiutil attach')
     expect(result.commands.join('\n')).toContain('.Trashes')
     expect(result.commands.join('\n')).toContain('pkgutil --expand')
@@ -45,18 +46,18 @@ describe('git env plugin', () => {
   it('returns dry-run result for direct git install on win32', async () => {
     const result = await gitPlugin.install({
       gitManager: 'git',
-      gitVersion: '2.47.1',
+      gitVersion: '2.49.1',
       installRootDir: 'C:\\toolchain',
       dryRun: true,
       platform: 'win32',
     })
 
     expect(result.downloads[0].url).toContain('github.com/git-for-windows/git')
-    expect(result.downloads[0].url).toContain('Git-2.47.1-64-bit.tar.bz2')
+    expect(result.downloads[0].url).toContain('Git-2.49.1-64-bit.tar.bz2')
     expect(result.commands.join('\n')).toContain('tar -xjf $archive -C $extractRoot')
     expect(result.commands.join('\n')).toContain('Move-Item -LiteralPath $_.FullName')
     expect(result.commands.join('\n')).not.toContain('Start-Process -FilePath $installer')
-    expect(result.commands.join('\n')).not.toContain('Git-2.47.1-64-bit.exe')
+    expect(result.commands.join('\n')).not.toContain('Git-2.49.1-64-bit.exe')
   })
 
   it('returns dry-run result for homebrew mode on darwin', async () => {
@@ -265,7 +266,7 @@ describe('git env plugin', () => {
       installResult: {
         status: 'installed_unverified',
         executionMode: 'real_run',
-        version: '2.47.1',
+        version: '2.49.1',
         paths: {},
         envChanges: [],
         downloads: [],

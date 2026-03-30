@@ -57,6 +57,28 @@ let homeDir: string
 let templatesById = new Map<string, ResolvedTemplate>()
 const cleanupHookTimeout = isWindows ? 300_000 : 30_000
 
+function selectCiVersion(
+  tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven',
+  fallback: string,
+): string {
+  return process.env.ENVSETUP_CI_TOOL === tool && process.env.ENVSETUP_CI_VERSION
+    ? process.env.ENVSETUP_CI_VERSION
+    : fallback
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const nodeTestVersion = selectCiVersion('node', '20.20.1')
+const javaTestVersion = selectCiVersion('java', '21.0.6+7')
+const normalizedJavaTestVersion = javaTestVersion.replace(/\+.*/u, '')
+const pythonTestVersion = selectCiVersion('python', '3.12.10')
+const gitTestVersion = selectCiVersion('git', isMac ? '2.33.0' : '2.49.1')
+const mysqlTestVersion = selectCiVersion('mysql', '8.4.8')
+const redisTestVersion = selectCiVersion('redis', '7.4.7')
+const mavenTestVersion = selectCiVersion('maven', '3.9.11')
+
 type RealCycleCase = {
   name: string
   tool: 'node' | 'java' | 'python' | 'git' | 'mysql' | 'redis' | 'maven'
@@ -96,11 +118,11 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         nodeManager: 'node',
-        nodeVersion: '20.20.1',
+        nodeVersion: nodeTestVersion,
         npmCacheDir: join(installRootDir, 'npm-cache'),
         npmGlobalPrefix: join(installRootDir, 'npm-global'),
       }),
-    verifyPattern: /v\d+\.\d+\.\d+/,
+    verifyPattern: new RegExp(`v${escapeRegExp(nodeTestVersion)}\\b`, 'i'),
   },
   {
     name: 'Node.js nvm',
@@ -112,11 +134,11 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         nodeManager: 'nvm',
-        nodeVersion: '20.20.1',
+        nodeVersion: nodeTestVersion,
         npmCacheDir: join(installRootDir, 'npm-cache'),
         npmGlobalPrefix: join(installRootDir, 'npm-global'),
       }),
-    verifyPattern: /v\d+\.\d+\.\d+/,
+    verifyPattern: new RegExp(`v${escapeRegExp(nodeTestVersion)}\\b`, 'i'),
   },
   {
     name: 'Java JDK',
@@ -128,9 +150,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         javaManager: 'jdk',
-        javaVersion: '21',
+        javaVersion: javaTestVersion,
       }),
-    verifyPattern: /(openjdk|temurin|version)/i,
+    verifyPattern: new RegExp(escapeRegExp(normalizedJavaTestVersion), 'i'),
   },
   {
     name: 'Java SDKMAN',
@@ -142,9 +164,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         javaManager: 'sdkman',
-        javaVersion: '21',
+        javaVersion: javaTestVersion,
       }),
-    verifyPattern: /(openjdk|temurin|version)/i,
+    verifyPattern: new RegExp(escapeRegExp(normalizedJavaTestVersion), 'i'),
   },
   {
     name: 'Python direct',
@@ -156,9 +178,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         pythonManager: 'python',
-        pythonVersion: '3.12.10',
+        pythonVersion: pythonTestVersion,
       }),
-    verifyPattern: /Python\s+\d+\.\d+\.\d+/,
+    verifyPattern: new RegExp(`Python\\s+${escapeRegExp(pythonTestVersion)}`, 'i'),
   },
   {
     name: 'Python conda',
@@ -170,10 +192,10 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         pythonManager: 'conda',
-        pythonVersion: '3.12.10',
+        pythonVersion: pythonTestVersion,
         condaEnvName: 'base',
       }),
-    verifyPattern: /Python\s+\d+\.\d+\.\d+/,
+    verifyPattern: new RegExp(`Python\\s+${escapeRegExp(pythonTestVersion)}`, 'i'),
   },
   {
     name: 'Maven direct',
@@ -185,9 +207,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         mavenManager: 'maven',
-        mavenVersion: '3.9.11',
+        mavenVersion: mavenTestVersion,
       }),
-    verifyPattern: /Apache Maven\s+3\.9\.11/i,
+    verifyPattern: new RegExp(`Apache Maven\\s+${escapeRegExp(mavenTestVersion)}`, 'i'),
   },
   {
     name: 'Maven package',
@@ -229,8 +251,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         gitManager: 'git',
+        gitVersion: gitTestVersion,
       }),
-    verifyPattern: /git version/i,
+    verifyPattern: new RegExp(`git version\\s+${escapeRegExp(gitTestVersion)}`, 'i'),
   },
   {
     name: 'MySQL direct',
@@ -242,8 +265,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         mysqlManager: 'mysql',
+        mysqlVersion: mysqlTestVersion,
       }),
-    verifyPattern: /(mysql|8\.4\.8|ver)/i,
+    verifyPattern: new RegExp(escapeRegExp(mysqlTestVersion), 'i'),
   },
   {
     name: 'MySQL package',
@@ -285,8 +309,9 @@ const allRealCycleCases: RealCycleCase[] = [
       withSharedCaches({
         installRootDir,
         redisManager: 'redis',
+        redisVersion: redisTestVersion,
       }),
-    verifyPattern: /(redis|memurai)/i,
+    verifyPattern: isWindows ? /(redis|memurai)/i : new RegExp(escapeRegExp(redisTestVersion), 'i'),
   },
   {
     name: 'Redis package',
