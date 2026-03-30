@@ -86,8 +86,11 @@ describe('redis env plugin', () => {
       ]),
     )
     expect(result.commands.join('\n')).toContain('& msiexec.exe /quiet /i')
+    expect(result.commands.join('\n')).toContain('/l*v $msiLogPath')
+    expect(result.commands.join('\n')).toContain('$($msiExitCode)')
     expect(result.commands.join('\n')).toContain('Memurai for Redis installed')
     expect(result.rollbackCommands?.join('\n')).toContain('DisplayName -like')
+    expect(result.rollbackCommands?.join('\n')).toContain('$($uninstallExitCode)')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'REDIS_HOME', value: 'C:\\envsetup\\redis\\redis' }),

@@ -281,6 +281,41 @@ describe('environment detection', () => {
     )
   })
 
+  it('detects the Scoop-managed Maven root on win32', async () => {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const scoopRoot = await mkdtemp(join(tmpdir(), 'envsetup-scoop-maven-'))
+    const mavenAppDir = join(scoopRoot, 'apps', 'maven')
+    await mkdir(mavenAppDir, { recursive: true })
+    process.env.SCOOP = scoopRoot
+
+    const template = resolveTemplate({
+      id: 'maven-template',
+      name: { 'zh-CN': 'Maven', en: 'Maven' },
+      version: '0.1.0',
+      platforms: ['win32'],
+      description: { 'zh-CN': 'Maven', en: 'Maven' },
+      plugins: [],
+      defaults: {},
+      overrides: {},
+      checks: ['maven'],
+    })
+
+    const detections = await detectTemplateEnvironments(template, {})
+    const scoopDetection = detections.find((detection) => detection.source === 'SCOOP')
+
+    expect(scoopDetection).toEqual(
+      expect.objectContaining({
+        tool: 'maven',
+        path: mavenAppDir,
+        cleanupSupported: true,
+        cleanupPath: mavenAppDir,
+      }),
+    )
+  })
+
   it('narrows SCOOP detection to the git app directory when present', async () => {
     const scoopRoot = await mkdtemp(join(tmpdir(), 'envsetup-scoop-'))
     const gitAppDir = join(scoopRoot, 'apps', 'git')

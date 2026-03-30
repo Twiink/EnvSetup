@@ -1520,6 +1520,25 @@ async function detectMavenEnvironment(
     )
   }
 
+  if (process.platform === 'win32' && process.env.SCOOP) {
+    const scoopMavenPath = await firstExistingPath(
+      resolveScoopPackagePath(process.env.SCOOP, 'maven'),
+    )
+    if (scoopMavenPath) {
+      detections.push(
+        buildDetection({
+          tool: 'maven',
+          kind: 'manager_root',
+          path: scoopMavenPath,
+          source: 'SCOOP',
+          cleanupSupported:
+            canCleanupDetection(scoopMavenPath) || isScoopManagedPath(scoopMavenPath),
+          cleanupPath: scoopMavenPath,
+        }),
+      )
+    }
+  }
+
   const mavenExecutable = await findExecutable(['mvn'], executableLookupCache)
   if (mavenExecutable) {
     detections.push(

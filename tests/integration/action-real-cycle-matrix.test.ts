@@ -676,7 +676,12 @@ async function hydrateDetectionEnvironment(
     prependProcessPath(join(scoopRoot, 'shims'))
   }
 
-  if (isWindows && (testCase.tool === 'mysql' || testCase.tool === 'redis')) {
+  if (
+    isWindows &&
+    ((testCase.tool === 'mysql' && params.mysqlManager === 'package') ||
+      (testCase.tool === 'redis' && params.redisManager === 'package') ||
+      (testCase.tool === 'maven' && params.mavenManager === 'package'))
+  ) {
     const scoopRoot = join(process.env.USERPROFILE ?? homeDir, 'scoop')
     process.env.SCOOP = scoopRoot
     prependProcessPath(join(scoopRoot, 'shims'))

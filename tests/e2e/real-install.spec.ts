@@ -92,6 +92,14 @@ async function dumpTaskLogs(dataDir: string): Promise<void> {
   }
 }
 
+type StoredTaskRecord = {
+  params?: Record<string, unknown>
+  plugins?: Array<{
+    params?: { installRootDir?: unknown }
+    lastResult?: { paths?: Record<string, unknown> }
+  }>
+}
+
 async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefined> {
   const tasksDir = path.join(dataDir, 'tasks')
 
@@ -102,9 +110,15 @@ async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefin
       .reverse()
 
     for (const taskFile of taskFiles) {
-      const raw = JSON.parse(await fs.readFile(path.join(tasksDir, taskFile), 'utf8')) as {
-        params?: Record<string, unknown>
-        plugins?: Array<{ params?: { installRootDir?: unknown } }>
+      const raw = JSON.parse(
+        await fs.readFile(path.join(tasksDir, taskFile), 'utf8'),
+      ) as StoredTaskRecord
+
+      const resultInstallRoot = raw.plugins?.find(
+        (plugin) => typeof plugin.lastResult?.paths?.installRootDir === 'string',
+      )?.lastResult?.paths?.installRootDir
+      if (typeof resultInstallRoot === 'string' && resultInstallRoot.length > 0) {
+        return path.resolve(process.cwd(), resultInstallRoot)
       }
 
       const pluginInstallRoot = raw.plugins?.find(
@@ -119,6 +133,37 @@ async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefin
       )?.[1]
       if (typeof taskInstallRoot === 'string' && taskInstallRoot.length > 0) {
         return path.resolve(process.cwd(), taskInstallRoot)
+      }
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
+async function resolveTaskResultPath(
+  dataDir: string,
+  pathKey: string,
+): Promise<string | undefined> {
+  const tasksDir = path.join(dataDir, 'tasks')
+
+  try {
+    const taskFiles = (await fs.readdir(tasksDir))
+      .filter((file) => file.endsWith('.json'))
+      .sort()
+      .reverse()
+
+    for (const taskFile of taskFiles) {
+      const raw = JSON.parse(
+        await fs.readFile(path.join(tasksDir, taskFile), 'utf8'),
+      ) as StoredTaskRecord
+      const resultPath = raw.plugins?.find(
+        (plugin) => typeof plugin.lastResult?.paths?.[pathKey] === 'string',
+      )?.lastResult?.paths?.[pathKey]
+
+      if (typeof resultPath === 'string' && resultPath.length > 0) {
+        return path.resolve(process.cwd(), resultPath)
       }
     }
   } catch {
@@ -887,8 +932,10 @@ test.describe('real install', () => {
       await runMavenInstallFlow(page)
       await dumpTaskLogs(dataDir)
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
-      const actualInstallRoot = (await resolveTaskInstallRoot(dataDir)) ?? installRoot
-      await expect(fs.access(path.join(actualInstallRoot, 'maven-3.9.11'))).resolves.toBeUndefined()
+      const actualMavenDir =
+        (await resolveTaskResultPath(dataDir, 'mavenDir')) ??
+        path.join((await resolveTaskInstallRoot(dataDir)) ?? installRoot, 'maven-3.9.11')
+      await expect(fs.access(actualMavenDir)).resolves.toBeUndefined()
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()
