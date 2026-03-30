@@ -93,6 +93,7 @@ async function dumpTaskLogs(dataDir: string): Promise<void> {
 }
 
 type StoredTaskRecord = {
+  snapshotId?: string
   params?: Record<string, unknown>
   plugins?: Array<{
     params?: { installRootDir?: unknown }
@@ -100,7 +101,7 @@ type StoredTaskRecord = {
   }>
 }
 
-async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefined> {
+async function resolveLatestTaskRecord(dataDir: string): Promise<StoredTaskRecord | undefined> {
   const tasksDir = path.join(dataDir, 'tasks')
 
   try {
@@ -110,33 +111,42 @@ async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefin
       .reverse()
 
     for (const taskFile of taskFiles) {
-      const raw = JSON.parse(
+      return JSON.parse(
         await fs.readFile(path.join(tasksDir, taskFile), 'utf8'),
       ) as StoredTaskRecord
-
-      const resultInstallRoot = raw.plugins?.find(
-        (plugin) => typeof plugin.lastResult?.paths?.installRootDir === 'string',
-      )?.lastResult?.paths?.installRootDir
-      if (typeof resultInstallRoot === 'string' && resultInstallRoot.length > 0) {
-        return path.resolve(process.cwd(), resultInstallRoot)
-      }
-
-      const pluginInstallRoot = raw.plugins?.find(
-        (plugin) => typeof plugin.params?.installRootDir === 'string',
-      )?.params?.installRootDir
-      if (typeof pluginInstallRoot === 'string' && pluginInstallRoot.length > 0) {
-        return path.resolve(process.cwd(), pluginInstallRoot)
-      }
-
-      const taskInstallRoot = Object.entries(raw.params ?? {}).find(
-        ([key, value]) => key.endsWith('.installRootDir') && typeof value === 'string',
-      )?.[1]
-      if (typeof taskInstallRoot === 'string' && taskInstallRoot.length > 0) {
-        return path.resolve(process.cwd(), taskInstallRoot)
-      }
     }
   } catch {
     return undefined
+  }
+
+  return undefined
+}
+
+async function resolveTaskInstallRoot(dataDir: string): Promise<string | undefined> {
+  const raw = await resolveLatestTaskRecord(dataDir)
+  if (!raw) {
+    return undefined
+  }
+
+  const resultInstallRoot = raw.plugins?.find(
+    (plugin) => typeof plugin.lastResult?.paths?.installRootDir === 'string',
+  )?.lastResult?.paths?.installRootDir
+  if (typeof resultInstallRoot === 'string' && resultInstallRoot.length > 0) {
+    return path.resolve(process.cwd(), resultInstallRoot)
+  }
+
+  const pluginInstallRoot = raw.plugins?.find(
+    (plugin) => typeof plugin.params?.installRootDir === 'string',
+  )?.params?.installRootDir
+  if (typeof pluginInstallRoot === 'string' && pluginInstallRoot.length > 0) {
+    return path.resolve(process.cwd(), pluginInstallRoot)
+  }
+
+  const taskInstallRoot = Object.entries(raw.params ?? {}).find(
+    ([key, value]) => key.endsWith('.installRootDir') && typeof value === 'string',
+  )?.[1]
+  if (typeof taskInstallRoot === 'string' && taskInstallRoot.length > 0) {
+    return path.resolve(process.cwd(), taskInstallRoot)
   }
 
   return undefined
@@ -146,28 +156,26 @@ async function resolveTaskResultPath(
   dataDir: string,
   pathKey: string,
 ): Promise<string | undefined> {
-  const tasksDir = path.join(dataDir, 'tasks')
-
-  try {
-    const taskFiles = (await fs.readdir(tasksDir))
-      .filter((file) => file.endsWith('.json'))
-      .sort()
-      .reverse()
-
-    for (const taskFile of taskFiles) {
-      const raw = JSON.parse(
-        await fs.readFile(path.join(tasksDir, taskFile), 'utf8'),
-      ) as StoredTaskRecord
-      const resultPath = raw.plugins?.find(
-        (plugin) => typeof plugin.lastResult?.paths?.[pathKey] === 'string',
-      )?.lastResult?.paths?.[pathKey]
-
-      if (typeof resultPath === 'string' && resultPath.length > 0) {
-        return path.resolve(process.cwd(), resultPath)
-      }
-    }
-  } catch {
+  const raw = await resolveLatestTaskRecord(dataDir)
+  if (!raw) {
     return undefined
+  }
+
+  const resultPath = raw.plugins?.find(
+    (plugin) => typeof plugin.lastResult?.paths?.[pathKey] === 'string',
+  )?.lastResult?.paths?.[pathKey]
+
+  if (typeof resultPath === 'string' && resultPath.length > 0) {
+    return path.resolve(process.cwd(), resultPath)
+  }
+
+  return undefined
+}
+
+async function resolveTaskSnapshotId(dataDir: string): Promise<string | undefined> {
+  const raw = await resolveLatestTaskRecord(dataDir)
+  if (typeof raw?.snapshotId === 'string' && raw.snapshotId.length > 0) {
+    return raw.snapshotId
   }
 
   return undefined
@@ -886,6 +894,15 @@ test.describe('real install', () => {
       await expect(page.getByText(/^失败$|^Failed$/)).toHaveCount(0)
       const actualInstallRoot = (await resolveTaskInstallRoot(dataDir)) ?? installRoot
       await expect(fs.access(path.join(actualInstallRoot, 'redis'))).resolves.toBeUndefined()
+      if (isWindows) {
+        const snapshotId = await resolveTaskSnapshotId(dataDir)
+        if (!snapshotId) {
+          throw new Error(`Redis direct packaged task snapshot not found in ${dataDir}`)
+        }
+        const rollbackResult = await executeRollbackViaApp(page, snapshotId, actualInstallRoot)
+        expect(rollbackResult.success).toBe(true)
+        expect(rollbackResult.executionMode).toBe('real_run')
+      }
     } finally {
       await dumpTaskLogs(dataDir)
       await app.close()

@@ -138,6 +138,12 @@ describe('git env plugin', () => {
     expect(result.logs).toContain('fresh_scoop_bootstrap_retry=enabled')
     expect(result.commands.join('\n')).toContain('$maxAttempts = 2')
     expect(result.commands.join('\n')).toContain(
+      'Retrying Scoop git install with an explicit 7zip dependency bootstrap.',
+    )
+    expect(result.commands.join('\n')).toContain('& $scoop install 7zip git')
+    expect(result.commands.join('\n')).toContain('sevenZipDependency=failed')
+    expect(result.commands.join('\n')).toContain('Start-Sleep -Seconds 5')
+    expect(result.commands.join('\n')).toContain(
       'Retrying fresh Scoop bootstrap after incomplete git install.',
     )
     expect(result.commands.join('\n')).toContain('$attemptDiagnostics += $diag')
