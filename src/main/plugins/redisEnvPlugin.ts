@@ -213,6 +213,7 @@ function buildDarwinPackageCommands(
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
   return [
+    `mkdir -p ${quoteShell(input.installRootDir)}`,
     `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install redis`,
   ]
 }
@@ -244,6 +245,7 @@ function buildWin32PackageCommands(
 
   const resolveScoopCmd = buildResolveScoopCommand()
   return [
+    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.installRootDir)} | Out-Null`,
     `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install redis`,
   ]
 }

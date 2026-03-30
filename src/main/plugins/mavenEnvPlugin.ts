@@ -200,6 +200,7 @@ function buildDarwinPackageCommands(
 
   const resolveBrewCmd = buildResolveHomebrewCommand()
   return [
+    `mkdir -p ${quoteShell(input.installRootDir)}`,
     `${resolveBrewCmd}; if [ -z "$BREW_BIN" ]; then NONINTERACTIVE=1 /bin/bash ${quoteShell(installerPath)}; ${resolveBrewCmd}; fi; if [ -z "$BREW_BIN" ]; then echo "Homebrew installation failed." >&2; exit 1; fi; HOMEBREW_NO_AUTO_UPDATE=1 "$BREW_BIN" install maven`,
   ]
 }
@@ -216,8 +217,8 @@ function buildWin32DirectCommands(
 
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
-    `Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneMavenDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
-    `Remove-Item -LiteralPath ${quotePowerShell(extractedDir)} -Recurse -Force -ErrorAction SilentlyContinue`,
+    `if (Test-Path ${quotePowerShell(installPaths.standaloneMavenDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneMavenDir)} -Recurse -Force -ErrorAction SilentlyContinue }`,
+    `if (Test-Path ${quotePowerShell(extractedDir)}) { Remove-Item -LiteralPath ${quotePowerShell(extractedDir)} -Recurse -Force -ErrorAction SilentlyContinue }`,
     `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(installPaths.installRootDir)} -Force`,
     `Move-Item -LiteralPath ${quotePowerShell(extractedDir)} -Destination ${quotePowerShell(installPaths.standaloneMavenDir)} -Force`,
     `$env:MAVEN_HOME = ${quotePowerShell(installPaths.standaloneMavenDir)}; $env:M2_HOME = ${quotePowerShell(installPaths.standaloneMavenDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneMavenBinDir)} + ';' + $env:Path; & ${quotePowerShell(`${installPaths.standaloneMavenBinDir}\\mvn.cmd`)} -version`,
@@ -234,6 +235,7 @@ function buildWin32PackageCommands(
 
   const resolveScoopCmd = buildResolveScoopCommand()
   return [
+    `New-Item -ItemType Directory -Force -Path ${quotePowerShell(input.installRootDir)} | Out-Null`,
     `${resolveScoopCmd}; if (-not $scoop) { function Get-ExecutionPolicy { 'ByPass' }; & ${quotePowerShell(installerPath)} -RunAsAdmin:$false; ${resolveScoopCmd}; if (-not $scoop) { throw 'Scoop bootstrap failed.' } }; & $scoop install maven`,
   ]
 }
