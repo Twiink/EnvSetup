@@ -5,7 +5,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn((_file, _args, callback) => {
+  execFileMock: vi.fn((_file, _args, optionsOrCallback, maybeCallback) => {
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
     callback(null, { stdout: 'Redis server v=7.4.7', stderr: '' })
   }),
 }))
@@ -85,15 +87,16 @@ describe('redis env plugin', () => {
         }),
       ]),
     )
-    expect(result.commands.join('\n')).toContain('Start-Process msiexec.exe -ArgumentList')
-    expect(result.commands.join('\n')).toContain("'/l*v', $msiLogPath")
-    expect(result.commands.join('\n')).toContain('Wait-Process -Id $process.Id -Timeout 300')
+    expect(result.commands.join('\n')).toContain('Memurai setup requires administrator privileges.')
+    expect(result.commands.join('\n')).toContain('& cmd.exe /d /s /c $installCommand')
+    expect(result.commands.join('\n')).toContain('/l*v "{2}"')
     expect(result.commands.join('\n')).toContain('$($msiExitCode)')
     expect(result.commands.join('\n')).toContain('Memurai for Redis installed')
     expect(result.rollbackCommands?.join('\n')).toContain('DisplayName -like')
     expect(result.rollbackCommands?.join('\n')).toContain(
-      'Wait-Process -Id $process.Id -Timeout 300',
+      'Memurai uninstall requires administrator privileges.',
     )
+    expect(result.rollbackCommands?.join('\n')).toContain('& cmd.exe /d /s /c $uninstallCommand')
     expect(result.rollbackCommands?.join('\n')).toContain('$($uninstallExitCode)')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([
@@ -159,6 +162,53 @@ describe('redis env plugin', () => {
         expect.stringContaining('mode=real-run'),
         expect.stringContaining('download_cache_hit=true'),
       ]),
+    )
+  })
+
+  it('retries win32 direct real-run installs with elevation after Memurai admin checks fail', async () => {
+    execFileMock.mockReset()
+    execFileMock
+      .mockImplementationOnce((_file, _args, callback) => {
+        const error = Object.assign(new Error('Memurai setup requires administrator privileges.'), {
+          stderr: 'Memurai setup requires administrator privileges.',
+        })
+        callback(error)
+      })
+      .mockImplementationOnce((_file, _args, _options, callback) => {
+        callback(null, { stdout: 'Memurai for Redis installed', stderr: '' })
+      })
+
+    const result = await redisEnvPlugin.install({
+      redisManager: 'redis',
+      installRootDir: 'C:\\envsetup\\redis',
+      downloadCacheDir: 'C:\\envsetup\\cache',
+      dryRun: false,
+      platform: 'win32',
+    })
+
+    expect(result.executionMode).toBe('real_run')
+    expect(execFileMock).toHaveBeenCalledWith(
+      'powershell',
+      expect.arrayContaining([
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        expect.stringContaining('Memurai setup requires administrator privileges.'),
+      ]),
+      expect.any(Function),
+    )
+    expect(execFileMock).toHaveBeenCalledWith(
+      'powershell',
+      expect.arrayContaining([
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        expect.stringContaining("-Verb RunAs"),
+      ]),
+      expect.any(Object),
+      expect.any(Function),
     )
   })
 

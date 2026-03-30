@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import { buildRedisEnvChanges, resolveRedisInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { executePlatformCommand, isPermissionError } from '../core/elevation'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -40,6 +41,13 @@ function quoteShell(value: string): string {
 
 function quotePowerShell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
+}
+
+function buildWindowsAdministratorCheck(message: string): string {
+  return [
+    '$isAdministrator = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
+    `if (-not $isAdministrator) { throw '${message.replace(/'/g, "''")}' }`,
+  ].join('; ')
 }
 
 function resolveDownloadedArtifactPath(
@@ -105,15 +113,19 @@ function buildMemuraiCleanupCommand(installDir?: string): string {
   const removeInstallDir = installDir
     ? `if (Test-Path ${quotePowerShell(installDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installDir)} -Recurse -Force -ErrorAction SilentlyContinue }`
     : undefined
+  const requireAdmin = buildWindowsAdministratorCheck(
+    'Memurai uninstall requires administrator privileges.',
+  )
 
   return [
+    requireAdmin,
     '$entries = @()',
     "foreach ($registryPath in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*')) { $entries += Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Memurai*' } }",
     '$entries = $entries | Sort-Object DisplayName -Unique',
     'foreach ($entry in $entries) {',
     '$command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }',
     'if (-not $command) { continue }',
-    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $process = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/quiet', '/norestart') -PassThru; try { Wait-Process -Id $process.Id -Timeout 300 -ErrorAction Stop } catch { try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}; throw 'Memurai uninstall timed out after 300 seconds.' }; $process.Refresh(); $uninstallExitCode = $process.ExitCode; if ($uninstallExitCode -ne 0 -and $uninstallExitCode -ne 1641 -and $uninstallExitCode -ne 3010) { throw \"Memurai uninstall failed with exit code $($uninstallExitCode).\" } }",
+    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $uninstallCommand = ('msiexec.exe /quiet /x \"{0}\" /norestart' -f $productCode); & cmd.exe /d /s /c $uninstallCommand; $uninstallExitCode = $LASTEXITCODE; if ($uninstallExitCode -ne 0 -and $uninstallExitCode -ne 1641 -and $uninstallExitCode -ne 3010) { throw \"Memurai uninstall failed with exit code $($uninstallExitCode).\" } }",
     '}',
     removeInstallDir,
   ]
@@ -260,7 +272,7 @@ function buildWin32DirectCommands(
   return [
     `New-Item -ItemType Directory -Force -Path ${quotePowerShell(installPaths.installRootDir)} | Out-Null`,
     `if (Test-Path ${quotePowerShell(installPaths.standaloneRedisDir)}) { Remove-Item -LiteralPath ${quotePowerShell(installPaths.standaloneRedisDir)} -Recurse -Force -ErrorAction SilentlyContinue }`,
-    `$installDir = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneRedisDir)}); $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); $msiLogPath = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-memurai-install.log'; if (Test-Path $msiLogPath) { Remove-Item -LiteralPath $msiLogPath -Force -ErrorAction SilentlyContinue }; $process = Start-Process msiexec.exe -ArgumentList @('/i', $installer, '/quiet', '/norestart', 'INSTALLFOLDER=' + $installDir, 'ADD_INSTALLFOLDER_TO_PATH=0', 'INSTALL_SERVICE=0', 'ADD_FIREWALL_RULE=0', '/l*v', $msiLogPath) -PassThru; try { Wait-Process -Id $process.Id -Timeout 300 -ErrorAction Stop } catch { try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}; throw 'Memurai install timed out after 300 seconds.' }; $process.Refresh(); $msiExitCode = $process.ExitCode; if ($msiExitCode -ne 0 -and $msiExitCode -ne 1641 -and $msiExitCode -ne 3010) { $msiLogTail = if (Test-Path $msiLogPath) { (Get-Content -LiteralPath $msiLogPath -Tail 80 | Out-String).Trim() } else { '' }; if ($msiLogTail) { throw ('Memurai install failed with exit code {0}. MSI log tail:{1}{2}' -f $msiExitCode, [System.Environment]::NewLine, $msiLogTail) }; throw "Memurai install failed with exit code $($msiExitCode)." }`,
+    `${buildWindowsAdministratorCheck('Memurai setup requires administrator privileges.')}; $installDir = [System.IO.Path]::GetFullPath(${quotePowerShell(installPaths.standaloneRedisDir)}); $installer = [System.IO.Path]::GetFullPath(${quotePowerShell(installerPath)}); $msiLogPath = Join-Path ([System.IO.Path]::GetTempPath()) 'envsetup-memurai-install.log'; if (Test-Path $msiLogPath) { Remove-Item -LiteralPath $msiLogPath -Force -ErrorAction SilentlyContinue }; $installCommand = ('msiexec.exe /quiet /i "{0}" INSTALLFOLDER="{1}" ADD_INSTALLFOLDER_TO_PATH=0 INSTALL_SERVICE=0 ADD_FIREWALL_RULE=0 /norestart /l*v "{2}"' -f $installer, $installDir, $msiLogPath); & cmd.exe /d /s /c $installCommand; $msiExitCode = $LASTEXITCODE; if ($msiExitCode -ne 0 -and $msiExitCode -ne 1641 -and $msiExitCode -ne 3010) { $msiLogTail = if (Test-Path $msiLogPath) { (Get-Content -LiteralPath $msiLogPath -Tail 80 | Out-String).Trim() } else { '' }; if ($msiLogTail) { throw ('Memurai install failed with exit code {0}. MSI log tail:{1}{2}' -f $msiExitCode, [System.Environment]::NewLine, $msiLogTail) }; throw "Memurai install failed with exit code $($msiExitCode)." }`,
     `$env:REDIS_HOME = ${quotePowerShell(installPaths.standaloneRedisDir)}; $env:Path = ${quotePowerShell(installPaths.standaloneRedisDir)} + ';' + $env:Path; $redisCandidates = @((Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'memurai-cli.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-server.exe'), (Join-Path ${quotePowerShell(installPaths.standaloneRedisDir)} 'redis-cli.exe')); $redisExe = $redisCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $redisExe) { throw 'Failed to locate Memurai binaries after installation.' }; Write-Output 'Memurai for Redis installed'; Write-Output $redisExe`,
   ]
 }
@@ -389,6 +401,25 @@ async function runCommands(
         timestamp: new Date().toISOString(),
       })
     } catch (err: unknown) {
+      if (platform === 'win32' && isPermissionError(err)) {
+        const elevatedResult = await executePlatformCommand(command, 'win32', { elevated: true })
+        if (elevatedResult.stdout.trim()) output.push(elevatedResult.stdout.trim())
+        if (elevatedResult.stderr.trim()) output.push(`stderr: ${elevatedResult.stderr.trim()}`)
+        onProgress?.({
+          taskId: '',
+          pluginId,
+          type: 'command_done',
+          message: command,
+          commandIndex: index + 1,
+          commandTotal: commands.length,
+          output: [elevatedResult.stdout.trim(), elevatedResult.stderr.trim()]
+            .filter(Boolean)
+            .join('\n'),
+          timestamp: new Date().toISOString(),
+        })
+        continue
+      }
+
       const error = err as { stdout?: string; stderr?: string; message?: string }
       const commandOutput = [
         error.stdout?.trim(),
