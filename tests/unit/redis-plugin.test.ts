@@ -85,11 +85,15 @@ describe('redis env plugin', () => {
         }),
       ]),
     )
-    expect(result.commands.join('\n')).toContain('& msiexec.exe /quiet /i')
-    expect(result.commands.join('\n')).toContain('/l*v $msiLogPath')
+    expect(result.commands.join('\n')).toContain('Start-Process msiexec.exe -ArgumentList')
+    expect(result.commands.join('\n')).toContain("'/l*v', $msiLogPath")
+    expect(result.commands.join('\n')).toContain('Wait-Process -Id $process.Id -Timeout 300')
     expect(result.commands.join('\n')).toContain('$($msiExitCode)')
     expect(result.commands.join('\n')).toContain('Memurai for Redis installed')
     expect(result.rollbackCommands?.join('\n')).toContain('DisplayName -like')
+    expect(result.rollbackCommands?.join('\n')).toContain(
+      'Wait-Process -Id $process.Id -Timeout 300',
+    )
     expect(result.rollbackCommands?.join('\n')).toContain('$($uninstallExitCode)')
     expect(result.envChanges).toEqual(
       expect.arrayContaining([

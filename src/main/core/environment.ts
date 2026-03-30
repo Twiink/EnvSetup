@@ -568,7 +568,7 @@ function buildMemuraiRedisCleanupCommand(installDir?: string): string {
     'foreach ($entry in $entries) {',
     '$command = if ($entry.QuietUninstallString) { $entry.QuietUninstallString } else { $entry.UninstallString }',
     'if (-not $command) { continue }',
-    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $process = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/quiet', '/norestart') -Wait -PassThru; if ($process.ExitCode -ne 0) { throw \"Memurai uninstall failed with exit code $($process.ExitCode).\" } }",
+    "if ($command -match '\\{[A-Za-z0-9\\-]+\\}') { $productCode = $matches[0]; $process = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/quiet', '/norestart') -PassThru; try { Wait-Process -Id $process.Id -Timeout 300 -ErrorAction Stop } catch { try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}; throw 'Memurai uninstall timed out after 300 seconds.' }; $process.Refresh(); if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 1641 -and $process.ExitCode -ne 3010) { throw \"Memurai uninstall failed with exit code $($process.ExitCode).\" } }",
     '}',
     removeInstallDir,
   ]
