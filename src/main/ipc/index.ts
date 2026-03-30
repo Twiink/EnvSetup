@@ -307,8 +307,13 @@ export function registerIpcHandlers(): void {
       })
 
       return precheckCache.getOrLoad(cacheKey, PRECHECK_CACHE_TTL_MS, async () => {
-        const template = await getTemplate(payload.templateId)
-        const input = await buildRuntimePrecheckInput(template, payload.values)
+        const [template, paths] = await Promise.all([
+          getTemplate(payload.templateId),
+          ensureAppPaths(),
+        ])
+        const input = await buildRuntimePrecheckInput(template, payload.values, {
+          downloadCacheDir: paths.downloadCacheDir,
+        })
         return runPrecheck(input, normalizedLocale)
       })
     },

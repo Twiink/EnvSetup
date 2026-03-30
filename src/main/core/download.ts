@@ -125,6 +125,31 @@ function resolveChecksumCacheFile(cacheDir: string, download: DownloadArtifact):
   return join(cacheDir, 'checksums', `${buildChecksumCacheKey(download)}.txt`)
 }
 
+export async function isDownloadArtifactAvailableOffline(
+  download: DownloadArtifact,
+  cacheDir: string,
+): Promise<boolean> {
+  try {
+    const cacheStat = await stat(resolveCacheFile(cacheDir, download))
+    if (!cacheStat.isFile()) {
+      return false
+    }
+  } catch {
+    return false
+  }
+
+  if (!download.checksumUrl) {
+    return true
+  }
+
+  try {
+    const checksumStat = await stat(resolveChecksumCacheFile(cacheDir, download))
+    return checksumStat.isFile()
+  } catch {
+    return false
+  }
+}
+
 async function fetchWithRetry(options: {
   url: string
   fetchImpl: typeof fetch

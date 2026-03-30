@@ -2,10 +2,20 @@
  * networkCheck 模块的单元测试。
  */
 
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import type { NetworkCheckTarget, ResolvedTemplate } from '../../src/main/core/contracts'
-import { collectTemplateNetworkTargets, runNetworkChecks } from '../../src/main/core/networkCheck'
+import { downloadArtifacts } from '../../src/main/core/download'
+import {
+  collectTemplateDownloadArtifacts,
+  collectTemplateNetworkTargets,
+  runNetworkChecks,
+  runTemplateNetworkChecks,
+} from '../../src/main/core/networkCheck'
 
 function makeTemplate(pluginId: string): ResolvedTemplate {
   return {
@@ -160,5 +170,55 @@ describe('networkCheck', () => {
 
     expect(result.reachable).toBe(false)
     expect(result.error).toContain('ENOTFOUND')
+  })
+
+  it('treats cached Redis direct downloads as reachable without probing the network', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'envsetup-network-cache-'))
+    const template = makeTemplate('redis-env')
+    const values = {
+      'redis.redisManager': 'redis',
+      'redis.installRootDir': 'C:\\envsetup\\redis',
+    }
+    const downloads = collectTemplateDownloadArtifacts(template, values, { platform: 'win32' })
+
+    const downloadFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://download.memurai.com/Memurai-Developer/4.2.2/Memurai-for-Redis-v4.2.2.msi?Expires=123',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(Buffer.from('signed-installer-content'), {
+          status: 200,
+          headers: { 'content-type': 'application/octet-stream' },
+        }),
+      )
+
+    await downloadArtifacts({ downloads, cacheDir, fetchImpl: downloadFetch })
+
+    const probeFetch = vi.fn<typeof fetch>().mockRejectedValue(new Error('probe should not run'))
+    const [result] = await runTemplateNetworkChecks(template, values, {
+      platform: 'win32',
+      downloadCacheDir: cacheDir,
+      fetchImpl: probeFetch,
+    })
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        tool: 'redis',
+        host: 'www.memurai.com',
+        reachable: true,
+        statusCode: 200,
+      }),
+    )
+    expect(result.durationMs).toBe(0)
+    expect(probeFetch).not.toHaveBeenCalled()
   })
 })

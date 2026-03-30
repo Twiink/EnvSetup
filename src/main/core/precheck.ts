@@ -60,6 +60,7 @@ export async function isWritablePath(targetPath: string): Promise<boolean> {
 export async function buildRuntimePrecheckInput(
   template: ResolvedTemplate,
   values: Record<string, Primitive>,
+  options: { downloadCacheDir?: string } = {},
 ): Promise<PrecheckInput> {
   const detections = await detectTemplateEnvironments(template, values)
 
@@ -102,6 +103,7 @@ export async function buildRuntimePrecheckInput(
   const networkChecks = await runTemplateNetworkChecks(template, values, {
     platform: currentPlatform,
     gitBashMissing,
+    downloadCacheDir: options.downloadCacheDir,
   })
   const networkAvailable = networkChecks.every((check) => check.reachable)
 

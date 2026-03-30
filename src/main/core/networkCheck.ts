@@ -20,6 +20,7 @@ import { planMysqlDownloads } from '../plugins/mysqlEnvPlugin'
 import { planRedisDownloads } from '../plugins/redisEnvPlugin'
 import { planMavenDownloads } from '../plugins/mavenEnvPlugin'
 import { createRuntimeCache } from './runtimeCache'
+import { isDownloadArtifactAvailableOffline } from './download'
 
 const DEFAULT_NETWORK_CHECK_TIMEOUT_MS = 5000
 const NETWORK_RESULT_CACHE_TTL_MS = 60_000
@@ -30,6 +31,7 @@ type TemplateNetworkCheckOptions = {
   timeoutMs?: number
   platform?: AppPlatform
   gitBashMissing?: boolean
+  downloadCacheDir?: string
 }
 
 function resolveCurrentPlatform(): AppPlatform {
@@ -216,5 +218,43 @@ export async function runTemplateNetworkChecks(
   options: TemplateNetworkCheckOptions = {},
 ): Promise<NetworkCheckResult[]> {
   const targets = collectTemplateNetworkTargets(template, values, options)
-  return runNetworkChecks(targets, options)
+  if (!options.downloadCacheDir) {
+    return runNetworkChecks(targets, options)
+  }
+
+  const downloads = collectTemplateDownloadArtifacts(template, values, options)
+  const cachedResults = new Map<string, NetworkCheckResult>()
+
+  for (const target of targets) {
+    const relatedDownloads = downloads.filter(
+      (download) => `${download.tool}:${download.url}` === target.id,
+    )
+    if (relatedDownloads.length === 0) {
+      continue
+    }
+
+    const offlineReady = await Promise.all(
+      relatedDownloads.map((download) =>
+        isDownloadArtifactAvailableOffline(download, options.downloadCacheDir!),
+      ),
+    )
+
+    if (offlineReady.every(Boolean)) {
+      cachedResults.set(target.id, {
+        ...target,
+        reachable: true,
+        durationMs: 0,
+        statusCode: 200,
+      })
+    }
+  }
+
+  const liveTargets = targets.filter((target) => !cachedResults.has(target.id))
+  const liveResults =
+    liveTargets.length > 0
+      ? await runNetworkChecks(liveTargets, options)
+      : ([] as NetworkCheckResult[])
+  const liveResultMap = new Map(liveResults.map((result) => [result.id, result]))
+
+  return targets.map((target) => cachedResults.get(target.id) ?? liveResultMap.get(target.id)!)
 }
