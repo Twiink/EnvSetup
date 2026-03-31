@@ -678,6 +678,25 @@ describe('App', () => {
     expect(await screen.findByText('Node.js Environment')).toBeInTheDocument()
   })
 
+  it('switches to the beginner guide and back without losing workspace state', async () => {
+    render(<App />)
+
+    await runPassingPrecheck()
+
+    fireEvent.click(await screen.findByRole('button', { name: '新手知识' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '给小白用户的常用命令与基础概念' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '导入插件' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '环境配置' }))
+
+    expect(await screen.findByText('当前预检项均已通过。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '导入插件' })).toBeInTheDocument()
+    expect(runPrecheck).toHaveBeenCalledTimes(1)
+  })
+
   it('shows real_run summary after starting a task', async () => {
     render(<App />)
 

@@ -15,10 +15,13 @@ import type {
 import { DEFAULT_LOCALE, normalizeLocale, type AppLocale } from '../shared/locale'
 import { validateResolvedTemplateValues } from '../shared/templateFields'
 import { getLocaleButtonLabel, getUiText } from './copy'
+import { BeginnerGuidePanel } from './components/BeginnerGuidePanel'
 import { OverrideForm } from './components/OverrideForm'
 import { PrecheckPanel } from './components/PrecheckPanel'
 import { TaskPanel } from './components/TaskPanel'
 import { TemplatePanel } from './components/TemplatePanel'
+
+type AppView = 'workspace' | 'guide'
 
 function buildInitialValues(
   template: ResolvedTemplate,
@@ -181,6 +184,7 @@ export default function App() {
 
     return normalizeLocale(window.localStorage.getItem('envsetup.locale'))
   })
+  const [currentView, setCurrentView] = useState<AppView>('workspace')
   const [templates, setTemplates] = useState<ResolvedTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [nodeLtsVersions, setNodeLtsVersions] = useState<string[]>([])
@@ -624,36 +628,74 @@ export default function App() {
           <div
             style={{
               display: 'flex',
-              gap: '0.75rem',
-              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
               flexWrap: 'wrap',
               marginTop: '0.5rem',
             }}
           >
-            <span style={{ fontSize: '0.85rem', color: '#7D746D' }}>
-              {getUiText(locale, 'languageLabel')}
-            </span>
-            {(['zh-CN', 'en'] as const).map((targetLocale) => (
-              <button
-                key={targetLocale}
-                type="button"
-                onClick={() => setLocale(targetLocale)}
-                aria-pressed={locale === targetLocale}
-                style={{
-                  borderRadius: '6px',
-                  border: locale === targetLocale ? '1px solid #D47A6A' : '1px solid #EFEAE4',
-                  padding: '0.4rem 0.8rem',
-                  background: locale === targetLocale ? '#FFF0EE' : '#FFFFFF',
-                  color: locale === targetLocale ? '#D47A6A' : '#7D746D',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  fontWeight: locale === targetLocale ? 500 : 400,
-                  transition: 'all 0.2s',
-                }}
-              >
-                {getLocaleButtonLabel(targetLocale)}
-              </button>
-            ))}
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              {(
+                [
+                  ['workspace', 'workspaceView'],
+                  ['guide', 'guideView'],
+                ] as const
+              ).map(([view, labelKey]) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setCurrentView(view)}
+                  aria-pressed={currentView === view}
+                  style={{
+                    borderRadius: '999px',
+                    border: currentView === view ? '1px solid #D47A6A' : '1px solid #EFEAE4',
+                    padding: '0.45rem 0.95rem',
+                    background: currentView === view ? '#FFF0EE' : '#FFFFFF',
+                    color: currentView === view ? '#D47A6A' : '#7D746D',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: currentView === view ? 600 : 500,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {getUiText(locale, labelKey)}
+                </button>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '0.75rem',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: '0.85rem', color: '#7D746D' }}>
+                {getUiText(locale, 'languageLabel')}
+              </span>
+              {(['zh-CN', 'en'] as const).map((targetLocale) => (
+                <button
+                  key={targetLocale}
+                  type="button"
+                  onClick={() => setLocale(targetLocale)}
+                  aria-pressed={locale === targetLocale}
+                  style={{
+                    borderRadius: '6px',
+                    border: locale === targetLocale ? '1px solid #D47A6A' : '1px solid #EFEAE4',
+                    padding: '0.4rem 0.8rem',
+                    background: locale === targetLocale ? '#FFF0EE' : '#FFFFFF',
+                    color: locale === targetLocale ? '#D47A6A' : '#7D746D',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: locale === targetLocale ? 500 : 400,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {getLocaleButtonLabel(targetLocale)}
+                </button>
+              ))}
+            </div>
           </div>
         </header>
 
@@ -673,7 +715,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {importMessage ? (
+        {currentView === 'workspace' && importMessage ? (
           <div
             role="status"
             style={{
@@ -689,7 +731,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {taskMessage ? (
+        {currentView === 'workspace' && taskMessage ? (
           <div
             role="status"
             style={{
@@ -705,7 +747,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {cleanupBackup ? (
+        {currentView === 'workspace' && cleanupBackup ? (
           <div
             role="status"
             style={{
@@ -746,77 +788,83 @@ export default function App() {
           </div>
         ) : null}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            onClick={handleImportPlugin}
-            disabled={busy}
-            style={{
-              borderRadius: '6px',
-              border: '1px solid #EFEAE4',
-              padding: '0.5rem 1.25rem',
-              background: busy ? '#F7F3EE' : '#FFFFFF',
-              color: busy ? '#A49C95' : '#4A403A',
-              cursor: busy ? 'not-allowed' : 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-            }}
-          >
-            {getUiText(locale, 'importPlugin')}
-          </button>
-        </div>
+        {currentView === 'workspace' ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={handleImportPlugin}
+                disabled={busy}
+                style={{
+                  borderRadius: '6px',
+                  border: '1px solid #EFEAE4',
+                  padding: '0.5rem 1.25rem',
+                  background: busy ? '#F7F3EE' : '#FFFFFF',
+                  color: busy ? '#A49C95' : '#4A403A',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                }}
+              >
+                {getUiText(locale, 'importPlugin')}
+              </button>
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          <TemplatePanel
-            locale={locale}
-            templates={templates}
-            selectedTemplateId={selectedTemplateId}
-            onSelect={handleSelectTemplate}
-          />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <TemplatePanel
+                locale={locale}
+                templates={templates}
+                selectedTemplateId={selectedTemplateId}
+                onSelect={handleSelectTemplate}
+              />
 
-          <OverrideForm
-            locale={locale}
-            template={selectedTemplate}
-            values={values}
-            errors={validationErrors}
-            busy={busy}
-            fieldOptions={buildFieldOptions(
-              values,
-              nodeLtsVersions,
-              javaLtsVersions,
-              pythonVersions,
-              gitVersions,
-              mysqlVersions,
-              redisVersions,
-              mavenVersions,
-            )}
-            onChange={handleChange}
-            onPickDirectory={handlePickDirectory}
-          />
+              <OverrideForm
+                locale={locale}
+                template={selectedTemplate}
+                values={values}
+                errors={validationErrors}
+                busy={busy}
+                fieldOptions={buildFieldOptions(
+                  values,
+                  nodeLtsVersions,
+                  javaLtsVersions,
+                  pythonVersions,
+                  gitVersions,
+                  mysqlVersions,
+                  redisVersions,
+                  mavenVersions,
+                )}
+                onChange={handleChange}
+                onPickDirectory={handlePickDirectory}
+              />
 
-          <PrecheckPanel
-            locale={locale}
-            precheck={precheck}
-            disabled={!selectedTemplate || busy || Object.keys(validationErrors).length > 0}
-            busy={busy}
-            onRun={handleRunPrecheck}
-            onCleanup={handleCleanupDetections}
-          />
+              <PrecheckPanel
+                locale={locale}
+                precheck={precheck}
+                disabled={!selectedTemplate || busy || Object.keys(validationErrors).length > 0}
+                busy={busy}
+                onRun={handleRunPrecheck}
+                onCleanup={handleCleanupDetections}
+              />
 
-          <TaskPanel
-            locale={locale}
-            task={task}
-            progressEvents={taskProgressEvents}
-            busy={busy}
-            canCreate={canCreateTask}
-            onCreateTask={handleCreateTask}
-            onStartTask={handleStartTask}
-            onCancelTask={handleCancelTask}
-            onRetryPlugin={handleRetryPlugin}
-            onApplyEnvChanges={handleApplyEnvChanges}
-          />
-        </div>
+              <TaskPanel
+                locale={locale}
+                task={task}
+                progressEvents={taskProgressEvents}
+                busy={busy}
+                canCreate={canCreateTask}
+                onCreateTask={handleCreateTask}
+                onStartTask={handleStartTask}
+                onCancelTask={handleCancelTask}
+                onRetryPlugin={handleRetryPlugin}
+                onApplyEnvChanges={handleApplyEnvChanges}
+              />
+            </div>
+          </>
+        ) : (
+          <BeginnerGuidePanel locale={locale} />
+        )}
       </div>
     </main>
   )

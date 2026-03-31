@@ -27,11 +27,15 @@ describe('getUiText', () => {
   it('returns zh-CN text for known keys', () => {
     expect(getUiText('zh-CN', 'appTitle')).toBe('开工吧')
     expect(getUiText('zh-CN', 'runPrecheck')).toBe('运行预检')
+    expect(getUiText('zh-CN', 'guideView')).toBe('新手知识')
+    expect(getUiText('zh-CN', 'guideCopyCommand')).toBe('复制命令')
   })
 
   it('returns en text for known keys', () => {
     expect(getUiText('en', 'appTitle')).toBe('EnvSetup')
     expect(getUiText('en', 'runPrecheck')).toBe('Run Precheck')
+    expect(getUiText('en', 'workspaceView')).toBe('Workspace')
+    expect(getUiText('en', 'guideCopyDone')).toBe('Copied')
   })
 })
 

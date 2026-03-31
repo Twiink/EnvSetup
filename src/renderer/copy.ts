@@ -34,6 +34,59 @@ const uiText = {
     'zh-CN': '语言',
     en: 'Language',
   },
+  workspaceView: {
+    'zh-CN': '环境配置',
+    en: 'Workspace',
+  },
+  guideView: {
+    'zh-CN': '新手知识',
+    en: 'Beginner Guide',
+  },
+  guideBadge: {
+    'zh-CN': '基础知识页',
+    en: 'Beginner Guide',
+  },
+  guideTitle: {
+    'zh-CN': '给小白用户的常用命令与基础概念',
+    en: 'Common Commands and Concepts for Beginners',
+  },
+  guideDescription: {
+    'zh-CN':
+      '这里整理了最常见的 Git、Python 虚拟环境和 Node 基础知识。先看懂这些，再动手敲命令会更稳。',
+    en: 'This page collects the most common Git commands, Python virtual environment workflows, and Node basics. Read these first, then start typing commands with more confidence.',
+  },
+  guideQuickNavLabel: {
+    'zh-CN': '知识页快速跳转',
+    en: 'Guide quick navigation',
+  },
+  guideCopyCommand: {
+    'zh-CN': '复制命令',
+    en: 'Copy Command',
+  },
+  guideCopyDone: {
+    'zh-CN': '已复制',
+    en: 'Copied',
+  },
+  guideCopyFailed: {
+    'zh-CN': '复制失败',
+    en: 'Copy Failed',
+  },
+  guideCopyUnavailable: {
+    'zh-CN': '当前环境不支持复制',
+    en: 'Copy Unavailable',
+  },
+  guideExampleLabel: {
+    'zh-CN': '示例',
+    en: 'Example',
+  },
+  guideTipLabel: {
+    'zh-CN': '提醒',
+    en: 'Tip',
+  },
+  guidePitfallLabel: {
+    'zh-CN': '常见误区',
+    en: 'Pitfall',
+  },
   templatesEyebrow: {
     'zh-CN': '模板',
     en: 'Templates',
