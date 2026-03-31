@@ -46,10 +46,7 @@ function selectCiVersion(tool: RealRollbackTool, fallback: string): string {
 }
 
 function resolveVersionSeries(version: string, segments = 2): string {
-  return version
-    .split('.')
-    .slice(0, segments)
-    .join('.')
+  return version.split('.').slice(0, segments).join('.')
 }
 
 function resolveMysqlHomebrewFormula(version?: string): string {
@@ -71,6 +68,12 @@ const gitTestVersion = selectCiVersion('git', isMac ? '2.33.0' : '2.49.1')
 const mysqlTestVersion = selectCiVersion('mysql', '8.4.8')
 const redisTestVersion = selectCiVersion('redis', '7.4.7')
 const mavenTestVersion = selectCiVersion('maven', '3.9.11')
+// Package-manager flows below do not expose every patch version distinctly in CI, so we run them
+// on one representative matrix version and keep the other jobs focused on versioned direct installs.
+const representativeCiGitScoopVersion = '2.50.1'
+const representativeCiMysqlPackageVersion = '8.4.8'
+const representativeCiRedisPackageVersion = '7.4.7'
+const representativeCiMavenPackageVersion = '3.9.11'
 
 type RealRollbackCase = {
   name: string
@@ -80,6 +83,7 @@ type RealRollbackCase = {
   templateId: string
   timeout: number
   buildParams: (installRootDir: string, downloadCacheDir: string) => Record<string, string>
+  ciVersionGate?: string
   verifyInstalledState?: (installRootDir: string) => Promise<void>
   verifyRolledBackState?: (installRootDir: string) => Promise<void>
 }
@@ -201,7 +205,12 @@ function shouldRunCaseInCi(testCase: RealRollbackCase): boolean {
   if (!isCi) return true
   const ciTool = process.env.ENVSETUP_CI_TOOL
   if (!ciTool) return true
-  return testCase.tool === ciTool
+  if (testCase.tool !== ciTool) return false
+  const ciVersion = process.env.ENVSETUP_CI_VERSION
+  if (testCase.ciVersionGate && ciVersion) {
+    return ciVersion === testCase.ciVersionGate
+  }
+  return true
 }
 
 const allRealRollbackCases: RealRollbackCase[] = [
@@ -353,6 +362,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
     plugin: mavenEnvPlugin,
     templateId: 'maven-template',
     timeout: 300_000,
+    ciVersionGate: representativeCiMavenPackageVersion,
     buildParams: (installRootDir, cacheDir) => ({
       installRootDir,
       mavenManager: 'package',
@@ -444,6 +454,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
           plugin: mysqlEnvPlugin,
           templateId: 'mysql-template',
           timeout: 300_000,
+          ciVersionGate: representativeCiMysqlPackageVersion,
           buildParams: (installRootDir: string, cacheDir: string) => ({
             installRootDir,
             mysqlManager: 'package',
@@ -451,9 +462,9 @@ const allRealRollbackCases: RealRollbackCase[] = [
             downloadCacheDir: cacheDir,
           }),
           verifyInstalledState: async () => {
-            expect(await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion))).toBe(
-              true,
-            )
+            expect(
+              await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion)),
+            ).toBe(true)
           },
           verifyRolledBackState: async () => {
             expect(
@@ -468,6 +479,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
           plugin: redisEnvPlugin,
           templateId: 'redis-template',
           timeout: 300_000,
+          ciVersionGate: representativeCiRedisPackageVersion,
           buildParams: (installRootDir: string, cacheDir: string) => ({
             installRootDir,
             redisManager: 'package',
@@ -492,6 +504,7 @@ const allRealRollbackCases: RealRollbackCase[] = [
           plugin: gitEnvPlugin,
           templateId: 'git-template',
           timeout: 300_000,
+          ciVersionGate: representativeCiGitScoopVersion,
           buildParams: (installRootDir: string, cacheDir: string) => ({
             installRootDir,
             gitManager: 'scoop',

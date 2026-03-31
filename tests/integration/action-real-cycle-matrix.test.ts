@@ -71,10 +71,7 @@ function escapeRegExp(value: string): string {
 }
 
 function resolveVersionSeries(version: string, segments = 2): string {
-  return version
-    .split('.')
-    .slice(0, segments)
-    .join('.')
+  return version.split('.').slice(0, segments).join('.')
 }
 
 function resolveMysqlHomebrewFormula(version?: string): string {
@@ -97,6 +94,12 @@ const gitTestVersion = selectCiVersion('git', isMac ? '2.33.0' : '2.49.1')
 const mysqlTestVersion = selectCiVersion('mysql', '8.4.8')
 const redisTestVersion = selectCiVersion('redis', '7.4.7')
 const mavenTestVersion = selectCiVersion('maven', '3.9.11')
+// Package-manager flows below do not expose every patch version distinctly in CI, so we run them
+// on one representative matrix version and keep the other jobs focused on versioned direct installs.
+const representativeCiGitScoopVersion = '2.50.1'
+const representativeCiMysqlPackageVersion = '8.4.8'
+const representativeCiRedisPackageVersion = '7.4.7'
+const representativeCiMavenPackageVersion = '3.9.11'
 
 type RealCycleCase = {
   name: string
@@ -113,6 +116,7 @@ type RealCycleCase = {
   templateId: string
   buildParams: (installRootDir: string) => Record<string, string>
   verifyPattern: RegExp
+  ciVersionGate?: string
   expectInstallRootAfterInstall?: boolean
   verifyInstalledState?: () => Promise<void>
   verifyRolledBackState?: () => Promise<void>
@@ -236,6 +240,7 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'maven-env',
     plugin: mavenEnvPlugin,
     templateId: 'maven-template',
+    ciVersionGate: representativeCiMavenPackageVersion,
     buildParams: (installRootDir) =>
       withSharedCaches({
         installRootDir,
@@ -298,6 +303,7 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'mysql-env',
     plugin: mysqlEnvPlugin,
     templateId: 'mysql-template',
+    ciVersionGate: isMac ? representativeCiMysqlPackageVersion : undefined,
     buildParams: (installRootDir) =>
       withSharedCaches({
         installRootDir,
@@ -310,9 +316,9 @@ const allRealCycleCases: RealCycleCase[] = [
     expectInstallRootAfterInstall: false,
     verifyInstalledState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion))).toBe(
-          true,
-        )
+        expect(
+          await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion)),
+        ).toBe(true)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('mysql')).toBe(true)
@@ -320,9 +326,9 @@ const allRealCycleCases: RealCycleCase[] = [
     },
     verifyRolledBackState: async () => {
       if (isMac) {
-        expect(await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion))).toBe(
-          false,
-        )
+        expect(
+          await isHomebrewFormulaInstalled(resolveMysqlHomebrewFormula(mysqlTestVersion)),
+        ).toBe(false)
       }
       if (isWindows) {
         expect(await isScoopPackageInstalled('mysql')).toBe(false)
@@ -349,6 +355,7 @@ const allRealCycleCases: RealCycleCase[] = [
     pluginId: 'redis-env',
     plugin: redisEnvPlugin,
     templateId: 'redis-template',
+    ciVersionGate: isMac ? representativeCiRedisPackageVersion : undefined,
     buildParams: (installRootDir) =>
       withSharedCaches({
         installRootDir,
@@ -407,6 +414,7 @@ const allRealCycleCases: RealCycleCase[] = [
           pluginId: 'git-env',
           plugin: gitEnvPlugin,
           templateId: 'git-template',
+          ciVersionGate: representativeCiGitScoopVersion,
           buildParams: (installRootDir: string) =>
             withSharedCaches({
               installRootDir,
@@ -429,7 +437,12 @@ const allRealCycleCases: RealCycleCase[] = [
 function shouldRunRealCycleCaseInCi(testCase: RealCycleCase): boolean {
   if (!isCi) return true
   const ciTool = process.env.ENVSETUP_CI_TOOL
-  if (ciTool) return testCase.tool === ciTool
+  if (!ciTool) return true
+  if (testCase.tool !== ciTool) return false
+  const ciVersion = process.env.ENVSETUP_CI_VERSION
+  if (testCase.ciVersionGate && ciVersion) {
+    return ciVersion === testCase.ciVersionGate
+  }
   return true
 }
 
