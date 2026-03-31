@@ -29,6 +29,8 @@ describe('getUiText', () => {
     expect(getUiText('zh-CN', 'runPrecheck')).toBe('运行预检')
     expect(getUiText('zh-CN', 'guideView')).toBe('新手知识')
     expect(getUiText('zh-CN', 'guideCopyCommand')).toBe('复制命令')
+    expect(getUiText('zh-CN', 'guideToolsNavLabel')).toBe('工具切换')
+    expect(getUiText('zh-CN', 'guideEnvVarsLabel')).toBe('环境变量')
   })
 
   it('returns en text for known keys', () => {
@@ -36,6 +38,8 @@ describe('getUiText', () => {
     expect(getUiText('en', 'runPrecheck')).toBe('Run Precheck')
     expect(getUiText('en', 'workspaceView')).toBe('Workspace')
     expect(getUiText('en', 'guideCopyDone')).toBe('Copied')
+    expect(getUiText('en', 'guideCurrentPlatformLabel')).toBe('Primary platform')
+    expect(getUiText('en', 'guideOtherPlatformLabel')).toBe('View Other Platform Content')
   })
 })
 

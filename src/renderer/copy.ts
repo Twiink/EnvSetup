@@ -52,12 +52,44 @@ const uiText = {
   },
   guideDescription: {
     'zh-CN':
-      '这里整理了最常见的 Git、Python 虚拟环境和 Node 基础知识。先看懂这些，再动手敲命令会更稳。',
-    en: 'This page collects the most common Git commands, Python virtual environment workflows, and Node basics. Read these first, then start typing commands with more confidence.',
+      '这里按工具整理了 Node、Java、Python、Git、MySQL、Redis、Maven 的基础知识、常见命令、环境变量和路径概念，适合第一次接触开发环境的用户按章节慢慢看。',
+    en: 'This page organizes beginner-friendly notes for Node, Java, Python, Git, MySQL, Redis, and Maven, including common commands, environment variables, and path concepts.',
   },
   guideQuickNavLabel: {
     'zh-CN': '知识页快速跳转',
     en: 'Guide quick navigation',
+  },
+  guideToolsNavLabel: {
+    'zh-CN': '工具切换',
+    en: 'Tool navigation',
+  },
+  guideSectionsNavLabel: {
+    'zh-CN': '当前工具目录',
+    en: 'Current tool sections',
+  },
+  guideCurrentPlatformLabel: {
+    'zh-CN': '当前优先平台',
+    en: 'Primary platform',
+  },
+  guidePlatformHint: {
+    'zh-CN': '另一平台内容会收在折叠块里，需要时再展开。',
+    en: 'Content for the other platform is placed inside collapsible blocks.',
+  },
+  guideCodeSamplesLabel: {
+    'zh-CN': '命令与路径示例',
+    en: 'Command and Path Examples',
+  },
+  guideEnvVarsLabel: {
+    'zh-CN': '环境变量',
+    en: 'Environment Variables',
+  },
+  guideFaqLabel: {
+    'zh-CN': '常见问题',
+    en: 'Common Questions',
+  },
+  guideOtherPlatformLabel: {
+    'zh-CN': '查看另一平台内容',
+    en: 'View Other Platform Content',
   },
   guideCopyCommand: {
     'zh-CN': '复制命令',
