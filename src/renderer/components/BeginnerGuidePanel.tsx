@@ -540,7 +540,7 @@ export function BeginnerGuidePanel({ locale }: BeginnerGuidePanelProps) {
         style={{
           display: 'grid',
           gap: '1rem',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: '1fr',
         }}
       >
         <div
@@ -672,6 +672,10 @@ export function BeginnerGuidePanel({ locale }: BeginnerGuidePanelProps) {
             style={{
               display: 'grid',
               gap: '1rem',
+              padding: '1.15rem 1.2rem 1.25rem',
+              borderRadius: '20px',
+              background: '#FCFAF6',
+              border: '1px solid #F1E8DE',
               scrollMarginTop: '1.5rem',
             }}
           >
@@ -688,8 +692,7 @@ export function BeginnerGuidePanel({ locale }: BeginnerGuidePanelProps) {
               style={{
                 display: 'grid',
                 gap: '1rem',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                alignItems: 'start',
+                gridTemplateColumns: '1fr',
               }}
             >
               {section.cards.map((card) => (
