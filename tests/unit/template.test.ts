@@ -2,6 +2,7 @@
  * template 模块的单元测试。
  */
 
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -67,7 +68,7 @@ describe('template', () => {
 
     expect(template.id).toBe('imported-acme-env-1.2.3')
     expect(template.plugins).toEqual([{ pluginId: 'acme-env', version: '1.2.3' }])
-    expect(template.fields['acme.installRootDir'].value).toBe('/tmp/envsetup-data/toolchain/acme')
+    expect(template.fields['acme.installRootDir'].value).toBe(join('/tmp/envsetup-data', 'toolchain', 'acme'))
     expect(template.fields['acme.channel'].enum).toEqual(['stable', 'beta'])
     expect(template.fields['acme.channel'].editable).toBe(true)
   })
