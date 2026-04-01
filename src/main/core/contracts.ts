@@ -592,6 +592,52 @@ export type EnvChangesPreview = {
   targets: string[]
 }
 
+// ============================================================
+// 日志系统类型定义
+// ============================================================
+
+export type LogLevel = 'info' | 'warn' | 'error'
+
+export type LogExportFormat = 'text' | 'json'
+
+export type LogEntry = {
+  timestamp: string
+  level: LogLevel
+  source: string
+  message: string
+  context?: Record<string, unknown>
+  error?: {
+    name: string
+    message: string
+    stack?: string
+    code?: string
+  }
+}
+
+export type SystemInfo = {
+  platform: string
+  arch: string
+  osVersion: string
+  osRelease: string
+  cpuModel: string
+  cpuCores: number
+  totalMemory: number
+  freeMemory: number
+  electronVersion: string
+  nodeVersion: string
+  chromeVersion: string
+  appVersion: string
+  locale: string
+  userData: string
+}
+
+export type LogExportResult = {
+  filePath: string
+  totalEntries: number
+  infoCount: number
+  errorCount: number
+}
+
 export type EnvSetupApi = {
   loadBootstrap: () => Promise<BootstrapData>
   listTemplates: () => Promise<ResolvedTemplate[]>
@@ -643,4 +689,12 @@ export type EnvSetupApi = {
   // 进度事件
   onTaskProgress: (callback: (event: TaskProgressEvent) => void) => void
   removeTaskProgressListener: () => void
+  // 日志
+  writeLog: (entry: {
+    level: LogLevel
+    source: string
+    message: string
+    context?: Record<string, unknown>
+  }) => Promise<void>
+  exportLogs: (format: LogExportFormat) => Promise<LogExportResult | undefined>
 }

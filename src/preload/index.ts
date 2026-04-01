@@ -41,6 +41,9 @@ const api: EnvSetupApi = {
   executeRollback: (payload) => ipcRenderer.invoke('rollback:execute', payload),
   // 增强预检
   runEnhancedPrecheck: (pluginResults) => ipcRenderer.invoke('precheck:enhanced', pluginResults),
+  // 日志
+  writeLog: (entry) => ipcRenderer.invoke('log:write', entry),
+  exportLogs: (format) => ipcRenderer.invoke('log:export', format),
   onTaskProgress: (callback) => {
     taskProgressListener = callback
     if (!taskProgressBridgeRegistered) {

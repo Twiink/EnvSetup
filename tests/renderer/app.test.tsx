@@ -577,6 +577,8 @@ beforeEach(() => {
     suggestRollback: vi.fn(),
     executeRollback,
     runEnhancedPrecheck: vi.fn(),
+    writeLog: vi.fn().mockResolvedValue(undefined),
+    exportLogs: vi.fn().mockResolvedValue(undefined),
   }
 
   Object.defineProperty(window, 'envSetup', {

@@ -13,6 +13,7 @@ export type AppPaths = {
   snapshotsDir: string
   downloadCacheDir: string
   extractedCacheDir: string
+  logsDir: string
 }
 
 let configuredDefaultAppDataDir: string | undefined
@@ -55,6 +56,7 @@ export function getAppPaths(baseDir = resolveDefaultAppDataDir()): AppPaths {
     snapshotsDir: join(baseDir, 'snapshots'),
     downloadCacheDir,
     extractedCacheDir,
+    logsDir: join(baseDir, 'logs'),
   }
 }
 
@@ -68,6 +70,7 @@ export async function ensureAppPaths(baseDir?: string): Promise<AppPaths> {
     mkdir(paths.snapshotsDir, { recursive: true }),
     mkdir(paths.downloadCacheDir, { recursive: true }),
     mkdir(paths.extractedCacheDir, { recursive: true }),
+    mkdir(paths.logsDir, { recursive: true }),
   ])
   return paths
 }

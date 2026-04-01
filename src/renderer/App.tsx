@@ -8,6 +8,7 @@ import type {
   BootstrapData,
   DetectedEnvironment,
   InstallTask,
+  LogLevel,
   Primitive,
   PrecheckResult,
   ResolvedTemplate,
@@ -230,7 +231,11 @@ export default function App() {
   const [rollbackResult, setRollbackResult] = useState<RollbackResult>()
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false)
   const [rollbackSuggestions, setRollbackSuggestions] = useState<RollbackSuggestion[]>([])
+  const [exportMessage, setExportMessage] = useState<string>()
 
+  function emitLog(level: LogLevel, source: string, message: string, context?: Record<string, unknown>) {
+    window.envSetup.writeLog({ level, source, message, context }).catch(() => {})
+  }
   const syncBootstrapData = useCallback((
     bootstrap: BootstrapData,
     preferredTemplateId?: string,
@@ -392,6 +397,7 @@ export default function App() {
     precheck.level !== 'block'
 
   function handleSelectTemplate(templateId: string) {
+    emitLog('info', 'renderer', 'template:select', { templateId })
     const template = getTemplateById(templates, templateId)
     if (!template) {
       return
@@ -424,6 +430,7 @@ export default function App() {
   }
 
   function handleChange(key: string, value: Primitive) {
+    emitLog('info', 'renderer', 'form:change', { key, value })
     setValues((currentValues) => ({
       ...currentValues,
       [key]: value,
@@ -443,6 +450,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'precheck:run', { templateId: selectedTemplate.id })
     setBusy(true)
     setError(undefined)
 
@@ -454,7 +462,9 @@ export default function App() {
       })
       setPrecheck(nextPrecheck)
     } catch (runError) {
-      setError(runError instanceof Error ? runError.message : String(runError))
+      const msg = runError instanceof Error ? runError.message : String(runError)
+      emitLog('error', 'renderer', 'precheck:run failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -465,6 +475,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'task:create', { templateId: selectedTemplate.id, values })
     setBusy(true)
     setError(undefined)
 
@@ -480,7 +491,9 @@ export default function App() {
       setTaskProgressEvents([])
       activeTaskIdRef.current = nextTask.id
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : String(createError))
+      const msg = createError instanceof Error ? createError.message : String(createError)
+      emitLog('error', 'renderer', 'task:create failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -491,6 +504,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'task:start', { taskId: task.id })
     setBusy(true)
     setError(undefined)
     setTaskProgressEvents([])
@@ -504,7 +518,9 @@ export default function App() {
       setTask(nextTask)
       await refreshSnapshots()
     } catch (startError) {
-      setError(startError instanceof Error ? startError.message : String(startError))
+      const msg = startError instanceof Error ? startError.message : String(startError)
+      emitLog('error', 'renderer', 'task:start failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -515,6 +531,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'task:cancel', { taskId: task.id })
     setBusy(true)
     setError(undefined)
 
@@ -522,13 +539,16 @@ export default function App() {
       const nextTask = await window.envSetup.cancelTask(task.id)
       setTask(nextTask)
     } catch (cancelError) {
-      setError(cancelError instanceof Error ? cancelError.message : String(cancelError))
+      const msg = cancelError instanceof Error ? cancelError.message : String(cancelError)
+      emitLog('error', 'renderer', 'task:cancel failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
   }
 
   async function handleImportPlugin() {
+    emitLog('info', 'renderer', 'plugin:import')
     setBusy(true)
     setError(undefined)
     setImportMessage(undefined)
@@ -544,7 +564,9 @@ export default function App() {
       })
       setImportMessage(getUiText(locale, 'importPluginSuccess'))
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : String(importError))
+      const msg = importError instanceof Error ? importError.message : String(importError)
+      emitLog('error', 'renderer', 'plugin:import failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -555,6 +577,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'task:retry', { taskId: task.id, pluginId })
     setBusy(true)
     setError(undefined)
     setTaskProgressEvents([])
@@ -568,7 +591,9 @@ export default function App() {
       setTask(nextTask)
       await refreshSnapshots()
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : String(retryError))
+      const msg = retryError instanceof Error ? retryError.message : String(retryError)
+      emitLog('error', 'renderer', 'task:retry failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -579,6 +604,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'env:apply', { pluginId })
     const plugin = task.plugins.find((entry) => entry.pluginId === pluginId)
     const changes = plugin?.lastResult?.envChanges ?? []
     if (changes.length === 0) {
@@ -595,7 +621,9 @@ export default function App() {
         `${getUiText(locale, 'applyEnvChangesSuccess')} (${result.applied.length}/${changes.length})`,
       )
     } catch (applyError) {
-      setError(applyError instanceof Error ? applyError.message : String(applyError))
+      const msg = applyError instanceof Error ? applyError.message : String(applyError)
+      emitLog('error', 'renderer', 'env:apply failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -606,6 +634,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'cleanup:batch', { count: detections.length })
     setBusy(true)
     setError(undefined)
 
@@ -631,7 +660,9 @@ export default function App() {
         setError(cleanupErrors.join(' | '))
       }
     } catch (cleanupError) {
-      setError(cleanupError instanceof Error ? cleanupError.message : String(cleanupError))
+      const msg = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+      emitLog('error', 'renderer', 'cleanup:batch failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -642,6 +673,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'rollback:cleanup', { snapshotId: cleanupBackup.snapshotId })
     setBusy(true)
     setError(undefined)
 
@@ -668,7 +700,9 @@ export default function App() {
         )
       }
     } catch (rollbackError) {
-      setError(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
+      const msg = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+      emitLog('error', 'renderer', 'rollback:cleanup failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -692,6 +726,7 @@ export default function App() {
       return
     }
 
+    emitLog('info', 'renderer', 'snapshot:create', { taskId: task.id })
     setBusy(true)
     setError(undefined)
 
@@ -703,13 +738,16 @@ export default function App() {
       await refreshSnapshots()
       setTaskMessage(locale === 'zh-CN' ? '快照已创建。' : 'Snapshot created.')
     } catch (snapshotError) {
-      setError(snapshotError instanceof Error ? snapshotError.message : String(snapshotError))
+      const msg = snapshotError instanceof Error ? snapshotError.message : String(snapshotError)
+      emitLog('error', 'renderer', 'snapshot:create failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
   }
 
   async function handleDeleteSnapshot(snapshotId: string) {
+    emitLog('info', 'renderer', 'snapshot:delete', { snapshotId })
     setBusy(true)
     setError(undefined)
 
@@ -717,7 +755,9 @@ export default function App() {
       await window.envSetup.deleteSnapshot(snapshotId)
       await refreshSnapshots()
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : String(deleteError))
+      const msg = deleteError instanceof Error ? deleteError.message : String(deleteError)
+      emitLog('error', 'renderer', 'snapshot:delete failed', { error: msg })
+      setError(msg)
     } finally {
       setBusy(false)
     }
@@ -746,6 +786,7 @@ export default function App() {
   }
 
   async function handleExecuteRollback(snapshotId: string) {
+    emitLog('info', 'renderer', 'rollback:execute', { snapshotId })
     setBusy(true)
     setError(undefined)
     setRollbackResult(undefined)
@@ -776,7 +817,31 @@ export default function App() {
         )
       }
     } catch (rollbackError) {
-      setError(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
+      const msg = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+      emitLog('error', 'renderer', 'rollback:execute failed', { error: msg })
+      setError(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleExportLogs(format: 'text' | 'json') {
+    emitLog('info', 'renderer', 'log:export', { format })
+    setBusy(true)
+    setExportMessage(undefined)
+    setError(undefined)
+
+    try {
+      const result = await window.envSetup.exportLogs(format)
+      if (result) {
+        setExportMessage(getUiText(locale, 'exportLogsSuccess'))
+      } else {
+        setExportMessage(getUiText(locale, 'exportLogsCancelled'))
+      }
+    } catch (exportError) {
+      const msg = exportError instanceof Error ? exportError.message : String(exportError)
+      emitLog('error', 'renderer', 'log:export failed', { error: msg })
+      setError(`${getUiText(locale, 'exportLogsError')}: ${msg}`)
     } finally {
       setBusy(false)
     }
@@ -849,7 +914,10 @@ export default function App() {
                 <button
                   key={view}
                   type="button"
-                  onClick={() => setCurrentView(view)}
+                  onClick={() => {
+                    emitLog('info', 'renderer', 'view:switch', { to: view })
+                    setCurrentView(view)
+                  }}
                   aria-pressed={currentView === view}
                   style={{
                     borderRadius: '999px',
@@ -883,7 +951,10 @@ export default function App() {
                 <button
                   key={targetLocale}
                   type="button"
-                  onClick={() => setLocale(targetLocale)}
+                  onClick={() => {
+                    emitLog('info', 'renderer', 'locale:switch', { to: targetLocale })
+                    setLocale(targetLocale)
+                  }}
                   aria-pressed={locale === targetLocale}
                   style={{
                     borderRadius: '6px',
@@ -900,6 +971,43 @@ export default function App() {
                   {getLocaleButtonLabel(targetLocale)}
                 </button>
               ))}
+              <span style={{ color: '#EFEAE4' }}>|</span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => handleExportLogs('text')}
+                style={{
+                  borderRadius: '6px',
+                  border: '1px solid #EFEAE4',
+                  padding: '0.4rem 0.8rem',
+                  background: busy ? '#F7F3EE' : '#FFFFFF',
+                  color: busy ? '#A49C95' : '#7D746D',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 400,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {getUiText(locale, 'exportLogsText')}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => handleExportLogs('json')}
+                style={{
+                  borderRadius: '6px',
+                  border: '1px solid #EFEAE4',
+                  padding: '0.4rem 0.8rem',
+                  background: busy ? '#F7F3EE' : '#FFFFFF',
+                  color: busy ? '#A49C95' : '#7D746D',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 400,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {getUiText(locale, 'exportLogsJson')}
+              </button>
             </div>
           </div>
         </header>
@@ -917,6 +1025,22 @@ export default function App() {
             }}
           >
             {error}
+          </div>
+        ) : null}
+
+        {exportMessage ? (
+          <div
+            role="status"
+            style={{
+              padding: '1.25rem',
+              borderRadius: '12px',
+              background: '#F2F6ED',
+              color: '#6B8E53',
+              border: '1px solid #DEE8D5',
+              fontSize: '0.95rem',
+            }}
+          >
+            {exportMessage}
           </div>
         ) : null}
 

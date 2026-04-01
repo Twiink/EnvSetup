@@ -3,12 +3,13 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { stat } from 'node:fs/promises'
+import { stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { getMainWindow } from '../index'
 import { ensureAppPaths } from '../core/appPaths'
+import { buildExportContent, logInfo, logWarn, writeLog } from '../core/appLogger'
 import { applyEnvChanges, previewEnvChanges } from '../core/envPersistence'
 import {
   cleanupDetectedEnvironment,
@@ -63,6 +64,8 @@ import type {
   FailureAnalysis,
   ImportedPluginRegistration,
   InstallTask,
+  LogExportFormat,
+  LogLevel,
   PluginInstallResult,
   Primitive,
   ResolvedTemplate,
@@ -331,7 +334,7 @@ async function finalizeBackgroundTask(
     try {
       await markSnapshotDeletable(paths.snapshotsDir, nextTask.snapshotId)
     } catch (err) {
-      console.warn(`[task:finalize] markSnapshotDeletable failed for snapshot ${nextTask.snapshotId}:`, err)
+      logWarn('ipc', 'markSnapshotDeletable failed', { snapshotId: nextTask.snapshotId, error: String(err) })
     }
   }
 
@@ -340,7 +343,7 @@ async function finalizeBackgroundTask(
       const rollbackSuggestions = await suggestRollbackSnapshots(paths.snapshotsDir, nextTask.id)
       nextTask = { ...nextTask, rollbackSuggestions }
     } catch (err) {
-      console.warn(`[task:finalize] suggestRollbackSnapshots failed for task ${nextTask.id}:`, err)
+      logWarn('ipc', 'suggestRollbackSnapshots failed', { taskId: nextTask.id, error: String(err) })
     }
   }
 
@@ -433,11 +436,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('redis:list-versions', async () => listRedisVersionsCached())
   ipcMain.handle('maven:list-versions', async () => listMavenVersionsCached())
   ipcMain.handle('environment:cleanup', async (_event, detection: DetectedEnvironment) => {
+    logInfo('ipc', 'environment:cleanup', { tool: detection.tool, path: detection.path })
     const result = await cleanupDetectedEnvironment(detection)
     clearRuntimeDerivedCaches()
     return result
   })
   ipcMain.handle('environment:cleanup-batch', async (_event, detections: DetectedEnvironment[]) => {
+    logInfo('ipc', 'environment:cleanup-batch', { count: detections?.length ?? 0 })
     const cleanupTargets = (detections ?? []).filter((detection) => detection.cleanupSupported)
     if (cleanupTargets.length === 0) {
       throw new Error('No cleanup-supported environments were provided')
@@ -512,6 +517,7 @@ export function registerIpcHandlers(): void {
         rollbackBaseSnapshotId?: string
       },
     ) => {
+      logInfo('ipc', 'task:create', { templateId: payload.templateId, values: payload.values })
       const [paths, template] = await Promise.all([
         ensureAppPaths(),
         getTemplate(payload.templateId),
@@ -538,6 +544,7 @@ export function registerIpcHandlers(): void {
   )
 
   ipcMain.handle('task:start', async (_event, taskId: string) => {
+    logInfo('ipc', 'task:start', { taskId })
     const paths = await ensureAppPaths()
     const task = await getTask(taskId, paths.tasksDir)
 
@@ -559,7 +566,7 @@ export function registerIpcHandlers(): void {
       await updateSnapshotMeta(paths.snapshotsDir, snapshot)
       snapshotId = snapshot.id
     } catch (err) {
-      console.warn(`[task:start] createSnapshot failed for task ${task.id}, proceeding without rollback support:`, err)
+      logWarn('ipc', 'createSnapshot failed, proceeding without rollback', { taskId: task.id, error: String(err) })
     }
 
     return beginTaskExecution({
@@ -572,6 +579,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('task:cancel', async (_event, taskId: string) => {
+    logInfo('ipc', 'task:cancel', { taskId })
     const paths = await ensureAppPaths()
     runningTaskControllers.get(taskId)?.abort()
     const task = await getTask(taskId, paths.tasksDir)
@@ -583,6 +591,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     'task:retry-plugin',
     async (_event, payload: { taskId: string; pluginId: string }) => {
+      logInfo('ipc', 'task:retry-plugin', { taskId: payload.taskId, pluginId: payload.pluginId })
       const paths = await ensureAppPaths()
       const task = await getTask(payload.taskId, paths.tasksDir)
       const nextTask = await prepareTaskPluginRetry({
@@ -602,6 +611,7 @@ export function registerIpcHandlers(): void {
   )
 
   ipcMain.handle('plugin:import', async (_event, payload: { path: string }) => {
+    logInfo('ipc', 'plugin:import', { path: payload.path })
     const paths = await ensureAppPaths()
     const pathStat = await stat(payload.path)
     let importedPlugin
@@ -659,6 +669,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     'snapshot:create',
     async (_event, payload: { taskId?: string; label?: string }) => {
+      logInfo('ipc', 'snapshot:create', { taskId: payload.taskId, label: payload.label })
       if (!payload.taskId) {
         throw new Error('taskId is required to create a snapshot')
       }
@@ -679,6 +690,7 @@ export function registerIpcHandlers(): void {
   )
 
   ipcMain.handle('snapshot:delete', async (_event, snapshotId: string) => {
+    logInfo('ipc', 'snapshot:delete', { snapshotId })
     const paths = await ensureAppPaths()
     await deleteSnapshot(paths.snapshotsDir, snapshotId)
     // 同步移除 meta 中的条目，保证列表与磁盘一致
@@ -702,6 +714,7 @@ export function registerIpcHandlers(): void {
       _event,
       payload: { snapshotId: string; trackedPaths?: string[]; installPaths?: string[] },
     ) => {
+      logInfo('ipc', 'rollback:execute', { snapshotId: payload.snapshotId })
       const paths = await ensureAppPaths()
       let rollbackCommands: string[] = []
       let targetSnapshotId = payload.snapshotId
@@ -748,4 +761,50 @@ export function registerIpcHandlers(): void {
       return runEnhancedPrecheck(payload.pluginResults, payload.installedVersions)
     },
   )
+
+  // 日志
+  ipcMain.handle(
+    'log:write',
+    async (
+      _event,
+      entry: { level: LogLevel; source: string; message: string; context?: Record<string, unknown> },
+    ) => {
+      writeLog(entry)
+    },
+  )
+
+  ipcMain.handle('log:export', async (_event, format: LogExportFormat) => {
+    const ext = format === 'json' ? 'json' : 'log'
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const defaultName = `envsetup-logs-${dateStr}.${ext}`
+
+    const result = await dialog.showSaveDialog(BrowserWindow.getFocusedWindow() ?? undefined, {
+      defaultPath: defaultName,
+      filters: [
+        format === 'json'
+          ? { name: 'JSON', extensions: ['json'] }
+          : { name: 'Log', extensions: ['log', 'txt'] },
+      ],
+    })
+
+    if (result.canceled || !result.filePath) {
+      return undefined
+    }
+
+    const content = await buildExportContent(format)
+    await writeFile(result.filePath, content, 'utf8')
+
+    const lines = content.split('\n').filter((l) => l.length > 0)
+    const errorCount = lines.filter((l) => l.includes('[ERROR]')).length
+    const infoCount = lines.length - errorCount
+
+    logInfo('ipc', 'log:export', { format, filePath: result.filePath })
+
+    return {
+      filePath: result.filePath,
+      totalEntries: lines.length,
+      infoCount,
+      errorCount,
+    }
+  })
 }

@@ -7,6 +7,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { appendTaskLog, sanitizeLog } from './logger'
+import { logError, logInfo } from './appLogger'
 import type {
   AppPlatform,
   AppLocale,
@@ -291,6 +292,11 @@ export async function executeTask(options: {
 }): Promise<InstallTask> {
   const dryRun = options.dryRun ?? true
   const emitTaskDone = options.emitTaskDone ?? true
+  logInfo('task', 'executeTask started', {
+    taskId: options.task.id,
+    plugins: options.task.plugins.map((p) => p.pluginId),
+    dryRun,
+  })
   let nextTask = withTaskUpdate(options.task, (draft) => {
     draft.status = 'running'
     draft.startedAt = draft.startedAt ?? timestamp()
@@ -356,6 +362,7 @@ export async function executeTask(options: {
       timestamp: timestamp(),
       taskSnapshot: nextTask,
     })
+    logInfo('task', `plugin started: ${plugin.pluginId}`, { taskId: nextTask.id })
 
     try {
       const draftPlugin = nextTask.plugins.find((entry) => entry.pluginId === plugin.pluginId)
@@ -412,6 +419,10 @@ export async function executeTask(options: {
         timestamp: timestamp(),
         taskSnapshot: nextTask,
       })
+      logInfo('task', `plugin done: ${plugin.pluginId}`, {
+        taskId: nextTask.id,
+        status: nextTask.plugins.find((p) => p.pluginId === plugin.pluginId)?.status,
+      })
     } catch (error) {
       if (isAbortError(error) || options.abortSignal?.aborted) {
         nextTask = await cancelTask({
@@ -442,6 +453,16 @@ export async function executeTask(options: {
         failedPlugin.error = error instanceof Error ? error.message : String(error)
         failedPlugin.logs.push(failedPlugin.error)
         failedPlugin.finishedAt = timestamp()
+      })
+      logError('task', `plugin failed: ${plugin.pluginId}`, {
+        error,
+        context: {
+          taskId: nextTask.id,
+          errorCode: resolveErrorCode(error),
+          pluginLogs: nextTask.plugins
+            .find((p) => p.pluginId === plugin.pluginId)
+            ?.logs.slice(-10),
+        },
       })
       await appendTaskLog(
         nextTask.id,
@@ -485,6 +506,12 @@ export async function executeTask(options: {
       taskSnapshot: nextTask,
     })
   }
+  logInfo('task', 'executeTask finished', {
+    taskId: nextTask.id,
+    status: nextTask.status,
+    resultLevel: nextTask.resultLevel,
+    pluginSummary: nextTask.plugins.map((p) => ({ id: p.pluginId, status: p.status })),
+  })
   return nextTask
 }
 

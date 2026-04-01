@@ -395,6 +395,30 @@ const uiText = {
     'zh-CN': '执行回滚',
     en: 'Execute Rollback',
   },
+  exportLogs: {
+    'zh-CN': '导出日志',
+    en: 'Export Logs',
+  },
+  exportLogsText: {
+    'zh-CN': '导出文本日志',
+    en: 'Export as Text',
+  },
+  exportLogsJson: {
+    'zh-CN': '导出 JSON 日志',
+    en: 'Export as JSON',
+  },
+  exportLogsSuccess: {
+    'zh-CN': '日志已导出',
+    en: 'Logs exported successfully',
+  },
+  exportLogsCancelled: {
+    'zh-CN': '导出已取消',
+    en: 'Export cancelled',
+  },
+  exportLogsError: {
+    'zh-CN': '导出日志失败',
+    en: 'Failed to export logs',
+  },
 } as const satisfies Record<string, LocalizedTextInput>
 
 const localeButtonLabelMap: Record<AppLocale, string> = {

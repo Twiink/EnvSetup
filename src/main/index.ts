@@ -6,7 +6,8 @@ import { app, BrowserWindow, nativeImage } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { setDefaultAppDataDir } from './core/appPaths'
+import { ensureAppPaths, setDefaultAppDataDir } from './core/appPaths'
+import { collectSystemInfo, initAppLogger, logInfo } from './core/appLogger'
 import { registerIpcHandlers } from './ipc/index'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -51,13 +52,18 @@ function createWindow() {
   void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 开发模式下 macOS Dock 图标默认是 Electron，手动替换
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(join(ICON_DIR, 'icon.png')))
   }
 
   setDefaultAppDataDir(app.getPath('userData'))
+
+  const paths = await ensureAppPaths()
+  initAppLogger(paths.logsDir)
+  logInfo('app', 'EnvSetup started', { systemInfo: collectSystemInfo() })
+
   registerIpcHandlers()
   createWindow()
 
