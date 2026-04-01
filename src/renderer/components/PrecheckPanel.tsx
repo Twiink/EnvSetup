@@ -102,6 +102,7 @@ export function PrecheckPanel({
         {precheck ? (
           <>
             <div
+              data-testid="precheck-level-badge"
               style={{
                 display: 'inline-flex',
                 width: 'fit-content',

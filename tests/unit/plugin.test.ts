@@ -41,19 +41,19 @@ async function createPluginFixtureDir(): Promise<string> {
   await writeFile(
     join(dir, 'manifest.json'),
     JSON.stringify({
-      id: 'node-env',
-      name: 'Node.js Env',
-      version: '0.1.0',
-      mainAppVersion: '^0.1.0',
-      platforms: ['darwin', 'win32'],
-      permissions: ['download', 'write_path', 'modify_env'],
-      parameters: {},
-      dependencies: [],
-      entry: 'index.ts',
-    }),
-    'utf8',
+        id: 'node-env',
+        name: 'Node.js Env',
+        version: '0.1.0',
+        mainAppVersion: '^0.2.4',
+        platforms: ['darwin', 'win32'],
+        permissions: ['download', 'write_path', 'modify_env'],
+        parameters: {},
+        dependencies: [],
+        entry: 'index.mjs',
+      }),
+      'utf8',
   )
-  await writeFile(join(dir, 'index.ts'), 'export default {}', 'utf8')
+  await writeFile(join(dir, 'index.mjs'), 'export default {}', 'utf8')
   return dir
 }
 
@@ -68,12 +68,12 @@ describe('plugin import', () => {
         id: 'node-env',
         name: 'Node.js Env',
         version: '0.1.0',
-        mainAppVersion: '^0.1.0',
+        mainAppVersion: '^0.2.4',
         platforms: ['darwin', 'win32'],
         permissions: ['download', 'write_path', 'modify_env'],
         parameters: {},
         dependencies: [],
-        entry: 'index.ts',
+        entry: 'index.mjs',
       }),
     ).not.toThrow()
   })
@@ -87,7 +87,7 @@ describe('plugin import', () => {
     const imported = await importPluginFromDirectory(pluginDir)
 
     expect(imported.manifest.id).toBe('node-env')
-    expect(imported.entryPath).toContain('index.ts')
+    expect(imported.entryPath).toContain('index.mjs')
   })
 
   it('imports a plugin from a zip archive', async () => {
@@ -100,6 +100,6 @@ describe('plugin import', () => {
     const imported = await importPluginFromZip(zipPath, stagingDir)
 
     expect(imported.manifest.id).toBe('node-env')
-    expect(imported.entryPath).toContain('index.ts')
+    expect(imported.entryPath).toContain('index.mjs')
   })
 })

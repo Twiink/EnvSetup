@@ -47,15 +47,15 @@ describe('plugin import on win32', () => {
           id: 'node-env',
           name: 'Node.js Env',
           version: '0.1.0',
-          mainAppVersion: '^0.1.0',
+          mainAppVersion: '^0.2.4',
           platforms: ['darwin', 'win32'],
           permissions: ['download', 'write_path', 'modify_env'],
           parameters: {},
           dependencies: [],
-          entry: 'index.ts',
+          entry: 'index.mjs',
         }),
       )
-      writeFileSync(join(extractionDir, 'index.ts'), 'export default {}')
+      writeFileSync(join(extractionDir, 'index.mjs'), 'export default {}')
       callback(null, { stdout: '', stderr: '' })
     })
 

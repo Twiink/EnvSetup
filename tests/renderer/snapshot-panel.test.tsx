@@ -39,7 +39,14 @@ afterEach(() => {
 
 describe('SnapshotPanel', () => {
   it('renders empty state when no snapshots', () => {
-    render(<SnapshotPanel locale="zh-CN" onCreateSnapshot={vi.fn()} onDeleteSnapshot={vi.fn()} />)
+    render(
+      <SnapshotPanel
+        locale="en"
+        onCreateSnapshot={vi.fn()}
+        onDeleteSnapshot={vi.fn()}
+        onRollbackSnapshot={vi.fn()}
+      />,
+    )
 
     expect(screen.getByText('No snapshots yet.')).toBeInTheDocument()
   })
@@ -47,10 +54,11 @@ describe('SnapshotPanel', () => {
   it('renders snapshot entries with labels and types', () => {
     render(
       <SnapshotPanel
-        locale="zh-CN"
+        locale="en"
         snapshots={makeSnapshots()}
         onCreateSnapshot={vi.fn()}
         onDeleteSnapshot={vi.fn()}
+        onRollbackSnapshot={vi.fn()}
       />,
     )
 
@@ -66,9 +74,10 @@ describe('SnapshotPanel', () => {
     const onCreateSnapshot = vi.fn()
     render(
       <SnapshotPanel
-        locale="zh-CN"
+        locale="en"
         onCreateSnapshot={onCreateSnapshot}
         onDeleteSnapshot={vi.fn()}
+        onRollbackSnapshot={vi.fn()}
       />,
     )
 
@@ -80,10 +89,11 @@ describe('SnapshotPanel', () => {
     const onDeleteSnapshot = vi.fn()
     render(
       <SnapshotPanel
-        locale="zh-CN"
+        locale="en"
         snapshots={makeSnapshots()}
         onCreateSnapshot={vi.fn()}
         onDeleteSnapshot={onDeleteSnapshot}
+        onRollbackSnapshot={vi.fn()}
       />,
     )
 
@@ -94,10 +104,11 @@ describe('SnapshotPanel', () => {
   it('toggles snapshot details on Details button click', () => {
     render(
       <SnapshotPanel
-        locale="zh-CN"
+        locale="en"
         snapshots={makeSnapshots()}
         onCreateSnapshot={vi.fn()}
         onDeleteSnapshot={vi.fn()}
+        onRollbackSnapshot={vi.fn()}
       />,
     )
 
@@ -110,11 +121,12 @@ describe('SnapshotPanel', () => {
   it('disables buttons when busy', () => {
     render(
       <SnapshotPanel
-        locale="zh-CN"
+        locale="en"
         snapshots={makeSnapshots()}
         busy={true}
         onCreateSnapshot={vi.fn()}
         onDeleteSnapshot={vi.fn()}
+        onRollbackSnapshot={vi.fn()}
       />,
     )
 

@@ -14,6 +14,7 @@ import {
   createTask,
   executeTask,
   loadTask,
+  prepareTaskPluginRetry,
   persistTask,
   shouldRerunPlugin,
 } from '../../src/main/core/task'
@@ -436,5 +437,119 @@ describe('executeTask', () => {
 
     await executeTask({ task, registry, platform: 'darwin', tasksDir, dryRun: true })
     expect(mockInstall).not.toHaveBeenCalled()
+  })
+
+  it('prefers version-qualified plugin lifecycle when available', async () => {
+    const task = createTask({
+      templateId: 'imported-template',
+      templateVersion: '1.0.0',
+      locale: 'zh-CN',
+      params: {},
+      plugins: [{ pluginId: 'acme-env', version: '2.0.0', params: {} }],
+    })
+    const defaultInstall = vi.fn().mockResolvedValue(makeInstallResult({ version: 'default' }))
+    const versionedInstall = vi.fn().mockResolvedValue(makeInstallResult({ version: '2.0.0' }))
+
+    const result = await executeTask({
+      task,
+      registry: {
+        'acme-env': {
+          install: defaultInstall,
+          verify: vi.fn().mockResolvedValue(makeVerifyResult()),
+        },
+        'acme-env@2.0.0': {
+          install: versionedInstall,
+          verify: vi.fn().mockResolvedValue(makeVerifyResult()),
+        },
+      },
+      platform: 'darwin',
+      tasksDir,
+      dryRun: true,
+    })
+
+    expect(versionedInstall).toHaveBeenCalledOnce()
+    expect(defaultInstall).not.toHaveBeenCalled()
+    expect(result.plugins[0].lastResult?.version).toBe('2.0.0')
+  })
+
+  it('cancels execution when abort signal is triggered during install', async () => {
+    const task = makeTask(['cancel-plugin'])
+    const controller = new AbortController()
+    const registry = {
+      'cancel-plugin': {
+        install: vi.fn().mockImplementation(async () => {
+          controller.abort()
+          throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+        }),
+        verify: vi.fn(),
+      },
+    }
+    const progressEvents: string[] = []
+
+    const result = await executeTask({
+      task,
+      registry,
+      platform: 'darwin',
+      tasksDir,
+      dryRun: true,
+      abortSignal: controller.signal,
+      onProgress: (event) => {
+        progressEvents.push(event.type)
+      },
+    })
+
+    expect(result.status).toBe('cancelled')
+    expect(result.plugins[0].errorCode).toBe('USER_CANCELLED')
+    expect(progressEvents).toContain('command_error')
+    expect(progressEvents).toContain('task_done')
+  })
+})
+
+describe('prepareTaskPluginRetry', () => {
+  let tasksDir: string
+
+  beforeEach(async () => {
+    tasksDir = await mkdtemp(join(tmpdir(), 'envsetup-retry-'))
+  })
+
+  afterEach(async () => {
+    await rm(tasksDir, { recursive: true, force: true })
+  })
+
+  it('clears stale rollback suggestions and result state before retry', async () => {
+    const task = {
+      ...makeTask(),
+      status: 'failed' as const,
+      resultLevel: 'failure' as const,
+      rollbackSuggestions: [
+        {
+          snapshotId: 'snapshot-1',
+          createdAt: new Date().toISOString(),
+          reason: 'latest',
+          confidence: 'high' as const,
+        },
+      ],
+      plugins: [
+        {
+          ...makeTask().plugins[0],
+          status: 'failed' as const,
+          error: 'failed',
+          errorCode: 'PLUGIN_EXECUTION_FAILED' as const,
+          logs: ['failed'],
+        },
+      ],
+    }
+
+    const resetTask = await prepareTaskPluginRetry({
+      task,
+      pluginId: 'node-env',
+      tasksDir,
+    })
+
+    expect(resetTask.status).toBe('ready')
+    expect(resetTask.resultLevel).toBeUndefined()
+    expect(resetTask.rollbackSuggestions).toBeUndefined()
+    expect(resetTask.plugins[0].status).toBe('needs_rerun')
+    expect(resetTask.plugins[0].logs).toEqual([])
   })
 })

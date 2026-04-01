@@ -11,7 +11,9 @@ import { suggestRollbackSnapshots, executeRollback } from '../../src/main/core/r
 // ---------------------------------------------------------------------------
 
 const { execFileMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn((_file, _args, _options, callback) => {
+  execFileMock: vi.fn((_file, _args, optionsOrCallback, maybeCallback) => {
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
     callback(null, { stdout: '', stderr: '' })
   }),
 }))
@@ -70,51 +72,50 @@ function makeSnapEntry(
 }
 
 function expectRollbackCommandInvocation(callIndex: number) {
+  const call = execFileMock.mock.calls[callIndex - 1]
+  expect(call).toBeDefined()
+
   if (runtimePlatform === 'win32') {
-    expect(execFileMock).toHaveBeenNthCalledWith(
-      callIndex,
-      'powershell',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'brew uninstall git'],
-      expect.any(Object),
-      expect.any(Function),
-    )
+    expect(call[0]).toBe('powershell')
+    expect(call[1]).toEqual([
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      'brew uninstall git',
+    ])
+    expect(typeof call[call.length - 1]).toBe('function')
     return
   }
 
-  expect(execFileMock).toHaveBeenNthCalledWith(
-    callIndex,
-    'sh',
-    ['-c', 'brew uninstall git'],
-    expect.any(Object),
-    expect.any(Function),
-  )
+  expect(call[0]).toBe('sh')
+  expect(call[1]).toEqual(['-c', 'brew uninstall git'])
+  expect(typeof call[call.length - 1]).toBe('function')
 }
 
 function expectElevatedRollbackCommandInvocation(callIndex: number) {
+  const call = execFileMock.mock.calls[callIndex - 1]
+  expect(call).toBeDefined()
+
   if (runtimePlatform === 'win32') {
-    expect(execFileMock).toHaveBeenNthCalledWith(
-      callIndex,
-      'powershell',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        expect.stringContaining("Start-Process -FilePath 'powershell.exe' -Verb RunAs"),
-      ],
-      expect.any(Object),
-      expect.any(Function),
-    )
+    expect(call[0]).toBe('powershell')
+    expect(call[1]).toEqual([
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      expect.stringContaining("Start-Process -FilePath 'powershell.exe' -Verb RunAs"),
+    ])
+    expect(typeof call[call.length - 1]).toBe('function')
     return
   }
 
-  expect(execFileMock).toHaveBeenNthCalledWith(
-    callIndex,
-    'osascript',
-    [expect.any(String), expect.stringContaining('with administrator privileges')],
-    expect.any(Object),
-    expect.any(Function),
-  )
+  expect(call[0]).toBe('osascript')
+  expect(call[1]).toEqual([
+    expect.any(String),
+    expect.stringContaining('with administrator privileges'),
+  ])
+  expect(typeof call[call.length - 1]).toBe('function')
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +299,9 @@ describe('suggestRollbackSnapshots', () => {
 describe('executeRollback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    execFileMock.mockImplementation((_file, _args, _options, callback) => {
+    execFileMock.mockImplementation((_file, _args, optionsOrCallback, maybeCallback) => {
+      const callback =
+        typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
       callback(null, { stdout: '', stderr: '' })
     })
     // Default: loadSnapshot returns a snapshot with empty shellConfigs
@@ -460,10 +463,14 @@ describe('executeRollback', () => {
     })
 
     execFileMock
-      .mockImplementationOnce((_file, _args, _options, callback) => {
+      .mockImplementationOnce((_file, _args, optionsOrCallback, maybeCallback) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
         callback(new Error('Permission denied'))
       })
-      .mockImplementationOnce((_file, _args, _options, callback) => {
+      .mockImplementationOnce((_file, _args, optionsOrCallback, maybeCallback) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
         callback(null, { stdout: '', stderr: '' })
       })
 

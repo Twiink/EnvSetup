@@ -56,13 +56,15 @@ afterEach(() => {
 
 describe('RollbackDialog', () => {
   it('renders no snapshots message when suggestions empty', () => {
-    render(<RollbackDialog suggestions={[]} onExecute={vi.fn()} onClose={vi.fn()} />)
+    render(<RollbackDialog locale="en" suggestions={[]} onExecute={vi.fn()} onClose={vi.fn()} />)
 
     expect(screen.getByText('No rollback snapshots available.')).toBeInTheDocument()
   })
 
   it('renders suggestion list with radio buttons', () => {
-    render(<RollbackDialog suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />)
+    render(
+      <RollbackDialog locale="en" suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />,
+    )
 
     expect(screen.getByText('Before install')).toBeInTheDocument()
     expect(screen.getByText('Manual backup')).toBeInTheDocument()
@@ -70,14 +72,18 @@ describe('RollbackDialog', () => {
   }, 15_000)
 
   it('first suggestion is pre-selected', () => {
-    render(<RollbackDialog suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />)
+    render(
+      <RollbackDialog locale="en" suggestions={suggestions} onExecute={vi.fn()} onClose={vi.fn()} />,
+    )
 
     expect(screen.getAllByRole('radio')[0]).toBeChecked()
   })
 
   it('calls onExecute with selected snapshot id when button clicked', () => {
     const onExecute = vi.fn()
-    render(<RollbackDialog suggestions={suggestions} onExecute={onExecute} onClose={vi.fn()} />)
+    render(
+      <RollbackDialog locale="en" suggestions={suggestions} onExecute={onExecute} onClose={vi.fn()} />,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Execute Rollback' }))
     expect(onExecute).toHaveBeenCalledWith('snapshot-1')
@@ -85,7 +91,9 @@ describe('RollbackDialog', () => {
 
   it('calls onClose when close button clicked', () => {
     const onClose = vi.fn()
-    render(<RollbackDialog suggestions={suggestions} onExecute={vi.fn()} onClose={onClose} />)
+    render(
+      <RollbackDialog locale="en" suggestions={suggestions} onExecute={vi.fn()} onClose={onClose} />,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledOnce()
@@ -94,6 +102,7 @@ describe('RollbackDialog', () => {
   it('renders failure analysis summary when provided', () => {
     render(
       <RollbackDialog
+        locale="en"
         suggestions={suggestions}
         failureAnalysis={failureAnalysis}
         onExecute={vi.fn()}
@@ -109,6 +118,7 @@ describe('RollbackDialog', () => {
   it('renders rollback result', () => {
     render(
       <RollbackDialog
+        locale="en"
         suggestions={suggestions}
         result={result}
         onExecute={vi.fn()}
@@ -124,6 +134,7 @@ describe('RollbackDialog', () => {
   it('disables execute button when busy', () => {
     render(
       <RollbackDialog
+        locale="en"
         suggestions={suggestions}
         busy={true}
         onExecute={vi.fn()}

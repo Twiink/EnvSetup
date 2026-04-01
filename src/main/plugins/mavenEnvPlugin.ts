@@ -2,11 +2,9 @@
  * 实现 Maven 在各平台上的安装与校验策略。
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import { buildMavenEnvChanges, resolveMavenInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { execFileAsync } from '../core/exec'
 import { DEFAULT_MAVEN_VERSIONS } from '../core/mavenVersions'
 import type {
   AppLocale,
@@ -19,8 +17,6 @@ import type {
   TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-
-const execFileAsync = promisify(execFile)
 
 const MAVEN_ARCHIVE_BASE_URL = 'https://archive.apache.org/dist/maven/maven-3'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
@@ -344,6 +340,7 @@ async function runCommands(
   commands: string[],
   platform: MavenPluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
+  signal?: AbortSignal,
   pluginId = 'maven-env',
 ): Promise<string[]> {
   const output: string[] = []
@@ -368,8 +365,8 @@ async function runCommands(
               'Bypass',
               '-Command',
               command,
-            ])
-          : await execFileAsync('/bin/sh', ['-c', command])
+            ], { signal })
+          : await execFileAsync('/bin/sh', ['-c', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({
@@ -448,7 +445,7 @@ const mavenEnvPlugin = {
 
       commands = buildInstallCommands(params, resolvedDownloads)
       const commandStartedAt = Date.now()
-      logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
+      logs.push(...(await runCommands(commands, params.platform, input.onProgress, input.signal)))
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
@@ -515,7 +512,12 @@ const mavenEnvPlugin = {
 
     return {
       status: 'verified_success',
-      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
+      checks: await runCommands(
+        buildVerifyCommands(params),
+        params.platform,
+        input.onProgress,
+        input.signal,
+      ),
     }
   },
 }

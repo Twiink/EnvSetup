@@ -100,6 +100,14 @@ describe('preload', () => {
     expect(invoke).toHaveBeenNthCalledWith(3, 'snapshot:delete', 'snapshot-1')
   })
 
+  it('maps plugin import picker to IPC invoke', async () => {
+    const api = await getApi()
+
+    api.pickPluginImportPath()
+
+    expect(invoke).toHaveBeenCalledWith('dialog:pick-plugin-import')
+  })
+
   it('maps rollback actions to IPC invokes', async () => {
     const api = await getApi()
 
@@ -150,5 +158,14 @@ describe('preload', () => {
 
     api.removeTaskProgressListener()
     expect(removeAllListeners).toHaveBeenCalledWith('task:progress')
+  })
+
+  it('reuses a single underlying task progress bridge across re-registration', async () => {
+    const api = await getApi()
+
+    api.onTaskProgress(vi.fn())
+    api.onTaskProgress(vi.fn())
+
+    expect(on).toHaveBeenCalledTimes(1)
   })
 })

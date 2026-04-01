@@ -26,10 +26,3 @@ win:
   target:
     - nsis
     - portable
-
-linux:
-  icon: build/icon.png
-  category: Development
-  target:
-    - AppImage
-    - deb

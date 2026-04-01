@@ -112,6 +112,7 @@ export function TaskPanel({
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
+            data-testid="create-task-button"
             type="button"
             onClick={onCreateTask}
             disabled={!canCreate || busy}
@@ -132,14 +133,14 @@ export function TaskPanel({
           <button
             type="button"
             onClick={onStartTask}
-            disabled={!task || busy}
+            disabled={!task || busy || task.status === 'running'}
             style={{
               borderRadius: '6px',
               border: 'none',
               padding: '0.6rem 1.25rem',
-              background: !task || busy ? '#EFEAE4' : '#C27628',
-              color: !task || busy ? '#A49C95' : '#FFFFFF',
-              cursor: !task || busy ? 'not-allowed' : 'pointer',
+              background: !task || busy || task.status === 'running' ? '#EFEAE4' : '#C27628',
+              color: !task || busy || task.status === 'running' ? '#A49C95' : '#FFFFFF',
+              cursor: !task || busy || task.status === 'running' ? 'not-allowed' : 'pointer',
               fontWeight: 500,
               fontSize: '0.95rem',
               transition: 'background 0.2s',
@@ -183,6 +184,7 @@ export function TaskPanel({
             >
               <strong style={{ color: '#2A2421' }}>{getUiText(locale, 'taskStatus')}</strong>
               <span
+                data-testid="task-status-badge"
                 style={{
                   borderRadius: '6px',
                   padding: '0.35rem 0.75rem',

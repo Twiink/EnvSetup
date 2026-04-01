@@ -320,14 +320,59 @@ async function createAndStartTask(
         values,
         locale: 'zh-CN',
       })
-      const started = await window.envSetup.startTask(task.id)
+      const completed = await new Promise<Awaited<ReturnType<typeof window.envSetup.startTask>>>(
+        (resolve, reject) => {
+          let settled = false
+          const timeoutId = window.setTimeout(() => {
+            if (settled) {
+              return
+            }
+            settled = true
+            window.envSetup.removeTaskProgressListener()
+            reject(new Error(`Timed out waiting for task_done: ${task.id}`))
+          }, 600_000)
+
+          const settle = (nextTask: Awaited<ReturnType<typeof window.envSetup.startTask>>) => {
+            if (settled) {
+              return
+            }
+            settled = true
+            window.clearTimeout(timeoutId)
+            window.envSetup.removeTaskProgressListener()
+            resolve(nextTask)
+          }
+
+          window.envSetup.onTaskProgress((event) => {
+            if (event.taskId === task.id && event.type === 'task_done' && event.taskSnapshot) {
+              settle(event.taskSnapshot)
+            }
+          })
+
+          void (async () => {
+            try {
+              const started = await window.envSetup.startTask(task.id)
+              if (started.status !== 'running') {
+                settle(started)
+              }
+            } catch (error) {
+              if (settled) {
+                return
+              }
+              settled = true
+              window.clearTimeout(timeoutId)
+              window.envSetup.removeTaskProgressListener()
+              reject(error)
+            }
+          })()
+        },
+      )
 
       return {
-        id: started.id,
-        status: started.status,
-        snapshotId: (started as typeof started & { snapshotId?: string }).snapshotId,
-        pluginStatuses: started.plugins.map((plugin) => plugin.status),
-        pluginExecutionModes: started.plugins.map(
+        id: completed.id,
+        status: completed.status,
+        snapshotId: (completed as typeof completed & { snapshotId?: string }).snapshotId,
+        pluginStatuses: completed.plugins.map((plugin) => plugin.status),
+        pluginExecutionModes: completed.plugins.map(
           (plugin) => plugin.lastResult?.executionMode ?? null,
         ),
       }

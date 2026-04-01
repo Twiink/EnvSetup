@@ -63,6 +63,10 @@ function isErrorCode(value: unknown): value is ErrorCode {
 }
 
 function resolveErrorCode(error: unknown): ErrorCode {
+  if (isAbortError(error)) {
+    return 'USER_CANCELLED'
+  }
+
   if (typeof error === 'object' && error !== null && 'code' in error && isErrorCode(error.code)) {
     return error.code
   }
@@ -75,6 +79,10 @@ function cloneTask(task: InstallTask): InstallTask {
 }
 
 function finalizeTaskStatus(task: InstallTask): TaskStatus {
+  if (task.status === 'cancelled') {
+    return 'cancelled'
+  }
+
   const pluginStates = task.plugins.map((plugin) => plugin.status)
 
   if (pluginStates.every((status) => status === 'verified_success')) {
@@ -141,6 +149,7 @@ function buildExecutionInput(
   platform: AppPlatform,
   dryRun: boolean,
   runtimeContext?: Record<string, Primitive>,
+  signal?: AbortSignal,
 ): PluginExecutionInput {
   // 把前置插件已经验证成功的上下文合并进来，便于后续插件消费安装产物或环境变量。
   const precedingContext: Record<string, Primitive> = {}
@@ -158,6 +167,36 @@ function buildExecutionInput(
     platform,
     dryRun,
     locale: task.locale,
+    signal,
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error) {
+    return false
+  }
+
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true
+  }
+
+  if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ABORT_ERR') {
+    return true
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  return message.toLowerCase().includes('abort')
+}
+
+function buildUserCancelledError(): Error {
+  const error = new Error('Task cancelled by user')
+  error.name = 'AbortError'
+  return Object.assign(error, { code: 'USER_CANCELLED' })
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw buildUserCancelledError()
   }
 }
 
@@ -246,8 +285,11 @@ export async function executeTask(options: {
   pluginFilter?: string
   onProgress?: (event: TaskProgressEvent) => void
   runtimeContext?: Record<string, Primitive>
+  abortSignal?: AbortSignal
+  emitTaskDone?: boolean
 }): Promise<InstallTask> {
   const dryRun = options.dryRun ?? true
+  const emitTaskDone = options.emitTaskDone ?? true
   let nextTask = withTaskUpdate(options.task, (draft) => {
     draft.status = 'running'
     draft.startedAt = draft.startedAt ?? timestamp()
@@ -255,6 +297,14 @@ export async function executeTask(options: {
   await persistTask(nextTask, options.tasksDir)
 
   for (const plugin of nextTask.plugins) {
+    if (options.abortSignal?.aborted) {
+      nextTask = await cancelTask({
+        task: nextTask,
+        tasksDir: options.tasksDir,
+      })
+      break
+    }
+
     if (options.pluginFilter && plugin.pluginId !== options.pluginFilter) {
       continue
     }
@@ -264,7 +314,8 @@ export async function executeTask(options: {
       continue
     }
 
-    const runner = options.registry[plugin.pluginId]
+    const runner =
+      options.registry[`${plugin.pluginId}@${plugin.version}`] ?? options.registry[plugin.pluginId]
     if (!runner) {
       nextTask = withTaskUpdate(nextTask, (draft) => {
         const draftPlugin = draft.plugins.find((entry) => entry.pluginId === plugin.pluginId)
@@ -302,6 +353,7 @@ export async function executeTask(options: {
       type: 'plugin_start',
       message: `Starting plugin: ${plugin.pluginId}`,
       timestamp: timestamp(),
+      taskSnapshot: nextTask,
     })
 
     try {
@@ -316,12 +368,14 @@ export async function executeTask(options: {
         options.platform,
         dryRun,
         options.runtimeContext,
+        options.abortSignal,
       )
       executionInput.onProgress = (event) => {
         options.onProgress?.({ ...event, taskId: nextTask.id })
       }
 
       // 执行顺序固定为 check -> prepare -> install -> verify，保证状态可预测。
+      throwIfAborted(options.abortSignal)
       if (runner.check) {
         const checkResult = await runner.check(executionInput)
         if (!checkResult.pass) {
@@ -329,11 +383,14 @@ export async function executeTask(options: {
         }
       }
 
+      throwIfAborted(options.abortSignal)
       if (runner.prepare) {
         await runner.prepare(executionInput)
       }
 
+      throwIfAborted(options.abortSignal)
       const installResult = await runner.install(executionInput)
+      throwIfAborted(options.abortSignal)
       const verifyResult = await runner.verify({
         ...executionInput,
         installResult,
@@ -352,8 +409,28 @@ export async function executeTask(options: {
         type: 'plugin_done',
         message: `Plugin ${plugin.pluginId} finished`,
         timestamp: timestamp(),
+        taskSnapshot: nextTask,
       })
     } catch (error) {
+      if (isAbortError(error) || options.abortSignal?.aborted) {
+        nextTask = await cancelTask({
+          task: nextTask,
+          tasksDir: options.tasksDir,
+        })
+        await appendTaskLog(nextTask.id, ['Task cancelled by user'], options.tasksDir)
+        options.onProgress?.({
+          taskId: nextTask.id,
+          pluginId: plugin.pluginId,
+          type: 'command_error',
+          message: 'Task cancelled by user',
+          output: 'Task cancelled by user',
+          timestamp: timestamp(),
+          taskSnapshot: nextTask,
+        })
+        await persistTask(nextTask, options.tasksDir)
+        break
+      }
+
       nextTask = withTaskUpdate(nextTask, (draft) => {
         const failedPlugin = draft.plugins.find((entry) => entry.pluginId === plugin.pluginId)
         if (!failedPlugin) {
@@ -377,6 +454,7 @@ export async function executeTask(options: {
         message: error instanceof Error ? error.message : String(error),
         output: error instanceof Error ? error.message : String(error),
         timestamp: timestamp(),
+        taskSnapshot: nextTask,
       })
     }
 
@@ -396,13 +474,16 @@ export async function executeTask(options: {
             : draft.resultLevel
   })
   await persistTask(nextTask, options.tasksDir)
-  options.onProgress?.({
-    taskId: nextTask.id,
-    pluginId: options.pluginFilter ?? 'task',
-    type: 'task_done',
-    message: `Task ${nextTask.status}`,
-    timestamp: timestamp(),
-  })
+  if (emitTaskDone) {
+    options.onProgress?.({
+      taskId: nextTask.id,
+      pluginId: options.pluginFilter ?? 'task',
+      type: 'task_done',
+      message: `Task ${nextTask.status}`,
+      timestamp: timestamp(),
+      taskSnapshot: nextTask,
+    })
+  }
   return nextTask
 }
 
@@ -423,7 +504,11 @@ export async function cancelTask(options: {
     draft.status = 'cancelled'
     draft.finishedAt = timestamp()
     for (const plugin of draft.plugins) {
-      if (plugin.status === 'not_started' || plugin.status === 'needs_rerun') {
+      if (
+        plugin.status === 'not_started' ||
+        plugin.status === 'needs_rerun' ||
+        plugin.status === 'running'
+      ) {
         plugin.status = 'failed'
         plugin.errorCode = 'USER_CANCELLED'
         plugin.error = 'Task cancelled by user'
@@ -445,6 +530,21 @@ export async function retryTaskPlugin(options: {
   dryRun?: boolean
   onProgress?: (event: TaskProgressEvent) => void
   runtimeContext?: Record<string, Primitive>
+  abortSignal?: AbortSignal
+}): Promise<InstallTask> {
+  const resetTask = await prepareTaskPluginRetry(options)
+
+  return executeTask({
+    ...options,
+    task: resetTask,
+    pluginFilter: options.pluginId,
+  })
+}
+
+export async function prepareTaskPluginRetry(options: {
+  task: InstallTask
+  pluginId: string
+  tasksDir: string
 }): Promise<InstallTask> {
   const resetTask = withTaskUpdate(options.task, (draft) => {
     const plugin = draft.plugins.find((entry) => entry.pluginId === options.pluginId)
@@ -458,12 +558,10 @@ export async function retryTaskPlugin(options: {
     plugin.errorCode = undefined
     plugin.finishedAt = undefined
     draft.finishedAt = undefined
+    draft.resultLevel = undefined
+    draft.rollbackSuggestions = undefined
   })
 
   await persistTask(resetTask, options.tasksDir)
-  return executeTask({
-    ...options,
-    task: resetTask,
-    pluginFilter: options.pluginId,
-  })
+  return resetTask
 }

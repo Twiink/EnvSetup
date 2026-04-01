@@ -8,6 +8,7 @@ import type { EnvSetupApi, TaskProgressEvent } from '../main/core/contracts'
 
 let taskProgressListener: ((event: TaskProgressEvent) => void) | undefined
 // 渲染层始终只保留一个活动中的任务进度监听器，避免重复注册造成事件风暴。
+let taskProgressBridgeRegistered = false
 
 const api: EnvSetupApi = {
   loadBootstrap: () => ipcRenderer.invoke('bootstrap:load'),
@@ -27,6 +28,7 @@ const api: EnvSetupApi = {
   cleanupEnvironment: (detection) => ipcRenderer.invoke('environment:cleanup', detection),
   cleanupEnvironments: (detections) => ipcRenderer.invoke('environment:cleanup-batch', detections),
   pickDirectory: (defaultPath) => ipcRenderer.invoke('dialog:pick-directory', { defaultPath }),
+  pickPluginImportPath: () => ipcRenderer.invoke('dialog:pick-plugin-import'),
   importPluginFromPath: (pluginPath) => ipcRenderer.invoke('plugin:import', { path: pluginPath }),
   previewEnvChanges: (changes) => ipcRenderer.invoke('environment:preview-changes', changes),
   applyEnvChanges: (payload) => ipcRenderer.invoke('environment:apply-changes', payload),
@@ -41,13 +43,17 @@ const api: EnvSetupApi = {
   runEnhancedPrecheck: (pluginResults) => ipcRenderer.invoke('precheck:enhanced', pluginResults),
   onTaskProgress: (callback) => {
     taskProgressListener = callback
-    ipcRenderer.on('task:progress', (_event, data: TaskProgressEvent) => {
-      taskProgressListener?.(data)
-    })
+    if (!taskProgressBridgeRegistered) {
+      ipcRenderer.on('task:progress', (_event, data: TaskProgressEvent) => {
+        taskProgressListener?.(data)
+      })
+      taskProgressBridgeRegistered = true
+    }
   },
   removeTaskProgressListener: () => {
     taskProgressListener = undefined
     ipcRenderer.removeAllListeners('task:progress')
+    taskProgressBridgeRegistered = false
   },
 }
 

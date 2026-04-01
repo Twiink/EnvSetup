@@ -6,11 +6,28 @@ import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type {
+  EnvironmentTool,
+  PluginManifest,
   Primitive,
   ResolvedTemplate,
   ResolvedTemplateField,
   TemplateManifest,
 } from './contracts'
+import { resolveLocalizedText } from '../../shared/locale'
+export {
+  isTemplateFieldActive,
+  validateResolvedTemplateValues,
+} from '../../shared/templateFields'
+
+const BUILTIN_ENVIRONMENT_TOOLS = new Set<EnvironmentTool>([
+  'node',
+  'java',
+  'python',
+  'git',
+  'mysql',
+  'redis',
+  'maven',
+])
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -67,70 +84,88 @@ export async function loadTemplatesFromDirectory(dir: string): Promise<ResolvedT
   return Promise.all(files.map((file) => loadTemplate(join(dir, file))))
 }
 
-export function isTemplateFieldActive(
-  field: ResolvedTemplateField,
-  values: Record<string, Primitive>,
-): boolean {
-  if (!field.dependsOn) {
-    return true
-  }
-
-  const dependencyValue = values[field.dependsOn.field]
-  if (field.dependsOn.in) {
-    return field.dependsOn.in.includes(dependencyValue)
-  }
-
-  if (Object.prototype.hasOwnProperty.call(field.dependsOn, 'equals')) {
-    return dependencyValue === field.dependsOn.equals
-  }
-
-  return true
+function toTemplateFieldKey(pluginId: string, paramKey: string): string {
+  return `${inferTemplateFieldPrefix(pluginId)}.${paramKey}`
 }
 
-export function validateResolvedTemplateValues(
-  template: ResolvedTemplate,
-  values: Record<string, Primitive>,
-): Record<string, string> {
-  const errors: Record<string, string> = {}
+function slugifyPathFragment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'default'
+}
 
-  for (const field of Object.values(template.fields)) {
-    if (!isTemplateFieldActive(field, values)) {
-      continue
-    }
+function buildPathDefault(baseDir: string, pluginId: string, paramKey: string): string {
+  if (paramKey === 'installRootDir') {
+    return join(baseDir, 'toolchain', inferTemplateFieldPrefix(pluginId))
+  }
 
-    const value = values[field.key]
+  return join(baseDir, slugifyPathFragment(`${pluginId}-${paramKey}`))
+}
 
-    if (field.required && (value === '' || value === null || value === undefined)) {
-      errors[field.key] = 'This value is required.'
-      continue
-    }
+function resolveParameterDefault(
+  pluginId: string,
+  paramKey: string,
+  fieldType: PluginManifest['parameters'][string]['type'],
+  baseDir: string,
+  values?: string[],
+): Primitive {
+  if (fieldType === 'boolean') {
+    return false
+  }
 
-    if (value === null || value === undefined || value === '') {
-      continue
-    }
+  if (fieldType === 'number') {
+    return 0
+  }
 
-    if (field.enum && typeof value === 'string' && !field.enum.includes(value)) {
-      errors[field.key] = 'Select a supported option.'
-      continue
-    }
+  if (fieldType === 'path') {
+    return buildPathDefault(baseDir, pluginId, paramKey)
+  }
 
-    if (field.range && typeof value === 'number') {
-      const { min, max } = field.range
-      if ((min !== undefined && value < min) || (max !== undefined && value > max)) {
-        errors[field.key] = 'Value is outside the allowed range.'
-        continue
-      }
-    }
+  return values?.[0] ?? ''
+}
 
-    if (field.pattern && typeof value === 'string') {
-      const pattern = new RegExp(field.pattern)
-      if (!pattern.test(value)) {
-        errors[field.key] = 'Value does not match the expected pattern.'
-      }
+export function buildImportedPluginTemplate(
+  manifest: PluginManifest,
+  options: { dataRootDir: string },
+): ResolvedTemplate {
+  const pluginDisplayName = resolveLocalizedText(manifest.name, 'en', manifest.id)
+  const defaults: Record<string, Primitive> = {}
+  const overrides: TemplateManifest['overrides'] = {}
+
+  for (const [paramKey, definition] of Object.entries(manifest.parameters)) {
+    const fieldKey = toTemplateFieldKey(manifest.id, paramKey)
+    defaults[fieldKey] = resolveParameterDefault(
+      manifest.id,
+      paramKey,
+      definition.type,
+      options.dataRootDir,
+      definition.values,
+    )
+    overrides[fieldKey] = {
+      type: definition.type,
+      editable: true,
+      required: definition.required ?? false,
+      enum: definition.values,
+      affects: [manifest.id],
     }
   }
 
-  return errors
+  const inferredTool = inferTemplateFieldPrefix(manifest.id) as EnvironmentTool
+  const checks = BUILTIN_ENVIRONMENT_TOOLS.has(inferredTool) ? [inferredTool] : []
+
+  return resolveTemplate({
+    id: `imported-${manifest.id}-${manifest.version}`,
+    name: manifest.name,
+    version: manifest.version,
+    platforms: manifest.platforms,
+    description: {
+      'zh-CN': `导入插件 ${resolveLocalizedText(manifest.name, 'zh-CN', pluginDisplayName)} 的执行模板，导入后可直接参与预检、任务执行与回滚链路。`,
+      en: `Execution template for the imported plugin ${pluginDisplayName}. It participates in precheck, task execution, and rollback immediately after import.`,
+    },
+    plugins: [{ pluginId: manifest.id, version: manifest.version }],
+    defaults,
+    overrides,
+    checks,
+    recommended: false,
+  })
 }
 
 export function mapTemplateValuesToPluginParams(

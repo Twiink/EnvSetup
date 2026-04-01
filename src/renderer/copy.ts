@@ -307,6 +307,94 @@ const uiText = {
     'zh-CN': '环境变更已应用。',
     en: 'Environment changes applied.',
   },
+  snapshotTitle: {
+    'zh-CN': '快照',
+    en: 'Snapshots',
+  },
+  snapshotDescription: {
+    'zh-CN': '为当前环境状态创建快照，并在需要时从界面直接回滚。',
+    en: 'Create snapshots for the current environment state and roll back from the UI when needed.',
+  },
+  createSnapshot: {
+    'zh-CN': '创建快照',
+    en: 'Create Snapshot',
+  },
+  snapshotEmpty: {
+    'zh-CN': '还没有快照。',
+    en: 'No snapshots yet.',
+  },
+  snapshotTypeAuto: {
+    'zh-CN': '自动',
+    en: 'Auto',
+  },
+  snapshotTypeManual: {
+    'zh-CN': '手动',
+    en: 'Manual',
+  },
+  snapshotTaskLabel: {
+    'zh-CN': '任务',
+    en: 'Task',
+  },
+  snapshotDetails: {
+    'zh-CN': '详情',
+    en: 'Details',
+  },
+  snapshotHideDetails: {
+    'zh-CN': '收起',
+    en: 'Hide',
+  },
+  snapshotDelete: {
+    'zh-CN': '删除',
+    en: 'Delete',
+  },
+  snapshotRollback: {
+    'zh-CN': '回滚到此快照',
+    en: 'Rollback to Snapshot',
+  },
+  rollbackDialogTitle: {
+    'zh-CN': '执行回滚',
+    en: 'Rollback',
+  },
+  rollbackDialogClose: {
+    'zh-CN': '关闭',
+    en: 'Close',
+  },
+  rollbackFailureLabel: {
+    'zh-CN': '失败原因',
+    en: 'Failure',
+  },
+  rollbackSuggestedAction: {
+    'zh-CN': '建议动作',
+    en: 'Suggestion',
+  },
+  rollbackNoSnapshots: {
+    'zh-CN': '当前没有可用的回滚快照。',
+    en: 'No rollback snapshots available.',
+  },
+  rollbackSelectSnapshot: {
+    'zh-CN': '选择要恢复的快照：',
+    en: 'Select a snapshot to restore:',
+  },
+  rollbackSucceeded: {
+    'zh-CN': '回滚成功',
+    en: 'Rollback succeeded',
+  },
+  rollbackFailed: {
+    'zh-CN': '回滚失败',
+    en: 'Rollback failed',
+  },
+  rollbackFilesRestored: {
+    'zh-CN': '个文件已恢复',
+    en: 'files restored',
+  },
+  rollbackExecuting: {
+    'zh-CN': '回滚中…',
+    en: 'Rolling back…',
+  },
+  rollbackExecute: {
+    'zh-CN': '执行回滚',
+    en: 'Execute Rollback',
+  },
 } as const satisfies Record<string, LocalizedTextInput>
 
 const localeButtonLabelMap: Record<AppLocale, string> = {

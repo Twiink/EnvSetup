@@ -4,9 +4,9 @@
  * 优先级：
  * 1. `ENVSETUP_REAL_RUN=1` -> 真实执行（返回 false）
  * 2. `ENVSETUP_REAL_RUN=0` -> 模拟执行（返回 true）
- * 3. 其他情况默认始终走模拟执行
+ * 3. 其他情况在开发模式默认模拟执行，在打包模式默认真实执行
  */
-export function resolveDryRun(_isPackaged: boolean): boolean {
+export function resolveDryRun(isPackaged: boolean): boolean {
   const override = process.env.ENVSETUP_REAL_RUN
 
   if (override === '1') {
@@ -17,5 +17,5 @@ export function resolveDryRun(_isPackaged: boolean): boolean {
     return true
   }
 
-  return true
+  return !isPackaged
 }

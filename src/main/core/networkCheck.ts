@@ -26,6 +26,10 @@ const DEFAULT_NETWORK_CHECK_TIMEOUT_MS = 5000
 const NETWORK_RESULT_CACHE_TTL_MS = 60_000
 const networkResultCache = createRuntimeCache<NetworkCheckResult>()
 
+function shouldSkipNetworkChecks(): boolean {
+  return process.env.ENVSETUP_SKIP_NETWORK_CHECKS === '1'
+}
+
 type TemplateNetworkCheckOptions = {
   fetchImpl?: typeof fetch
   timeoutMs?: number
@@ -218,6 +222,15 @@ export async function runTemplateNetworkChecks(
   options: TemplateNetworkCheckOptions = {},
 ): Promise<NetworkCheckResult[]> {
   const targets = collectTemplateNetworkTargets(template, values, options)
+  if (shouldSkipNetworkChecks()) {
+    return targets.map((target) => ({
+      ...target,
+      reachable: true,
+      durationMs: 0,
+      statusCode: 200,
+    }))
+  }
+
   if (!options.downloadCacheDir) {
     return runNetworkChecks(targets, options)
   }

@@ -5,8 +5,11 @@
 import { useState } from 'react'
 
 import type { FailureAnalysis, RollbackResult, RollbackSuggestion } from '../../main/core/contracts'
+import type { AppLocale } from '../../shared/locale'
+import { getUiText } from '../copy'
 
 type RollbackDialogProps = {
+  locale: AppLocale
   failureAnalysis?: FailureAnalysis
   suggestions: RollbackSuggestion[]
   busy?: boolean
@@ -22,6 +25,7 @@ const CONFIDENCE_COLOR: Record<string, string> = {
 }
 
 export function RollbackDialog({
+  locale,
   failureAnalysis,
   suggestions,
   busy,
@@ -58,7 +62,7 @@ export function RollbackDialog({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Rollback System</h2>
+          <h2 style={{ margin: 0 }}>{getUiText(locale, 'rollbackDialogTitle')}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -70,7 +74,7 @@ export function RollbackDialog({
               cursor: 'pointer',
             }}
           >
-            Close
+            {getUiText(locale, 'rollbackDialogClose')}
           </button>
         </div>
 
@@ -87,14 +91,14 @@ export function RollbackDialog({
             }}
           >
             <strong style={{ color: '#b91c1c', fontSize: '0.9rem' }}>
-              Failure: {failureAnalysis.category}
+              {getUiText(locale, 'rollbackFailureLabel')}: {failureAnalysis.category}
             </strong>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#7f1d1d' }}>
               {failureAnalysis.message}
             </p>
             {failureAnalysis.suggestedAction && (
               <p style={{ margin: 0, fontSize: '0.82rem', color: '#92400e' }}>
-                Suggestion: {failureAnalysis.suggestedAction}
+                {getUiText(locale, 'rollbackSuggestedAction')}: {failureAnalysis.suggestedAction}
               </p>
             )}
           </div>
@@ -102,11 +106,13 @@ export function RollbackDialog({
 
         {/* 回滚建议列表 */}
         {suggestions.length === 0 ? (
-          <p style={{ margin: 0, color: '#64748b' }}>No rollback snapshots available.</p>
+          <p style={{ margin: 0, color: '#64748b' }}>
+            {getUiText(locale, 'rollbackNoSnapshots')}
+          </p>
         ) : (
           <div style={{ display: 'grid', gap: '0.5rem' }}>
             <p style={{ margin: 0, fontSize: '0.88rem', color: '#64748b' }}>
-              Select a snapshot to restore:
+              {getUiText(locale, 'rollbackSelectSnapshot')}
             </p>
             {suggestions.map((s) => (
               <label
@@ -169,10 +175,13 @@ export function RollbackDialog({
             }}
           >
             <strong style={{ color: result.success ? '#166534' : '#b91c1c', fontSize: '0.9rem' }}>
-              {result.success ? 'Rollback succeeded' : 'Rollback failed'}
+              {result.success
+                ? getUiText(locale, 'rollbackSucceeded')
+                : getUiText(locale, 'rollbackFailed')}
             </strong>
             <p style={{ margin: '0.35rem 0 0', fontSize: '0.85rem', color: '#334155' }}>
-              {result.message} · {result.filesRestored} files restored
+              {result.message} · {result.filesRestored}{' '}
+              {getUiText(locale, 'rollbackFilesRestored')}
             </p>
           </div>
         )}
@@ -192,7 +201,7 @@ export function RollbackDialog({
             fontWeight: 600,
           }}
         >
-          {busy ? 'Rolling back…' : 'Execute Rollback'}
+          {busy ? getUiText(locale, 'rollbackExecuting') : getUiText(locale, 'rollbackExecute')}
         </button>
       </div>
     </div>

@@ -23,7 +23,6 @@ vi.mock('node:fs', async (importOriginal) => {
 })
 
 const DEFAULT_DOWNLOAD_SIZE = 10_485_760
-const DEFAULT_FILE_SIZE = 1_048_576
 
 function makeResult(overrides: Partial<PluginInstallResult> = {}): PluginInstallResult {
   return {
@@ -288,7 +287,6 @@ describe('runPrecheck', () => {
 
   it('detects existing paths from plugin paths via existsSync', async () => {
     vi.mocked(existsSync).mockImplementation((p) => p === '/usr/local/bin/node')
-    const plan = generateInstallPlan([makeResult({ paths: { bin: '/usr/local/bin/node' } })])
     // file op for '/usr/local/bin/node' will be 'create' -> conflict since it exists
     const result = await runPrecheck([makeResult({ paths: { bin: '/usr/local/bin/node' } })])
     expect(result.conflicts.some((c) => c.type === 'file_exists')).toBe(true)

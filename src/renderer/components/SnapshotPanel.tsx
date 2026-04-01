@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 import type { SnapshotMeta } from '../../main/core/contracts'
 import type { AppLocale } from '../../shared/locale'
+import { getUiText } from '../copy'
 
 type SnapshotPanelProps = {
   locale: AppLocale
@@ -13,23 +14,20 @@ type SnapshotPanelProps = {
   busy?: boolean
   onCreateSnapshot: () => void
   onDeleteSnapshot: (snapshotId: string) => void
+  onRollbackSnapshot: (snapshotId: string) => void
 }
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 export function SnapshotPanel({
+  locale,
   snapshots,
   busy,
   onCreateSnapshot,
   onDeleteSnapshot,
+  onRollbackSnapshot,
 }: SnapshotPanelProps) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -48,9 +46,9 @@ export function SnapshotPanel({
         }}
       >
         <div style={{ display: 'grid', gap: '0.35rem' }}>
-          <h2 style={{ margin: 0 }}>Snapshots</h2>
+          <h2 style={{ margin: 0 }}>{getUiText(locale, 'snapshotTitle')}</h2>
           <p style={{ margin: 0, color: '#64748b', lineHeight: 1.6 }}>
-            System state snapshots for rollback
+            {getUiText(locale, 'snapshotDescription')}
           </p>
         </div>
         <button
@@ -66,13 +64,13 @@ export function SnapshotPanel({
             cursor: busy ? 'not-allowed' : 'pointer',
           }}
         >
-          Create Snapshot
+          {getUiText(locale, 'createSnapshot')}
         </button>
       </header>
 
       <div style={{ marginTop: '1rem' }}>
         {list.length === 0 ? (
-          <p style={{ margin: 0, color: '#64748b' }}>No snapshots yet.</p>
+          <p style={{ margin: 0, color: '#64748b' }}>{getUiText(locale, 'snapshotEmpty')}</p>
         ) : (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             {list.map((entry) => (
@@ -98,13 +96,32 @@ export function SnapshotPanel({
                       {entry.label ?? `Snapshot ${entry.id.slice(0, 8)}`}
                     </strong>
                     <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                      {entry.type === 'auto' ? 'Auto' : 'Manual'} · {formatDate(entry.createdAt)}
+                      {entry.type === 'auto'
+                        ? getUiText(locale, 'snapshotTypeAuto')
+                        : getUiText(locale, 'snapshotTypeManual')}{' '}
+                      · {formatDate(entry.createdAt)}
                     </span>
                     <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                      Task: {entry.taskId.slice(0, 8)}
+                      {getUiText(locale, 'snapshotTaskLabel')}: {entry.taskId.slice(0, 8)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onRollbackSnapshot(entry.id)}
+                      style={{
+                        borderRadius: '999px',
+                        border: 'none',
+                        padding: '0.4rem 0.75rem',
+                        background: busy ? '#cbd5e1' : '#fee2e2',
+                        color: busy ? '#94a3b8' : '#b91c1c',
+                        cursor: busy ? 'not-allowed' : 'pointer',
+                        fontSize: '0.82rem',
+                      }}
+                    >
+                      {getUiText(locale, 'snapshotRollback')}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
@@ -117,7 +134,9 @@ export function SnapshotPanel({
                         fontSize: '0.82rem',
                       }}
                     >
-                      {expanded === entry.id ? 'Hide' : 'Details'}
+                      {expanded === entry.id
+                        ? getUiText(locale, 'snapshotHideDetails')
+                        : getUiText(locale, 'snapshotDetails')}
                     </button>
                     {entry.canDelete && (
                       <button
@@ -134,7 +153,7 @@ export function SnapshotPanel({
                           fontSize: '0.82rem',
                         }}
                       >
-                        Delete
+                        {getUiText(locale, 'snapshotDelete')}
                       </button>
                     )}
                   </div>

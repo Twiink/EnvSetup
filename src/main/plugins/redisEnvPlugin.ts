@@ -2,11 +2,9 @@
  * 实现 Redis 在各平台上的一键安装与校验策略。
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import { buildRedisEnvChanges, resolveRedisInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { execFileAsync } from '../core/exec'
 import { executePlatformCommand, isPermissionError } from '../core/elevation'
 import { DEFAULT_REDIS_MACOS_VERSIONS, DEFAULT_REDIS_WINDOWS_VERSIONS } from '../core/redisVersions'
 import type {
@@ -20,8 +18,6 @@ import type {
   TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-
-const execFileAsync = promisify(execFile)
 
 const MEMURAI_LTS_RELEASES = {
   '7.4.7': {
@@ -410,6 +406,7 @@ async function runCommands(
   commands: string[],
   platform: RedisPluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
+  signal?: AbortSignal,
   pluginId = 'redis-env',
 ): Promise<string[]> {
   const output: string[] = []
@@ -434,8 +431,8 @@ async function runCommands(
               'Bypass',
               '-Command',
               command,
-            ])
-          : await execFileAsync('/bin/sh', ['-c', command])
+            ], { signal })
+          : await execFileAsync('/bin/sh', ['-c', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({
@@ -450,7 +447,10 @@ async function runCommands(
       })
     } catch (err: unknown) {
       if (platform === 'win32' && isPermissionError(err)) {
-        const elevatedResult = await executePlatformCommand(command, 'win32', { elevated: true })
+        const elevatedResult = await executePlatformCommand(command, 'win32', {
+          elevated: true,
+          signal,
+        })
         if (elevatedResult.stdout.trim()) output.push(elevatedResult.stdout.trim())
         if (elevatedResult.stderr.trim()) output.push(`stderr: ${elevatedResult.stderr.trim()}`)
         onProgress?.({
@@ -533,7 +533,7 @@ const redisEnvPlugin = {
 
       commands = buildInstallCommands(params, resolvedDownloads)
       const commandStartedAt = Date.now()
-      logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
+      logs.push(...(await runCommands(commands, params.platform, input.onProgress, input.signal)))
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
@@ -597,7 +597,12 @@ const redisEnvPlugin = {
 
     return {
       status: 'verified_success',
-      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
+      checks: await runCommands(
+        buildVerifyCommands(params),
+        params.platform,
+        input.onProgress,
+        input.signal,
+      ),
     }
   },
 }

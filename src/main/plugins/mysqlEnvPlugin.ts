@@ -2,11 +2,9 @@
  * 实现 MySQL 在各平台上的一键安装与校验策略。
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import { buildMysqlEnvChanges, resolveMysqlInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { execFileAsync } from '../core/exec'
 import { DEFAULT_MYSQL_LTS_VERSIONS } from '../core/mysqlVersions'
 import type {
   AppLocale,
@@ -19,8 +17,6 @@ import type {
   TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-
-const execFileAsync = promisify(execFile)
 
 const MYSQL_MACOS_ARCHIVE_BASE_URL = 'https://cdn.mysql.com/Downloads'
 const MYSQL_WINDOWS_ARCHIVE_BASE_URL = 'https://dev.mysql.com/get/Downloads'
@@ -337,6 +333,7 @@ async function runCommands(
   commands: string[],
   platform: MysqlPluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
+  signal?: AbortSignal,
   pluginId = 'mysql-env',
 ): Promise<string[]> {
   const output: string[] = []
@@ -361,8 +358,8 @@ async function runCommands(
               'Bypass',
               '-Command',
               command,
-            ])
-          : await execFileAsync('/bin/sh', ['-c', command])
+            ], { signal })
+          : await execFileAsync('/bin/sh', ['-c', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({
@@ -441,7 +438,7 @@ const mysqlEnvPlugin = {
 
       commands = buildInstallCommands(params, resolvedDownloads)
       const commandStartedAt = Date.now()
-      logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
+      logs.push(...(await runCommands(commands, params.platform, input.onProgress, input.signal)))
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
@@ -498,7 +495,12 @@ const mysqlEnvPlugin = {
 
     return {
       status: 'verified_success',
-      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
+      checks: await runCommands(
+        buildVerifyCommands(params),
+        params.platform,
+        input.onProgress,
+        input.signal,
+      ),
     }
   },
 }

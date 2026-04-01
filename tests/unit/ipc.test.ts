@@ -2,6 +2,10 @@
  * ipc 模块的单元测试。
  */
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstallTask, Primitive, Snapshot } from '../../src/main/core/contracts'
 import type { CreateTaskInput } from '../../src/main/core/task'
@@ -35,11 +39,12 @@ const snapshotStub: Snapshot = {
 const showOpenDialog = vi.fn()
 const getFocusedWindow = vi.fn()
 const send = vi.fn()
+const getVersion = vi.fn(() => '0.2.4')
 const isPackaged = false
 const runtimePlatform = (process.platform === 'win32' ? 'win32' : 'darwin') as const
 
 vi.mock('electron', () => ({
-  app: { isPackaged },
+  app: { isPackaged, getVersion },
   BrowserWindow: { getFocusedWindow },
   dialog: { showOpenDialog },
   ipcMain: { handle },
@@ -139,6 +144,21 @@ vi.mock('../../src/main/core/mavenVersions', () => ({
 vi.mock('../../src/main/core/plugin', () => ({
   importPluginFromDirectory: vi.fn(),
   importPluginFromZip: vi.fn(),
+  listImportedPluginsFromRegistry: vi.fn(async () => []),
+  loadPluginLifecycle: vi.fn(async () => ({
+    install: vi.fn(async () => ({
+      status: 'installed_unverified',
+      executionMode: 'dry_run',
+      version: '1.0.0',
+      paths: {},
+      envChanges: [],
+      downloads: [],
+      commands: [],
+      logs: [],
+      summary: 'ok',
+    })),
+    verify: vi.fn(async () => ({ status: 'verified_success', checks: [] })),
+  })),
 }))
 vi.mock('../../src/main/core/precheck', () => ({
   buildRuntimePrecheckInput: vi.fn(async () => ({ ok: true })),
@@ -212,6 +232,7 @@ vi.mock('../../src/main/core/task', () => ({
       type: 'command_done',
       message: 'ok',
       timestamp: '2026-03-25T00:00:00.000Z',
+      taskSnapshot: { ...task, status: 'running' },
     })
     return { ...task, status: 'succeeded' }
   }),
@@ -252,6 +273,22 @@ vi.mock('../../src/main/core/task', () => ({
     updatedAt: '2026-03-25T00:00:00.000Z',
   })),
   persistTask: vi.fn(async () => undefined),
+  prepareTaskPluginRetry: vi.fn(async ({ task, pluginId }) => ({
+    ...task,
+    status: 'ready',
+    rollbackSuggestions: undefined,
+    plugins: task.plugins.map((plugin) =>
+      plugin.pluginId === pluginId
+        ? {
+            ...plugin,
+            status: 'needs_rerun',
+            logs: [],
+            error: undefined,
+            errorCode: undefined,
+          }
+        : plugin,
+    ),
+  })),
   retryTaskPlugin: vi.fn(async ({ task, pluginId }) => ({
     ...task,
     retriedPluginId: pluginId,
@@ -259,6 +296,18 @@ vi.mock('../../src/main/core/task', () => ({
   })),
 }))
 vi.mock('../../src/main/core/template', () => ({
+  buildImportedPluginTemplate: vi.fn((manifest) => ({
+    id: `imported-${manifest.id}-${manifest.version}`,
+    version: manifest.version,
+    name: manifest.name,
+    description: { 'zh-CN': '导入模板', en: 'Imported template' },
+    platforms: manifest.platforms,
+    plugins: [{ pluginId: manifest.id, version: manifest.version }],
+    defaults: {},
+    overrides: {},
+    checks: [],
+    fields: {},
+  })),
   loadTemplatesFromDirectory: vi.fn(async () => [
     {
       id: 'tpl-1',
@@ -300,6 +349,7 @@ beforeEach(async () => {
   const snapshotMod = await import('../../src/main/core/snapshot')
   const taskMod = await import('../../src/main/core/task')
   const templateMod = await import('../../src/main/core/template')
+  const pluginMod = await import('../../src/main/core/plugin')
 
   vi.mocked(envMod.previewEnvChanges).mockClear()
   vi.mocked(envMod.applyEnvChanges).mockClear()
@@ -318,14 +368,21 @@ beforeEach(async () => {
   vi.mocked(taskMod.createTask).mockClear()
   vi.mocked(taskMod.executeTask).mockClear()
   vi.mocked(taskMod.loadTask).mockClear()
+  vi.mocked(taskMod.prepareTaskPluginRetry).mockClear()
   vi.mocked(taskMod.persistTask).mockClear()
   vi.mocked(taskMod.retryTaskPlugin).mockClear()
   vi.mocked(templateMod.mapTemplateValuesToPluginParams).mockClear()
+  vi.mocked(templateMod.buildImportedPluginTemplate).mockClear()
+  vi.mocked(pluginMod.importPluginFromDirectory).mockClear()
+  vi.mocked(pluginMod.importPluginFromZip).mockClear()
+  vi.mocked(pluginMod.listImportedPluginsFromRegistry).mockClear()
+  vi.mocked(pluginMod.loadPluginLifecycle).mockClear()
 
   vi.mocked(rollbackMod.suggestRollbackSnapshots).mockResolvedValue([])
   vi.mocked(snapshotMod.createSnapshot).mockResolvedValue(snapshotStub)
   vi.mocked(snapshotMod.loadSnapshot).mockClear()
   vi.mocked(snapshotMod.loadSnapshotMeta).mockResolvedValue({ snapshots: [], maxSnapshots: 5 })
+  vi.mocked(pluginMod.listImportedPluginsFromRegistry).mockResolvedValue([])
 })
 
 describe('registerIpcHandlers', () => {
@@ -349,6 +406,8 @@ describe('registerIpcHandlers', () => {
     expect(handlers.has('rollback:suggest')).toBe(true)
     expect(handlers.has('rollback:execute')).toBe(true)
     expect(handlers.has('dialog:pick-directory')).toBe(true)
+    expect(handlers.has('dialog:pick-plugin-import')).toBe(true)
+    expect(handlers.has('plugin:import')).toBe(true)
     expect(handlers.has('precheck:enhanced')).toBe(true)
   })
 
@@ -391,7 +450,7 @@ describe('registerIpcHandlers', () => {
     expect(result.id).toBe('task-created')
   })
 
-  it('starts task, creates snapshot, sends progress, and marks snapshot deletable on success', async () => {
+  it('starts task in background, returns running state immediately, then finalizes on success', async () => {
     const snapshotMod = await import('../../src/main/core/snapshot')
     const taskMod = await import('../../src/main/core/task')
 
@@ -405,21 +464,29 @@ describe('registerIpcHandlers', () => {
     })
     expect(taskMod.executeTask).toHaveBeenCalledWith(
       expect.objectContaining({
-        task: expect.objectContaining({ id: 'task-1' }),
+        task: expect.objectContaining({ id: 'task-1', status: 'running' }),
         tasksDir: '/tmp/tasks',
         dryRun: true,
+        emitTaskDone: false,
       }),
     )
-    expect(send).toHaveBeenCalledWith(
-      'task:progress',
-      expect.objectContaining({ taskId: 'task-1', pluginId: 'node-env', type: 'command_done' }),
-    )
-    expect(snapshotMod.markSnapshotDeletable).toHaveBeenCalledWith('/tmp/snapshots', 'snapshot-1')
     expect(result.snapshotId).toBe('snapshot-1')
-    expect(result.status).toBe('succeeded')
+    expect(result.status).toBe('running')
+
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledWith(
+        'task:progress',
+        expect.objectContaining({ taskId: 'task-1', pluginId: 'node-env', type: 'command_done' }),
+      )
+      expect(send).toHaveBeenCalledWith(
+        'task:progress',
+        expect.objectContaining({ taskId: 'task-1', pluginId: 'task', type: 'task_done' }),
+      )
+      expect(snapshotMod.markSnapshotDeletable).toHaveBeenCalledWith('/tmp/snapshots', 'snapshot-1')
+    })
   })
 
-  it('starts task and attaches rollback suggestions when execution fails', async () => {
+  it('attaches rollback suggestions when background execution fails', async () => {
     const rollbackMod = await import('../../src/main/core/rollback')
     const taskMod = await import('../../src/main/core/task')
     const failedTask: InstallTask = {
@@ -439,12 +506,25 @@ describe('registerIpcHandlers', () => {
 
     const result = await handlers.get('task:start')?.({}, 'task-2')
 
-    expect(rollbackMod.suggestRollbackSnapshots).toHaveBeenCalledWith('/tmp/snapshots', 'task-2')
-    expect(result.status).toBe('failed')
+    expect(result.status).toBe('running')
     expect(result.snapshotId).toBe('snapshot-1')
-    expect(result.rollbackSuggestions).toEqual([
-      expect.objectContaining({ snapshotId: 'snapshot-1', confidence: 'high' }),
-    ])
+
+    await vi.waitFor(() => {
+      expect(rollbackMod.suggestRollbackSnapshots).toHaveBeenCalledWith('/tmp/snapshots', 'task-2')
+      expect(send).toHaveBeenCalledWith(
+        'task:progress',
+        expect.objectContaining({
+          taskId: 'task-2',
+          type: 'task_done',
+          taskSnapshot: expect.objectContaining({
+            status: 'failed',
+            rollbackSuggestions: [
+              expect.objectContaining({ snapshotId: 'snapshot-1', confidence: 'high' }),
+            ],
+          }),
+        }),
+      )
+    })
   })
 
   it('cancels task and returns updated task', async () => {
@@ -459,7 +539,7 @@ describe('registerIpcHandlers', () => {
     expect(result.status).toBe('cancelled')
   })
 
-  it('retries a plugin with mapped execution options', async () => {
+  it('retries a plugin in background with mapped execution options', async () => {
     const taskMod = await import('../../src/main/core/task')
 
     const result = await handlers.get('task:retry-plugin')?.(
@@ -467,15 +547,20 @@ describe('registerIpcHandlers', () => {
       { taskId: 'task-1', pluginId: 'node-env' },
     )
 
-    expect(taskMod.retryTaskPlugin).toHaveBeenCalledWith(
+    expect(taskMod.prepareTaskPluginRetry).toHaveBeenCalledWith({
+      task: expect.objectContaining({ id: 'task-1' }),
+      pluginId: 'node-env',
+      tasksDir: '/tmp/tasks',
+    })
+    expect(taskMod.executeTask).toHaveBeenCalledWith(
       expect.objectContaining({
         task: expect.objectContaining({ id: 'task-1' }),
-        pluginId: 'node-env',
         tasksDir: '/tmp/tasks',
         dryRun: true,
+        emitTaskDone: false,
       }),
     )
-    expect(result.retriedPluginId).toBe('node-env')
+    expect(result.status).toBe('running')
   })
 
   it('delegates cleanup handler to cleanupDetectedEnvironment', async () => {
@@ -749,6 +834,57 @@ describe('registerIpcHandlers', () => {
     showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] })
     const canceled = await handlers.get('dialog:pick-directory')?.({}, { defaultPath: '/tmp' })
     expect(canceled).toBeUndefined()
+  })
+
+  it('dialog pick-plugin-import returns selected zip path or undefined when canceled', async () => {
+    showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ['/tmp/acme.zip'] })
+    const selected = await handlers.get('dialog:pick-plugin-import')?.({})
+    expect(selected).toBe('/tmp/acme.zip')
+
+    showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] })
+    const canceled = await handlers.get('dialog:pick-plugin-import')?.({})
+    expect(canceled).toBeUndefined()
+  })
+
+  it('imports plugin from zip and returns template id', async () => {
+    const pluginMod = await import('../../src/main/core/plugin')
+    const tempDir = await mkdtemp(join(tmpdir(), 'envsetup-ipc-plugin-'))
+    const pluginZipPath = join(tempDir, 'acme.zip')
+    await writeFile(pluginZipPath, 'zip', 'utf8')
+    vi.mocked(pluginMod.importPluginFromZip).mockResolvedValueOnce({
+      manifest: {
+        id: 'acme-env',
+        name: { 'zh-CN': 'Acme 环境', en: 'Acme Environment' },
+        version: '1.0.0',
+        mainAppVersion: '^0.2.4',
+        platforms: ['darwin', 'win32'],
+        permissions: ['download'],
+        parameters: {},
+        dependencies: [],
+        entry: 'index.mjs',
+      },
+      sourcePath: '/tmp/staging/acme-env',
+      entryPath: '/tmp/staging/acme-env/index.mjs',
+      importedAt: '2026-03-25T00:00:00.000Z',
+      storagePath: '/tmp/plugins/acme-env/1.0.0',
+    })
+
+    try {
+      const result = await handlers.get('plugin:import')?.({}, { path: pluginZipPath })
+
+      expect(pluginMod.importPluginFromZip).toHaveBeenCalledWith(pluginZipPath, '/tmp/staging', {
+        registryDir: '/tmp/plugins',
+        appVersion: '0.2.4',
+      })
+      expect(result).toEqual(
+        expect.objectContaining({
+          templateId: 'imported-acme-env-1.0.0',
+          manifest: expect.objectContaining({ id: 'acme-env' }),
+        }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
   })
 
   describe.each([

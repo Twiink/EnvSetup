@@ -21,7 +21,9 @@ export default tseslint.config(
     ignores: [
       'node_modules/**',
       'out/**',
+      'dist/**',
       '.envsetup-data/**',
+      '.playwright-mcp/**',
       'playwright-report/**',
       'test-results/**',
       'coverage/**',

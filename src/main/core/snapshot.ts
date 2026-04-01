@@ -1051,10 +1051,6 @@ export async function reconcileSnapshotState(options: {
     errors: [],
   }
 
-  function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
-    return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${pathSeparator}`)
-  }
-
   function snapshotContainsPath(targetPath: string): boolean {
     return (
       snapshotDirectories.has(targetPath) ||

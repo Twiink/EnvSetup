@@ -5,7 +5,7 @@
     "en": "Node.js Environment"
   },
   "version": "0.1.0",
-  "mainAppVersion": "^0.1.0",
+  "mainAppVersion": "^0.2.4",
   "platforms": ["darwin", "win32"],
   "permissions": ["download", "write_path", "modify_env"],
   "parameters": {

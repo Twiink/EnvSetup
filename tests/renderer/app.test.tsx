@@ -4,7 +4,7 @@
 
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -306,6 +306,8 @@ const mavenTemplateFixture = {
 }
 
 const pickDirectory = vi.fn()
+const pickPluginImportPath = vi.fn()
+const importPluginFromPath = vi.fn()
 const runPrecheck = vi.fn()
 const onTaskProgress = vi.fn()
 const removeTaskProgressListener = vi.fn()
@@ -316,12 +318,36 @@ const cleanupEnvironment = vi.fn()
 const cleanupEnvironments = vi.fn()
 const previewEnvChanges = vi.fn()
 const applyEnvChanges = vi.fn()
+const listSnapshots = vi.fn()
+const createSnapshot = vi.fn()
+const deleteSnapshot = vi.fn()
 const executeRollback = vi.fn()
+let taskProgressHandler: ((event: Parameters<EnvSetupApi['onTaskProgress']>[0] extends (event: infer E) => void ? E : never) => void) | undefined
 
 beforeEach(() => {
   window.localStorage.clear()
   pickDirectory.mockReset()
   pickDirectory.mockResolvedValue('/tmp/selected-toolchain')
+  pickPluginImportPath.mockReset()
+  pickPluginImportPath.mockResolvedValue('/tmp/acme-plugin.zip')
+  importPluginFromPath.mockReset()
+  importPluginFromPath.mockResolvedValue({
+    manifest: {
+      id: 'acme-env',
+      name: { 'zh-CN': 'Acme 环境', en: 'Acme Environment' },
+      version: '1.0.0',
+      mainAppVersion: '^0.2.4',
+      platforms: ['darwin'],
+      permissions: ['download'],
+      parameters: {},
+      dependencies: [],
+      entry: 'index.mjs',
+    },
+    sourcePath: '/tmp/acme-plugin',
+    entryPath: '/tmp/acme-plugin/index.mjs',
+    importedAt: new Date().toISOString(),
+    templateId: 'imported-acme-env-1.0.0',
+  })
   runPrecheck.mockReset()
   runPrecheck.mockResolvedValue({
     level: 'pass',
@@ -330,7 +356,11 @@ beforeEach(() => {
     createdAt: new Date().toISOString(),
   })
   onTaskProgress.mockReset()
+  onTaskProgress.mockImplementation((callback) => {
+    taskProgressHandler = callback
+  })
   removeTaskProgressListener.mockReset()
+  taskProgressHandler = undefined
   startTask.mockReset()
   cancelTask.mockReset()
   retryPlugin.mockReset()
@@ -353,6 +383,35 @@ beforeEach(() => {
     message: 'Successfully cleaned 2 environment(s)',
   })
   applyEnvChanges.mockResolvedValue({ applied: [], skipped: [] })
+  listSnapshots.mockReset()
+  listSnapshots.mockResolvedValue({
+    snapshots: [
+      {
+        id: 'snapshot-1',
+        taskId: 'task-1',
+        createdAt: '2026-03-25T00:00:00.000Z',
+        type: 'auto',
+        label: 'before-install',
+        canDelete: false,
+      },
+    ],
+    maxSnapshots: 5,
+  })
+  createSnapshot.mockReset()
+  createSnapshot.mockResolvedValue({
+    id: 'snapshot-manual-1',
+    taskId: 'task-1',
+    createdAt: '2026-03-25T00:00:00.000Z',
+    type: 'manual',
+    label: 'task-1-manual',
+    trackedPaths: [],
+    files: {},
+    environment: { variables: {}, path: [] },
+    shellConfigs: {},
+    metadata: { platform: 'darwin', diskUsage: 0, fileCount: 0 },
+  })
+  deleteSnapshot.mockReset()
+  deleteSnapshot.mockResolvedValue(undefined)
   executeRollback.mockResolvedValue({
     success: true,
     executionMode: 'real_run',
@@ -401,33 +460,19 @@ beforeEach(() => {
     templateId: 'node-template',
     templateVersion: '0.1.0',
     locale: 'zh-CN',
-    status: 'succeeded',
+    status: 'running',
     params: {},
     plugins: [
       {
         pluginId: 'node-env',
         version: '0.1.0',
-        status: 'verified_success',
+        status: 'running',
         params: {},
         logs: [],
         context: {},
-        lastResult: {
-          status: 'installed_unverified',
-          executionMode: 'real_run',
-          version: '20.11.1',
-          paths: {
-            installRootDir: '/tmp/toolchain',
-            npmCacheDir: '/tmp/npm-cache',
-            npmGlobalPrefix: '/tmp/npm-global',
-          },
-          envChanges: [],
-          downloads: [],
-          commands: [],
-          logs: [],
-          summary: 'Completed Node.js environment install commands.',
-        },
       },
     ],
+    snapshotId: 'snapshot-1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   })
@@ -520,14 +565,15 @@ beforeEach(() => {
     cleanupEnvironment,
     cleanupEnvironments,
     pickDirectory,
-    importPluginFromPath: vi.fn(),
+    pickPluginImportPath,
+    importPluginFromPath,
     previewEnvChanges,
     applyEnvChanges,
     onTaskProgress,
     removeTaskProgressListener,
-    listSnapshots: vi.fn(),
-    createSnapshot: vi.fn(),
-    deleteSnapshot: vi.fn(),
+    listSnapshots,
+    createSnapshot,
+    deleteSnapshot,
     suggestRollback: vi.fn(),
     executeRollback,
     runEnhancedPrecheck: vi.fn(),
@@ -555,6 +601,18 @@ async function clickEnabledButton(name: string) {
 async function runPassingPrecheck() {
   await clickEnabledButton('运行预检')
   await screen.findByText('当前预检项均已通过。')
+}
+
+async function emitTaskProgress(
+  event: Parameters<Exclude<typeof taskProgressHandler, undefined>>[0],
+) {
+  if (!taskProgressHandler) {
+    throw new Error('task progress listener was not registered')
+  }
+
+  await act(async () => {
+    taskProgressHandler?.(event)
+  })
 }
 
 describe('App', () => {
@@ -705,11 +763,55 @@ describe('App', () => {
     await screen.findByText('任务状态')
 
     fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
+    await waitFor(() => {
+      expect(startTask).toHaveBeenCalledWith('task-1')
+    })
+    await screen.findByRole('button', { name: '取消任务' })
+    await emitTaskProgress({
+      taskId: 'task-1',
+      pluginId: 'task',
+      type: 'task_done',
+      message: 'Task succeeded',
+      timestamp: new Date().toISOString(),
+      taskSnapshot: {
+        id: 'task-1',
+        templateId: 'node-template',
+        templateVersion: '0.1.0',
+        locale: 'zh-CN',
+        status: 'succeeded',
+        params: {},
+        plugins: [
+          {
+            pluginId: 'node-env',
+            version: '0.1.0',
+            status: 'verified_success',
+            params: {},
+            logs: [],
+            context: {},
+            lastResult: {
+              status: 'installed_unverified',
+              executionMode: 'real_run',
+              version: '20.11.1',
+              paths: {
+                installRootDir: '/tmp/toolchain',
+                npmCacheDir: '/tmp/npm-cache',
+                npmGlobalPrefix: '/tmp/npm-global',
+              },
+              envChanges: [],
+              downloads: [],
+              commands: [],
+              logs: [],
+              summary: 'Completed Node.js environment install commands.',
+            },
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    })
 
     expect(await screen.findByText('Node.js 环境安装命令已执行完成。')).toBeInTheDocument()
-    expect(startTask).toHaveBeenCalledWith('task-1')
     expect(onTaskProgress).toHaveBeenCalled()
-    expect(removeTaskProgressListener).toHaveBeenCalled()
   }, 15000)
 
   it('renders env/download/command details when task has lastResult', async () => {
@@ -718,46 +820,16 @@ describe('App', () => {
       templateId: 'node-template',
       templateVersion: '0.1.0',
       locale: 'zh-CN',
-      status: 'succeeded',
+      status: 'running',
       params: {},
       plugins: [
         {
           pluginId: 'node-env',
           version: '0.1.0',
-          status: 'verified_success',
+          status: 'running',
           params: {},
           logs: [],
           context: {},
-          lastResult: {
-            status: 'installed_unverified',
-            executionMode: 'real_run',
-            version: '20.11.1',
-            paths: {
-              installRootDir: '/tmp/toolchain',
-              npmCacheDir: '/tmp/npm-cache',
-              npmGlobalPrefix: '/tmp/npm-global',
-            },
-            envChanges: [
-              {
-                kind: 'env',
-                key: 'npm_config_cache',
-                value: '/tmp/npm-cache',
-                scope: 'user',
-                description: 'Set npm cache directory.',
-              },
-            ],
-            downloads: [
-              {
-                kind: 'archive',
-                tool: 'node',
-                url: 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-arm64.tar.gz',
-                official: true,
-              },
-            ],
-            commands: ['echo install'],
-            logs: [],
-            summary: 'Completed Node.js environment install commands.',
-          },
         },
       ],
       createdAt: new Date().toISOString(),
@@ -770,6 +842,67 @@ describe('App', () => {
     await clickEnabledButton('创建任务')
     await screen.findByText('任务状态')
     fireEvent.click(await screen.findByRole('button', { name: '开始执行' }))
+    await waitFor(() => {
+      expect(startTask).toHaveBeenCalledWith('task-1')
+    })
+    await screen.findByRole('button', { name: '取消任务' })
+    await emitTaskProgress({
+      taskId: 'task-1',
+      pluginId: 'task',
+      type: 'task_done',
+      message: 'Task succeeded',
+      timestamp: new Date().toISOString(),
+      taskSnapshot: {
+        id: 'task-1',
+        templateId: 'node-template',
+        templateVersion: '0.1.0',
+        locale: 'zh-CN',
+        status: 'succeeded',
+        params: {},
+        plugins: [
+          {
+            pluginId: 'node-env',
+            version: '0.1.0',
+            status: 'verified_success',
+            params: {},
+            logs: [],
+            context: {},
+            lastResult: {
+              status: 'installed_unverified',
+              executionMode: 'real_run',
+              version: '20.11.1',
+              paths: {
+                installRootDir: '/tmp/toolchain',
+                npmCacheDir: '/tmp/npm-cache',
+                npmGlobalPrefix: '/tmp/npm-global',
+              },
+              envChanges: [
+                {
+                  kind: 'env',
+                  key: 'npm_config_cache',
+                  value: '/tmp/npm-cache',
+                  scope: 'user',
+                  description: 'Set npm cache directory.',
+                },
+              ],
+              downloads: [
+                {
+                  kind: 'archive',
+                  tool: 'node',
+                  url: 'https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-arm64.tar.gz',
+                  official: true,
+                },
+              ],
+              commands: ['echo install'],
+              logs: [],
+              summary: 'Completed Node.js environment install commands.',
+            },
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    })
 
     expect(await screen.findByText('下载项（1）')).toBeInTheDocument()
     expect(await screen.findByText('命令计划（1）')).toBeInTheDocument()
@@ -909,7 +1042,6 @@ describe('App', () => {
 
     expect(retryPlugin).toHaveBeenCalledWith('task-1', 'node-env')
     expect(onTaskProgress).toHaveBeenCalled()
-    expect(removeTaskProgressListener).toHaveBeenCalled()
   })
 
   it('cancels running task from task panel', async () => {
@@ -962,5 +1094,45 @@ describe('App', () => {
       })
     })
     expect(await screen.findByText('环境变更已应用。 (0/1)')).toBeInTheDocument()
+  })
+
+  it('imports plugin from selected zip and refreshes templates', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '导入插件' }))
+
+    await waitFor(() => {
+      expect(pickPluginImportPath).toHaveBeenCalledTimes(1)
+      expect(importPluginFromPath).toHaveBeenCalledWith('/tmp/acme-plugin.zip')
+    })
+    expect(await screen.findByText('插件导入成功')).toBeInTheDocument()
+  })
+
+  it('creates manual snapshot and opens rollback dialog from snapshot list', async () => {
+    render(<App />)
+
+    await runPassingPrecheck()
+    await clickEnabledButton('创建任务')
+
+    fireEvent.click(await screen.findByRole('button', { name: '创建快照' }))
+    await waitFor(() => {
+      expect(createSnapshot).toHaveBeenCalledWith({
+        taskId: 'task-1',
+        label: 'node-template-manual',
+      })
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '回滚到此快照' }))
+
+    expect(await screen.findByRole('heading', { name: '执行回滚' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '执行回滚' }))
+
+    await waitFor(() => {
+      expect(executeRollback).toHaveBeenCalledWith({
+        snapshotId: 'snapshot-1',
+        installPaths: ['/tmp/toolchain'],
+      })
+    })
   })
 })

@@ -2,13 +2,10 @@
  * 处理跨平台提权命令的生成与执行回退。
  */
 
-import { execFile } from 'node:child_process'
 import { dirname } from 'node:path'
-import { promisify } from 'node:util'
 
 import type { AppPlatform } from './contracts'
-
-const execFileAsync = promisify(execFile)
+import { execFileAsync } from './exec'
 
 function quotePosix(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
@@ -56,9 +53,12 @@ export function isPermissionError(error: unknown): boolean {
 export async function executePlatformCommand(
   command: string,
   platform: AppPlatform,
-  options: { elevated?: boolean; timeoutMs?: number } = {},
+  options: { elevated?: boolean; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<{ stdout: string; stderr: string }> {
-  const execOptions = options.timeoutMs ? { timeout: options.timeoutMs } : {}
+  const execOptions = {
+    ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  }
 
   if (platform === 'win32') {
     if (options.elevated) {

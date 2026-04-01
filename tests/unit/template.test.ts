@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildImportedPluginTemplate,
   inferTemplateFieldPrefix,
   isTemplateFieldActive,
   mapTemplateValuesToPluginParams,
@@ -31,6 +32,44 @@ describe('template', () => {
 
     expect(template.fields['node.nodeManager'].value).toBe('nvm')
     expect(template.fields['node.nodeManager'].enum).toEqual(['node', 'nvm'])
+  })
+
+  it('builds executable templates for imported plugins', () => {
+    const template = buildImportedPluginTemplate(
+      {
+        id: 'acme-env',
+        name: {
+          'zh-CN': 'Acme 环境',
+          en: 'Acme Environment',
+        },
+        version: '1.2.3',
+        mainAppVersion: '^0.2.4',
+        platforms: ['darwin', 'win32'],
+        permissions: ['download'],
+        parameters: {
+          installRootDir: {
+            type: 'path',
+            required: true,
+          },
+          channel: {
+            type: 'enum',
+            required: true,
+            values: ['stable', 'beta'],
+          },
+        },
+        dependencies: [],
+        entry: 'index.mjs',
+      },
+      {
+        dataRootDir: '/tmp/envsetup-data',
+      },
+    )
+
+    expect(template.id).toBe('imported-acme-env-1.2.3')
+    expect(template.plugins).toEqual([{ pluginId: 'acme-env', version: '1.2.3' }])
+    expect(template.fields['acme.installRootDir'].value).toBe('/tmp/envsetup-data/toolchain/acme')
+    expect(template.fields['acme.channel'].enum).toEqual(['stable', 'beta'])
+    expect(template.fields['acme.channel'].editable).toBe(true)
   })
 
   it('rejects override for undefined field', () => {

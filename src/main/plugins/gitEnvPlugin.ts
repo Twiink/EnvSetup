@@ -2,11 +2,9 @@
  * 实现 Git 在各平台上的安装、清理与回滚策略。
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import { buildGitEnvChanges, resolveGitInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { execFileAsync } from '../core/exec'
 import { DEFAULT_GIT_MACOS_VERSIONS, DEFAULT_GIT_WINDOWS_VERSIONS } from '../core/gitVersions'
 import type {
   AppLocale,
@@ -19,8 +17,6 @@ import type {
   TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-
-const execFileAsync = promisify(execFile)
 
 const GIT_MACOS_INSTALLER_BASE_URL = 'https://sourceforge.net/projects/git-osx-installer/files'
 const HOMEBREW_INSTALL_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
@@ -568,6 +564,7 @@ async function runCommands(
   commands: string[],
   platform: GitPluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
+  signal?: AbortSignal,
   pluginId = 'git-env',
 ): Promise<string[]> {
   const output: string[] = []
@@ -593,8 +590,8 @@ async function runCommands(
               'Bypass',
               '-Command',
               command,
-            ])
-          : await execFileAsync('/bin/sh', ['-c', command])
+            ], { signal })
+          : await execFileAsync('/bin/sh', ['-c', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({
@@ -679,7 +676,7 @@ const gitEnvPlugin = {
         allowScoopBootstrapReset: allowFreshScoopBootstrapReset,
       })
       const commandStartedAt = Date.now()
-      logs.push(...(await runCommands(commands, params.platform, input.onProgress)))
+      logs.push(...(await runCommands(commands, params.platform, input.onProgress, input.signal)))
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
 
@@ -737,7 +734,12 @@ const gitEnvPlugin = {
 
     return {
       status: 'verified_success',
-      checks: await runCommands(buildVerifyCommands(params), params.platform, input.onProgress),
+      checks: await runCommands(
+        buildVerifyCommands(params),
+        params.platform,
+        input.onProgress,
+        input.signal,
+      ),
     }
   },
 }

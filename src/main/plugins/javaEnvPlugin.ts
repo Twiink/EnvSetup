@@ -2,12 +2,10 @@
  * 实现 Java 在各平台上的安装、清理与回滚策略。
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import { prepareExtractedArchive } from '../core/archiveCache'
 import { buildJavaEnvChanges, resolveJavaInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { execFileAsync } from '../core/exec'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -19,8 +17,6 @@ import type {
   TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-
-const execFileAsync = promisify(execFile)
 
 const ADOPTIUM_BINARY_BASE_URL = 'https://api.adoptium.net/v3/binary/latest'
 const SDKMAN_CLI_VERSION = '5.22.3'
@@ -614,6 +610,7 @@ async function runCommands(
   commands: string[],
   platform: JavaPluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
+  signal?: AbortSignal,
   pluginId = 'java-env',
 ): Promise<string[]> {
   const output: string[] = []
@@ -637,8 +634,8 @@ async function runCommands(
               'Bypass',
               '-Command',
               command,
-            ])
-          : await execFileAsync('/bin/bash', ['-lc', command])
+            ], { signal })
+          : await execFileAsync('/bin/bash', ['-lc', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({
@@ -733,7 +730,7 @@ const javaEnvPlugin = {
 
       commands = buildInstallCommands(params, resolvedDownloads, preparedSources)
       const commandStartedAt = Date.now()
-      const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
+      const cmdOutput = await runCommands(commands, params.platform, input.onProgress, input.signal)
       logs.push(...cmdOutput)
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
@@ -792,6 +789,7 @@ const javaEnvPlugin = {
       buildVerifyCommands(params),
       params.platform,
       input.onProgress,
+      input.signal,
     )
 
     return {

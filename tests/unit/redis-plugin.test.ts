@@ -184,7 +184,7 @@ describe('redis env plugin', () => {
         })
         callback(error)
       })
-      .mockImplementationOnce((_file, _args, _options, callback) => {
+      .mockImplementationOnce((_file, _args, callback) => {
         callback(null, { stdout: 'Memurai for Redis installed', stderr: '' })
       })
 
@@ -218,7 +218,6 @@ describe('redis env plugin', () => {
         '-Command',
         expect.stringContaining('-Verb RunAs'),
       ]),
-      expect.any(Object),
       expect.any(Function),
     )
   })

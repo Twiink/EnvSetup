@@ -7,13 +7,22 @@ import { constants } from 'node:fs'
 import { access, cp, mkdir, mkdtemp, readFile, readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, extname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
-import type { AppPlatform, ImportedPlugin, PluginManifest } from './contracts'
+import packageJson from '../../../package.json'
+import type {
+  AppPlatform,
+  ImportedPlugin,
+  PluginLifecycle,
+  PluginManifest,
+} from './contracts'
 import { isLocalizedTextInput } from '../../shared/locale'
 
 const execFileAsync = promisify(execFile)
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
+const EXECUTABLE_PLUGIN_ENTRY_EXTENSIONS = new Set(['.js', '.mjs', '.cjs'])
+const DEFAULT_APP_VERSION = packageJson.version
 
 function ensureObject(value: unknown, message: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null) {
@@ -55,6 +64,14 @@ function matchesVersionRange(version: string, range: string): boolean {
 
 async function assertEntryExists(pluginDir: string, entry: string): Promise<void> {
   await access(join(pluginDir, entry), constants.F_OK)
+}
+
+function assertExecutablePluginEntry(entry: string): void {
+  if (!EXECUTABLE_PLUGIN_ENTRY_EXTENSIONS.has(extname(entry).toLowerCase())) {
+    throw new Error(
+      `Imported plugins must expose a JavaScript entry (${[...EXECUTABLE_PLUGIN_ENTRY_EXTENSIONS].join(', ')}): ${entry}`,
+    )
+  }
 }
 
 async function resolvePluginRoot(dir: string): Promise<string> {
@@ -118,7 +135,31 @@ async function copyImportedPlugin(
   }
 }
 
-export function validatePluginManifest(input: unknown, appVersion = '0.1.0'): PluginManifest {
+function normalizeVersionParts(version: string): number[] {
+  return version
+    .split(/[-+.]/)
+    .map((segment) => Number(segment))
+    .filter((segment) => Number.isFinite(segment))
+}
+
+function compareVersions(left: string, right: string): number {
+  const leftParts = normalizeVersionParts(left)
+  const rightParts = normalizeVersionParts(right)
+  const length = Math.max(leftParts.length, rightParts.length)
+
+  for (let index = 0; index < length; index += 1) {
+    const leftValue = leftParts[index] ?? 0
+    const rightValue = rightParts[index] ?? 0
+
+    if (leftValue !== rightValue) {
+      return leftValue - rightValue
+    }
+  }
+
+  return left.localeCompare(right)
+}
+
+export function validatePluginManifest(input: unknown, appVersion = DEFAULT_APP_VERSION): PluginManifest {
   const manifest = ensureObject(input, 'Plugin manifest must be an object.')
   const {
     id,
@@ -212,6 +253,7 @@ export async function importPluginFromDirectory(
   const manifestRaw = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')) as unknown
   const manifest = validatePluginManifest(manifestRaw, options?.appVersion)
   await assertEntryExists(dir, manifest.entry)
+  assertExecutablePluginEntry(manifest.entry)
 
   const normalized = normalizeImportedPlugin(dir, manifest)
   return copyImportedPlugin(normalized, options?.registryDir)
@@ -227,4 +269,86 @@ export async function importPluginFromZip(
 ): Promise<ImportedPlugin> {
   const pluginDir = await extractZipArchive(zipPath, stagingDir)
   return importPluginFromDirectory(pluginDir, options)
+}
+
+async function readImportedPlugin(
+  pluginDir: string,
+  appVersion?: string,
+): Promise<ImportedPlugin | undefined> {
+  try {
+    const manifestRaw = JSON.parse(await readFile(join(pluginDir, 'manifest.json'), 'utf8')) as unknown
+    const manifest = validatePluginManifest(manifestRaw, appVersion)
+    await assertEntryExists(pluginDir, manifest.entry)
+    assertExecutablePluginEntry(manifest.entry)
+    return normalizeImportedPlugin(pluginDir, manifest, pluginDir)
+  } catch {
+    return undefined
+  }
+}
+
+export async function listImportedPluginsFromRegistry(
+  registryDir: string,
+  options?: { appVersion?: string },
+): Promise<ImportedPlugin[]> {
+  try {
+    const pluginEntries = await readdir(registryDir, { withFileTypes: true })
+    const importedPlugins: ImportedPlugin[] = []
+
+    for (const pluginEntry of pluginEntries) {
+      if (!pluginEntry.isDirectory()) {
+        continue
+      }
+
+      const pluginVersionsDir = join(registryDir, pluginEntry.name)
+      const versionEntries = await readdir(pluginVersionsDir, { withFileTypes: true })
+
+      for (const versionEntry of versionEntries) {
+        if (!versionEntry.isDirectory()) {
+          continue
+        }
+
+        const importedPlugin = await readImportedPlugin(
+          join(pluginVersionsDir, versionEntry.name),
+          options?.appVersion,
+        )
+        if (importedPlugin) {
+          importedPlugins.push(importedPlugin)
+        }
+      }
+    }
+
+    return importedPlugins.sort((left, right) => {
+      if (left.manifest.id !== right.manifest.id) {
+        return left.manifest.id.localeCompare(right.manifest.id)
+      }
+
+      return compareVersions(right.manifest.version, left.manifest.version)
+    })
+  } catch {
+    return []
+  }
+}
+
+function isPluginLifecycle(value: unknown): value is PluginLifecycle {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  return 'install' in value && 'verify' in value
+}
+
+export async function loadPluginLifecycle(importedPlugin: ImportedPlugin): Promise<PluginLifecycle> {
+  const entryPath = importedPlugin.storagePath
+    ? join(importedPlugin.storagePath, importedPlugin.manifest.entry)
+    : importedPlugin.entryPath
+  const entryStat = await stat(entryPath)
+  const moduleRef = `${pathToFileURL(entryPath).href}?mtime=${entryStat.mtimeMs}`
+  const loadedModule = (await import(moduleRef)) as { default?: unknown }
+  const pluginLifecycle = loadedModule.default ?? loadedModule
+
+  if (!isPluginLifecycle(pluginLifecycle)) {
+    throw new Error(`Imported plugin ${importedPlugin.manifest.id} does not export a valid lifecycle`)
+  }
+
+  return pluginLifecycle
 }

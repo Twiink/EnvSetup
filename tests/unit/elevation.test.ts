@@ -5,7 +5,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { execFileMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn((_file, _args, _options, callback) => {
+  execFileMock: vi.fn((_file, _args, optionsOrCallback, maybeCallback) => {
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
     callback(null, { stdout: 'ok', stderr: '' })
   }),
 }))
@@ -27,7 +29,9 @@ import {
 describe('elevation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    execFileMock.mockImplementation((_file, _args, _options, callback) => {
+    execFileMock.mockImplementation((_file, _args, optionsOrCallback, maybeCallback) => {
+      const callback =
+        typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
       callback(null, { stdout: 'ok', stderr: '' })
     })
   })
@@ -41,39 +45,42 @@ describe('elevation', () => {
   it('uses osascript for elevated darwin commands', async () => {
     await executePlatformCommand('rm -rf /tmp/tool', 'darwin', { elevated: true })
 
-    expect(execFileMock).toHaveBeenCalledWith(
-      'osascript',
-      [expect.any(String), expect.stringContaining('with administrator privileges')],
-      expect.any(Object),
-      expect.any(Function),
-    )
+    const [file, args, maybeOptions, maybeCallback] = execFileMock.mock.calls[0]
+    expect(file).toBe('osascript')
+    expect(args).toEqual([
+      expect.any(String),
+      expect.stringContaining('with administrator privileges'),
+    ])
+    expect(typeof (maybeCallback ?? maybeOptions)).toBe('function')
   })
 
   it('retries with elevation after permission errors', async () => {
     execFileMock
-      .mockImplementationOnce((_file, _args, _options, callback) => {
+      .mockImplementationOnce((_file, _args, optionsOrCallback, maybeCallback) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
         callback(new Error('Permission denied'))
       })
-      .mockImplementationOnce((_file, _args, _options, callback) => {
+      .mockImplementationOnce((_file, _args, optionsOrCallback, maybeCallback) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
         callback(null, { stdout: 'ok', stderr: '' })
       })
 
     const result = await executePlatformCommandWithElevationFallback('rm -rf /tmp/tool', 'darwin')
 
-    expect(execFileMock).toHaveBeenNthCalledWith(
-      1,
-      'sh',
-      ['-c', 'rm -rf /tmp/tool'],
-      expect.any(Object),
-      expect.any(Function),
-    )
-    expect(execFileMock).toHaveBeenNthCalledWith(
-      2,
-      'osascript',
-      [expect.any(String), expect.stringContaining('with administrator privileges')],
-      expect.any(Object),
-      expect.any(Function),
-    )
+    const firstCall = execFileMock.mock.calls[0]
+    expect(firstCall[0]).toBe('sh')
+    expect(firstCall[1]).toEqual(['-c', 'rm -rf /tmp/tool'])
+    expect(typeof firstCall[firstCall.length - 1]).toBe('function')
+
+    const secondCall = execFileMock.mock.calls[1]
+    expect(secondCall[0]).toBe('osascript')
+    expect(secondCall[1]).toEqual([
+      expect.any(String),
+      expect.stringContaining('with administrator privileges'),
+    ])
+    expect(typeof secondCall[secondCall.length - 1]).toBe('function')
     expect(result.elevated).toBe(true)
   })
 

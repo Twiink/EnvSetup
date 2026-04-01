@@ -2,12 +2,10 @@
  * 实现 Node.js 在各平台上的安装、清理与回滚策略。
  */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-
 import { prepareExtractedArchive } from '../core/archiveCache'
 import { buildNodeEnvChanges, resolveNodeInstallPaths } from '../core/platform'
 import { downloadArtifacts, validateOfficialDownloads } from '../core/download'
+import { execFileAsync } from '../core/exec'
 import type {
   AppLocale,
   DownloadArtifact,
@@ -19,8 +17,6 @@ import type {
   TaskProgressEvent,
 } from '../core/contracts'
 import { DEFAULT_LOCALE } from '../../shared/locale'
-
-const execFileAsync = promisify(execFile)
 
 const NODEJS_DIST_BASE_URL = 'https://nodejs.org/dist'
 const NVM_ARCHIVE_BASE_URL = 'https://github.com/nvm-sh/nvm/archive/refs/tags'
@@ -531,6 +527,7 @@ async function runCommands(
   commands: string[],
   platform: NodePluginParams['platform'],
   onProgress?: (event: TaskProgressEvent) => void,
+  signal?: AbortSignal,
   pluginId = 'node-env',
 ): Promise<string[]> {
   const output: string[] = []
@@ -554,8 +551,8 @@ async function runCommands(
               'Bypass',
               '-Command',
               command,
-            ])
-          : await execFileAsync('sh', ['-c', command])
+            ], { signal })
+          : await execFileAsync('sh', ['-c', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
       onProgress?.({
@@ -653,7 +650,7 @@ const nodeEnvPlugin = {
 
       commands = buildInstallCommands(params, resolvedDownloads, preparedSources)
       const commandStartedAt = Date.now()
-      const cmdOutput = await runCommands(commands, params.platform, input.onProgress)
+      const cmdOutput = await runCommands(commands, params.platform, input.onProgress, input.signal)
       logs.push(...cmdOutput)
       appendPhaseLog(logs, 'install_commands', commandStartedAt, `commands=${commands.length}`)
     }
@@ -718,6 +715,7 @@ const nodeEnvPlugin = {
       buildVerifyCommands(params),
       params.platform,
       input.onProgress,
+      input.signal,
     )
 
     return {

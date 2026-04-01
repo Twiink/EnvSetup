@@ -24,10 +24,10 @@ describe('resolveDryRun', () => {
     expect(resolveDryRun(false)).toBe(true)
   })
 
-  it('defaults to dry-run in packaged mode (isPackaged=true)', () => {
+  it('defaults to real-run in packaged mode (isPackaged=true)', () => {
     delete process.env.ENVSETUP_REAL_RUN
 
-    expect(resolveDryRun(true)).toBe(true)
+    expect(resolveDryRun(true)).toBe(false)
   })
 
   it('forces real-run when ENVSETUP_REAL_RUN=1 regardless of packaging', () => {
@@ -44,10 +44,10 @@ describe('resolveDryRun', () => {
     expect(resolveDryRun(true)).toBe(true)
   })
 
-  it('ignores unsupported override values and falls back to dry-run', () => {
+  it('ignores unsupported override values and falls back to mode defaults', () => {
     process.env.ENVSETUP_REAL_RUN = 'unexpected'
 
     expect(resolveDryRun(false)).toBe(true)
-    expect(resolveDryRun(true)).toBe(true)
+    expect(resolveDryRun(true)).toBe(false)
   })
 })

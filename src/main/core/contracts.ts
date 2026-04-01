@@ -147,6 +147,10 @@ export type ImportedPlugin = {
   storagePath?: string
 }
 
+export type ImportedPluginRegistration = ImportedPlugin & {
+  templateId: string
+}
+
 export type PrecheckInput = {
   platformSupported: boolean
   archSupported: boolean
@@ -293,6 +297,7 @@ export type TaskProgressEvent = {
   commandTotal?: number
   output?: string
   timestamp: string
+  taskSnapshot?: InstallTask
 }
 
 export type PluginExecutionInput = {
@@ -300,7 +305,12 @@ export type PluginExecutionInput = {
   dryRun?: boolean
   locale?: AppLocale
   onProgress?: (event: TaskProgressEvent) => void
-  [key: string]: Primitive | undefined | ((event: TaskProgressEvent) => void)
+  signal?: AbortSignal
+  [key: string]:
+    | Primitive
+    | undefined
+    | AbortSignal
+    | ((event: TaskProgressEvent) => void)
 }
 
 export type NodePluginParams = PluginExecutionInput & {
@@ -610,7 +620,8 @@ export type EnvSetupApi = {
   cleanupEnvironment: (detection: DetectedEnvironment) => Promise<CleanupEnvironmentResult>
   cleanupEnvironments: (detections: DetectedEnvironment[]) => Promise<CleanupTransactionResult>
   pickDirectory: (defaultPath?: string) => Promise<string | undefined>
-  importPluginFromPath: (pluginPath: string) => Promise<ImportedPlugin>
+  pickPluginImportPath: () => Promise<string | undefined>
+  importPluginFromPath: (pluginPath: string) => Promise<ImportedPluginRegistration>
   previewEnvChanges: (changes: EnvChange[]) => Promise<EnvChangesPreview>
   applyEnvChanges: (payload: { changes: EnvChange[] }) => Promise<ApplyEnvChangesResult>
   // 快照管理

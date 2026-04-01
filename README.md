@@ -184,7 +184,7 @@ fixtures/
 
 1. 在 `src/main/plugins/` 实现真实插件逻辑。
 2. 在 `fixtures/plugins/<plugin-id>/manifest.json` 定义插件参数和权限。
-3. 在 `fixtures/plugins/<plugin-id>/index.ts` 暴露插件入口。
+3. 为“可导入插件包”提供可执行的 JavaScript 入口（例如 `index.mjs`）；内置示例仍可在 `fixtures/plugins/<plugin-id>/index.ts` 代理到 `src/main/plugins/*.ts`。
 4. 在 `fixtures/templates/<template-id>.json` 把模板字段和插件绑定起来。
 
 下面是一个最小示例，演示如何新增一个 `acme-env` 模板插件。
@@ -201,7 +201,7 @@ fixtures/
     "en": "Acme Environment"
   },
   "version": "0.1.0",
-  "mainAppVersion": "^0.1.0",
+  "mainAppVersion": "^0.2.4",
   "platforms": ["darwin", "win32"],
   "permissions": ["download", "write_path", "modify_env"],
   "parameters": {
@@ -215,16 +215,16 @@ fixtures/
     }
   },
   "dependencies": [],
-  "entry": "index.ts"
+  "entry": "index.mjs"
 }
 ```
 
 ### 2. 插件入口
 
-`fixtures/plugins/acme-env/index.ts`
+`fixtures/plugins/acme-env/index.mjs`
 
-```ts
-export { default } from '../../../src/main/plugins/acmeEnvPlugin'
+```js
+export { default } from '../../../out/main/plugins/acmeEnvPlugin.js'
 ```
 
 ### 3. 模板定义

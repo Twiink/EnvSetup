@@ -15,12 +15,25 @@ export type AppPaths = {
   extractedCacheDir: string
 }
 
+let configuredDefaultAppDataDir: string | undefined
+
+export function setDefaultAppDataDir(baseDir?: string): void {
+  const normalized = baseDir?.trim()
+  configuredDefaultAppDataDir = normalized && normalized.length > 0 ? normalized : undefined
+}
+
 function resolveDefaultAppDataDir(): string {
   const overriddenBaseDir = process.env.ENVSETUP_DATA_DIR
 
-  return overriddenBaseDir && overriddenBaseDir.trim().length > 0
-    ? overriddenBaseDir
-    : join(process.cwd(), '.envsetup-data')
+  if (overriddenBaseDir && overriddenBaseDir.trim().length > 0) {
+    return overriddenBaseDir
+  }
+
+  if (configuredDefaultAppDataDir) {
+    return configuredDefaultAppDataDir
+  }
+
+  return join(process.cwd(), '.envsetup-data')
 }
 
 function resolveOptionalDirOverride(envKey: string): string | undefined {

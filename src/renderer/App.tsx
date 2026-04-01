@@ -2,14 +2,18 @@
  * 协调模板选择、本地化、预检与任务状态的主界面组件。
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 
 import type {
+  BootstrapData,
   DetectedEnvironment,
   InstallTask,
   Primitive,
   PrecheckResult,
   ResolvedTemplate,
+  RollbackResult,
+  RollbackSuggestion,
+  SnapshotMeta,
   TaskProgressEvent,
 } from '../main/core/contracts'
 import { DEFAULT_LOCALE, normalizeLocale, type AppLocale } from '../shared/locale'
@@ -18,6 +22,8 @@ import { getLocaleButtonLabel, getUiText } from './copy'
 import { BeginnerGuidePanel } from './components/BeginnerGuidePanel'
 import { OverrideForm } from './components/OverrideForm'
 import { PrecheckPanel } from './components/PrecheckPanel'
+import { RollbackDialog } from './components/RollbackDialog'
+import { SnapshotPanel } from './components/SnapshotPanel'
 import { TaskPanel } from './components/TaskPanel'
 import { TemplatePanel } from './components/TemplatePanel'
 
@@ -175,7 +181,24 @@ function registerTaskProgressListener(callback: (event: TaskProgressEvent) => vo
   window.envSetup.onTaskProgress?.(callback)
 }
 
+function collectInstallPathsFromTask(task?: InstallTask): string[] {
+  if (!task) {
+    return []
+  }
+
+  return [
+    ...new Set(
+      task.plugins.flatMap((plugin) => {
+        const installRootDir = plugin.lastResult?.paths.installRootDir ?? plugin.params.installRootDir
+        return typeof installRootDir === 'string' && installRootDir.length > 0 ? [installRootDir] : []
+      }),
+    ),
+  ]
+}
+
 export default function App() {
+  const selectedTemplateIdRef = useRef('')
+  const activeTaskIdRef = useRef<string>()
   const [locale, setLocale] = useState<AppLocale>(() => {
     // 语言偏好持久化在 localStorage，刷新后直接恢复。
     if (typeof window === 'undefined') {
@@ -203,6 +226,102 @@ export default function App() {
   const [taskProgressEvents, setTaskProgressEvents] = useState<TaskProgressEvent[]>([])
   const [taskMessage, setTaskMessage] = useState<string>()
   const [cleanupBackup, setCleanupBackup] = useState<{ snapshotId: string; message: string }>()
+  const [snapshots, setSnapshots] = useState<SnapshotMeta>()
+  const [rollbackResult, setRollbackResult] = useState<RollbackResult>()
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false)
+  const [rollbackSuggestions, setRollbackSuggestions] = useState<RollbackSuggestion[]>([])
+
+  const syncBootstrapData = useCallback((
+    bootstrap: BootstrapData,
+    preferredTemplateId?: string,
+    options: { resetWorkspaceState?: boolean } = {},
+  ) => {
+    const {
+      templates: nextTemplates,
+      nodeLtsVersions: nextNodeLtsVersions,
+      javaLtsVersions: nextJavaLtsVersions,
+      pythonVersions: nextPythonVersions,
+      gitVersions: nextGitVersions,
+      mysqlVersions: nextMysqlVersions,
+      redisVersions: nextRedisVersions,
+      mavenVersions: nextMavenVersions,
+    } = bootstrap
+
+    if (nextTemplates.length === 0) {
+      setError('No templates found — fixtures/templates may be missing or empty')
+      return
+    }
+
+    const nextSelectedTemplate =
+      getTemplateById(nextTemplates, preferredTemplateId ?? selectedTemplateIdRef.current) ??
+      nextTemplates[0]
+
+    setTemplates(nextTemplates)
+    setNodeLtsVersions(nextNodeLtsVersions)
+    setJavaLtsVersions(nextJavaLtsVersions)
+    setPythonVersions(nextPythonVersions)
+    setGitVersions(nextGitVersions)
+    setMysqlVersions(nextMysqlVersions)
+    setRedisVersions(nextRedisVersions)
+    setMavenVersions(nextMavenVersions)
+    setSelectedTemplateId(nextSelectedTemplate.id)
+    selectedTemplateIdRef.current = nextSelectedTemplate.id
+    setValues(
+      buildInitialValues(
+        nextSelectedTemplate,
+        nextNodeLtsVersions,
+        nextJavaLtsVersions,
+        nextPythonVersions,
+        nextGitVersions,
+        nextMysqlVersions,
+        nextRedisVersions,
+        nextMavenVersions,
+      ),
+    )
+
+    if (options.resetWorkspaceState) {
+      setPrecheck(undefined)
+      setTask(undefined)
+      setTaskProgressEvents([])
+      setTaskMessage(undefined)
+      setCleanupBackup(undefined)
+      setRollbackResult(undefined)
+      setRollbackSuggestions([])
+      setRollbackDialogOpen(false)
+      activeTaskIdRef.current = undefined
+    }
+  }, [])
+
+  const refreshSnapshots = useCallback(async () => {
+    const nextSnapshots = await window.envSetup.listSnapshots()
+    setSnapshots(nextSnapshots)
+  }, [])
+
+  const handleTaskProgressEvent = useEffectEvent((event: TaskProgressEvent) => {
+    if (!activeTaskIdRef.current || event.taskId !== activeTaskIdRef.current) {
+      return
+    }
+
+    setTaskProgressEvents((currentEvents) => [...currentEvents, event])
+
+    if (event.taskSnapshot) {
+      activeTaskIdRef.current = event.taskSnapshot.id
+      setTask(event.taskSnapshot)
+
+      if (
+        event.taskSnapshot.rollbackSuggestions &&
+        event.taskSnapshot.rollbackSuggestions.length > 0
+      ) {
+        setRollbackSuggestions(event.taskSnapshot.rollbackSuggestions)
+        setRollbackDialogOpen(true)
+      }
+    }
+
+    if (event.type === 'task_done') {
+      void refreshSnapshots()
+    }
+  })
+
   useEffect(() => {
     document.documentElement.lang = locale
     document.title = getUiText(locale, 'documentTitle')
@@ -210,51 +329,29 @@ export default function App() {
   }, [locale])
 
   useEffect(() => {
+    selectedTemplateIdRef.current = selectedTemplateId
+  }, [selectedTemplateId])
+
+  useEffect(() => {
+    activeTaskIdRef.current = task?.id
+  }, [task?.id])
+
+  useEffect(() => {
     let active = true
 
     async function loadTemplates() {
       try {
         // 启动时一次性加载模板和版本清单，避免页面初始化阶段多次请求主进程。
-        const {
-          templates: nextTemplates,
-          nodeLtsVersions: nextNodeLtsVersions,
-          javaLtsVersions: nextJavaLtsVersions,
-          pythonVersions: nextPythonVersions,
-          gitVersions: nextGitVersions,
-          mysqlVersions: nextMysqlVersions,
-          redisVersions: nextRedisVersions,
-          mavenVersions: nextMavenVersions,
-        } = await window.envSetup.loadBootstrap()
+        const bootstrap = await window.envSetup.loadBootstrap()
         if (!active) {
           return
         }
-        if (nextTemplates.length === 0) {
+        if (bootstrap.templates.length === 0) {
           setError('No templates found — fixtures/templates may be missing or empty')
           return
         }
 
-        const firstTemplate = nextTemplates[0]
-        setTemplates(nextTemplates)
-        setNodeLtsVersions(nextNodeLtsVersions)
-        setJavaLtsVersions(nextJavaLtsVersions)
-        setPythonVersions(nextPythonVersions)
-        setGitVersions(nextGitVersions)
-        setMysqlVersions(nextMysqlVersions)
-        setRedisVersions(nextRedisVersions)
-        setMavenVersions(nextMavenVersions)
-        setSelectedTemplateId(firstTemplate.id)
-        setValues(
-          buildInitialValues(
-            firstTemplate,
-            nextNodeLtsVersions,
-            nextJavaLtsVersions,
-            nextPythonVersions,
-            nextGitVersions,
-            nextMysqlVersions,
-            nextRedisVersions,
-            nextMavenVersions,
-          ),
-        )
+        syncBootstrapData(bootstrap)
       } catch (loadError) {
         if (!active) {
           return
@@ -268,14 +365,20 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [])
+  }, [syncBootstrapData])
 
   useEffect(() => {
+    registerTaskProgressListener((event) => {
+      handleTaskProgressEvent(event)
+    })
+
+    void refreshSnapshots()
+
     return () => {
       // 组件卸载时清理 IPC 监听器，防止重复挂载后收到旧任务事件。
       removeTaskProgressListenerSafely()
     }
-  }, [])
+  }, [refreshSnapshots])
 
   const selectedTemplate = getTemplateById(templates, selectedTemplateId)
   const validationErrors = selectedTemplate
@@ -311,8 +414,13 @@ export default function App() {
     setPrecheck(undefined)
     setTask(undefined)
     setTaskProgressEvents([])
+    setTaskMessage(undefined)
     setError(undefined)
     setCleanupBackup(undefined)
+    setRollbackResult(undefined)
+    setRollbackSuggestions([])
+    setRollbackDialogOpen(false)
+    activeTaskIdRef.current = undefined
   }
 
   function handleChange(key: string, value: Primitive) {
@@ -323,7 +431,11 @@ export default function App() {
     setPrecheck(undefined)
     setTask(undefined)
     setTaskProgressEvents([])
+    setTaskMessage(undefined)
     setError(undefined)
+    setRollbackResult(undefined)
+    setRollbackSuggestions([])
+    setRollbackDialogOpen(false)
   }
 
   async function handleRunPrecheck() {
@@ -366,6 +478,7 @@ export default function App() {
       })
       setTask(nextTask)
       setTaskProgressEvents([])
+      activeTaskIdRef.current = nextTask.id
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : String(createError))
     } finally {
@@ -381,22 +494,18 @@ export default function App() {
     setBusy(true)
     setError(undefined)
     setTaskProgressEvents([])
-    removeTaskProgressListenerSafely()
-    // 任务启动前重新注册监听器，只收集当前任务的实时进度事件。
-    registerTaskProgressListener((event) => {
-      if (event.taskId !== task.id) {
-        return
-      }
-      setTaskProgressEvents((currentEvents) => [...currentEvents, event])
-    })
+    setRollbackResult(undefined)
+    setRollbackSuggestions([])
+    setRollbackDialogOpen(false)
 
     try {
+      activeTaskIdRef.current = task.id
       const nextTask = await window.envSetup.startTask(task.id)
       setTask(nextTask)
+      await refreshSnapshots()
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : String(startError))
     } finally {
-      removeTaskProgressListenerSafely()
       setBusy(false)
     }
   }
@@ -425,11 +534,14 @@ export default function App() {
     setImportMessage(undefined)
 
     try {
-      const pluginPath = await window.envSetup.pickDirectory()
+      const pluginPath = await window.envSetup.pickPluginImportPath()
       if (!pluginPath) {
         return
       }
-      await window.envSetup.importPluginFromPath(pluginPath)
+      const importedPlugin = await window.envSetup.importPluginFromPath(pluginPath)
+      syncBootstrapData(await window.envSetup.loadBootstrap(), importedPlugin.templateId, {
+        resetWorkspaceState: true,
+      })
       setImportMessage(getUiText(locale, 'importPluginSuccess'))
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : String(importError))
@@ -446,22 +558,18 @@ export default function App() {
     setBusy(true)
     setError(undefined)
     setTaskProgressEvents([])
-    removeTaskProgressListenerSafely()
-    // 插件重试时只保留当前插件的事件，避免把旧日志重新混进列表。
-    registerTaskProgressListener((event) => {
-      if (event.taskId !== task.id || event.pluginId !== pluginId) {
-        return
-      }
-      setTaskProgressEvents((currentEvents) => [...currentEvents, event])
-    })
+    setRollbackResult(undefined)
+    setRollbackSuggestions([])
+    setRollbackDialogOpen(false)
 
     try {
+      activeTaskIdRef.current = task.id
       const nextTask = await window.envSetup.retryPlugin(task.id, pluginId)
       setTask(nextTask)
+      await refreshSnapshots()
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : String(retryError))
     } finally {
-      removeTaskProgressListenerSafely()
       setBusy(false)
     }
   }
@@ -553,6 +661,7 @@ export default function App() {
 
       if (rollbackResult.success) {
         setCleanupBackup(undefined)
+        await refreshSnapshots()
       } else {
         setError(
           rollbackResult.errors.map((entry) => entry.error).join(' | ') || rollbackResult.message,
@@ -575,6 +684,102 @@ export default function App() {
     }
 
     handleChange(key, selectedPath)
+  }
+
+  async function handleCreateSnapshot() {
+    if (!task) {
+      setError(locale === 'zh-CN' ? '请先创建任务，再创建快照。' : 'Create a task before creating a snapshot.')
+      return
+    }
+
+    setBusy(true)
+    setError(undefined)
+
+    try {
+      await window.envSetup.createSnapshot({
+        taskId: task.id,
+        label: `${task.templateId}-manual`,
+      })
+      await refreshSnapshots()
+      setTaskMessage(locale === 'zh-CN' ? '快照已创建。' : 'Snapshot created.')
+    } catch (snapshotError) {
+      setError(snapshotError instanceof Error ? snapshotError.message : String(snapshotError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteSnapshot(snapshotId: string) {
+    setBusy(true)
+    setError(undefined)
+
+    try {
+      await window.envSetup.deleteSnapshot(snapshotId)
+      await refreshSnapshots()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : String(deleteError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleOpenSnapshotRollback(snapshotId: string) {
+    const snapshot = snapshots?.snapshots.find((entry) => entry.id === snapshotId)
+    if (!snapshot) {
+      return
+    }
+
+    setRollbackResult(undefined)
+    setRollbackSuggestions([
+      {
+        snapshotId,
+        snapshotLabel: snapshot.label,
+        createdAt: snapshot.createdAt,
+        reason:
+          locale === 'zh-CN'
+            ? '由快照列表手动选择，立即恢复到该状态。'
+            : 'Manually selected from the snapshot list for immediate restore.',
+        confidence: 'high',
+      },
+    ])
+    setRollbackDialogOpen(true)
+  }
+
+  async function handleExecuteRollback(snapshotId: string) {
+    setBusy(true)
+    setError(undefined)
+    setRollbackResult(undefined)
+
+    try {
+      const result = await window.envSetup.executeRollback({
+        snapshotId,
+        installPaths: collectInstallPathsFromTask(task),
+      })
+      setRollbackResult(result)
+      setTaskMessage(result.message)
+      await refreshSnapshots()
+
+      if (selectedTemplate) {
+        const nextPrecheck = await window.envSetup.runPrecheck({
+          templateId: selectedTemplate.id,
+          values,
+          locale,
+        })
+        setPrecheck(nextPrecheck)
+      }
+
+      if (result.success) {
+        setRollbackDialogOpen(false)
+        setRollbackSuggestions([])
+        setTask((currentTask) =>
+          currentTask ? { ...currentTask, rollbackSuggestions: undefined } : currentTask,
+        )
+      }
+    } catch (rollbackError) {
+      setError(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -860,12 +1065,35 @@ export default function App() {
                 onRetryPlugin={handleRetryPlugin}
                 onApplyEnvChanges={handleApplyEnvChanges}
               />
+
+              <SnapshotPanel
+                locale={locale}
+                snapshots={snapshots}
+                busy={busy}
+                onCreateSnapshot={handleCreateSnapshot}
+                onDeleteSnapshot={handleDeleteSnapshot}
+                onRollbackSnapshot={handleOpenSnapshotRollback}
+              />
             </div>
           </>
         ) : (
           <BeginnerGuidePanel locale={locale} />
         )}
       </div>
+      {currentView === 'workspace' && rollbackDialogOpen ? (
+        <RollbackDialog
+          locale={locale}
+          suggestions={rollbackSuggestions}
+          busy={busy}
+          result={rollbackResult}
+          onExecute={handleExecuteRollback}
+          onClose={() => {
+            setRollbackDialogOpen(false)
+            setRollbackResult(undefined)
+            setRollbackSuggestions([])
+          }}
+        />
+      ) : null}
     </main>
   )
 }

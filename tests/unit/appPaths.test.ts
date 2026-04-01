@@ -7,9 +7,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stat } from 'node:fs/promises'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { ensureAppPaths, getAppPaths } from '../../src/main/core/appPaths'
+import { ensureAppPaths, getAppPaths, setDefaultAppDataDir } from '../../src/main/core/appPaths'
+
+afterEach(() => {
+  setDefaultAppDataDir(undefined)
+})
 
 describe('getAppPaths', () => {
   it('returns correct sub-paths under baseDir', () => {
@@ -32,6 +36,24 @@ describe('getAppPaths', () => {
       const paths = getAppPaths()
       expect(paths.rootDir).toBe('/tmp/envsetup-custom-data')
       expect(paths.tasksDir).toBe(join('/tmp/envsetup-custom-data', 'tasks'))
+    } finally {
+      if (originalOverride === undefined) {
+        delete process.env.ENVSETUP_DATA_DIR
+      } else {
+        process.env.ENVSETUP_DATA_DIR = originalOverride
+      }
+    }
+  })
+
+  it('uses configured default app data directory when ENVSETUP_DATA_DIR is absent', () => {
+    const originalOverride = process.env.ENVSETUP_DATA_DIR
+    delete process.env.ENVSETUP_DATA_DIR
+    setDefaultAppDataDir('/tmp/envsetup-user-data')
+
+    try {
+      const paths = getAppPaths()
+      expect(paths.rootDir).toBe('/tmp/envsetup-user-data')
+      expect(paths.tasksDir).toBe(join('/tmp/envsetup-user-data', 'tasks'))
     } finally {
       if (originalOverride === undefined) {
         delete process.env.ENVSETUP_DATA_DIR

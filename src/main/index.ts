@@ -6,6 +6,7 @@ import { app, BrowserWindow, nativeImage } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { setDefaultAppDataDir } from './core/appPaths'
 import { registerIpcHandlers } from './ipc/index'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -56,6 +57,7 @@ app.whenReady().then(() => {
     app.dock.setIcon(nativeImage.createFromPath(join(ICON_DIR, 'icon.png')))
   }
 
+  setDefaultAppDataDir(app.getPath('userData'))
   registerIpcHandlers()
   createWindow()
 

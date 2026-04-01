@@ -13,6 +13,29 @@ import {
   type Page,
 } from '@playwright/test'
 
+test.describe.configure({ timeout: 120_000 })
+
+function resolveDevElectronExecutable(): string {
+  if (process.platform === 'darwin') {
+    return path.join(
+      process.cwd(),
+      'node_modules',
+      'electron',
+      'dist',
+      'Electron.app',
+      'Contents',
+      'MacOS',
+      'Electron',
+    )
+  }
+
+  if (process.platform === 'win32') {
+    return path.join(process.cwd(), 'node_modules', 'electron', 'dist', 'electron.exe')
+  }
+
+  return path.join(process.cwd(), 'node_modules', 'electron', 'dist', 'electron')
+}
+
 async function launchZhApp(
   env?: NodeJS.ProcessEnv,
 ): Promise<{ app: ElectronApplication; page: Page }> {
@@ -21,9 +44,12 @@ async function launchZhApp(
     `envsetup-dev-data-${Date.now()}-${Math.random().toString(16).slice(2)}`,
   )
   const app = await electron.launch({
+    executablePath: resolveDevElectronExecutable(),
     args: ['.'],
     env: {
       ...process.env,
+      ELECTRON_RUN_AS_NODE: '',
+      ENVSETUP_SKIP_NETWORK_CHECKS: '1',
       ENVSETUP_DATA_DIR: dataDir,
       ...env,
     },
@@ -98,14 +124,59 @@ async function createAndStartTask(
         values,
         locale: 'zh-CN',
       })
-      const started = await window.envSetup.startTask(task.id)
+      const completed = await new Promise<Awaited<ReturnType<typeof window.envSetup.startTask>>>(
+        (resolve, reject) => {
+          let settled = false
+          const timeoutId = window.setTimeout(() => {
+            if (settled) {
+              return
+            }
+            settled = true
+            window.envSetup.removeTaskProgressListener()
+            reject(new Error(`Timed out waiting for task_done: ${task.id}`))
+          }, 180_000)
+
+          const settle = (nextTask: Awaited<ReturnType<typeof window.envSetup.startTask>>) => {
+            if (settled) {
+              return
+            }
+            settled = true
+            window.clearTimeout(timeoutId)
+            window.envSetup.removeTaskProgressListener()
+            resolve(nextTask)
+          }
+
+          window.envSetup.onTaskProgress((event) => {
+            if (event.taskId === task.id && event.type === 'task_done' && event.taskSnapshot) {
+              settle(event.taskSnapshot)
+            }
+          })
+
+          void (async () => {
+            try {
+              const started = await window.envSetup.startTask(task.id)
+              if (started.status !== 'running') {
+                settle(started)
+              }
+            } catch (error) {
+              if (settled) {
+                return
+              }
+              settled = true
+              window.clearTimeout(timeoutId)
+              window.envSetup.removeTaskProgressListener()
+              reject(error)
+            }
+          })()
+        },
+      )
 
       return {
-        id: started.id,
-        status: started.status,
-        snapshotId: (started as typeof started & { snapshotId?: string }).snapshotId,
-        pluginStatuses: started.plugins.map((plugin) => plugin.status),
-        pluginExecutionModes: started.plugins.map(
+        id: completed.id,
+        status: completed.status,
+        snapshotId: (completed as typeof completed & { snapshotId?: string }).snapshotId,
+        pluginStatuses: completed.plugins.map((plugin) => plugin.status),
+        pluginExecutionModes: completed.plugins.map(
           (plugin) => plugin.lastResult?.executionMode ?? null,
         ),
       }
@@ -150,6 +221,9 @@ async function selectPythonTemplate(page: Page) {
 async function selectGitTemplate(page: Page) {
   await expect(page.getByRole('button', { name: 'Git 版本控制' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Git 版本控制' }).click()
+  await page
+    .locator('select[id="git.gitManager"]')
+    .selectOption(process.platform === 'win32' ? 'scoop' : 'homebrew')
   await page.locator('select[id="git.gitVersion"]').selectOption({ index: 0 })
 }
 
@@ -175,22 +249,29 @@ async function selectMavenTemplate(page: Page) {
   await page.locator('select[id="maven.mavenVersion"]').selectOption({ index: 0 })
 }
 
+async function waitForCreateTaskEnabled(page: Page) {
+  await page.waitForFunction(() => {
+    const button = document.querySelector('[data-testid="create-task-button"]')
+    return button instanceof HTMLButtonElement && !button.disabled
+  }, { timeout: 30_000 })
+}
+
 async function runDryRunFlow(page: Page) {
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
-
-  const cleanupButton = page.getByRole('button', { name: '一键清理' }).first()
-  if (await cleanupButton.isVisible().catch(() => false)) {
-    await cleanupButton.click()
-    await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible({ timeout: 30_000 })
-  }
-
+  await expect(page.getByTestId('precheck-level-badge')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('precheck-level-badge')).toContainText(/通过|警告|阻塞/, {
+    timeout: 30_000,
+  })
+  await waitForCreateTaskEnabled(page)
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|就绪|执行中/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('task-status-badge')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('task-status-badge')).toContainText(/草稿|就绪|执行中/, {
+    timeout: 30_000,
+  })
   await page.getByRole('button', { name: '开始执行' }).click()
 
-  await expect(page.getByText(/已生成|校验成功|成功|失败|部分成功/).first()).toBeVisible({
-    timeout: 60_000,
+  await expect(page.getByTestId('task-status-badge')).toContainText(/成功|失败|部分成功|已取消/, {
+    timeout: 90_000,
   })
 }
 
@@ -274,10 +355,17 @@ test('user can select template and create task', async () => {
 
   await selectNodeTemplate(page)
   await page.getByRole('button', { name: '运行预检' }).click()
-  await expect(page.getByText(/通过|警告|阻塞/)).toBeVisible()
-  await expect(page.getByRole('button', { name: '创建任务' })).toBeEnabled()
+  await expect(page.getByTestId('precheck-level-badge')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('precheck-level-badge')).toContainText(/通过|警告|阻塞/, {
+    timeout: 30_000,
+  })
+
+  await waitForCreateTaskEnabled(page)
   await page.getByRole('button', { name: '创建任务' }).click()
-  await expect(page.getByText(/草稿|执行中|就绪/)).toBeVisible()
+  await expect(page.getByTestId('task-status-badge')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('task-status-badge')).toContainText(/草稿|执行中|就绪/, {
+    timeout: 30_000,
+  })
 
   await app.close()
 })

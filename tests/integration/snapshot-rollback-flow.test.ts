@@ -13,19 +13,16 @@ import {
   createSnapshot,
   loadSnapshotMeta,
   markSnapshotDeletable,
-  deleteSnapshot,
   updateSnapshotMeta,
 } from '../../src/main/core/snapshot'
 import { suggestRollbackSnapshots } from '../../src/main/core/rollback'
 
 let tmpDir: string
 let snapshotsDir: string
-let tasksDir: string
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'envsetup-integration-'))
   snapshotsDir = join(tmpDir, 'snapshots')
-  tasksDir = join(tmpDir, 'tasks')
 })
 
 afterEach(async () => {
