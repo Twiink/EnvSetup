@@ -1113,8 +1113,9 @@ describe('App', () => {
 
     await runPassingPrecheck()
     await clickEnabledButton('创建任务')
+    await screen.findByText('草稿')
 
-    fireEvent.click(await screen.findByRole('button', { name: '创建快照' }))
+    await clickEnabledButton('创建快照')
     await waitFor(() => {
       expect(createSnapshot).toHaveBeenCalledWith({
         taskId: 'task-1',
