@@ -507,6 +507,29 @@ function buildInstallCommands(
   })
 }
 
+function resolveExecutionDownloads(
+  params: GitPluginParams,
+  resolvedDownloads: DownloadResolvedArtifact[],
+  logs: string[],
+): DownloadResolvedArtifact[] {
+  if (params.gitManager !== 'scoop' || params.platform !== 'win32') {
+    return resolvedDownloads
+  }
+
+  const scoopBootstrap = resolvedDownloads.find((item) => item.artifact.tool === 'scoop')
+  if (!scoopBootstrap) {
+    return resolvedDownloads
+  }
+
+  if (!scoopBootstrap.cacheHit) {
+    logs.push(`scoop_bootstrap_cache_bypassed=false localPath=${scoopBootstrap.localPath}`)
+    return resolvedDownloads
+  }
+
+  logs.push(`scoop_bootstrap_cache_bypassed=true localPath=${scoopBootstrap.localPath}`)
+  return resolvedDownloads.filter((item) => item !== scoopBootstrap)
+}
+
 function buildRollbackCommands(input: GitPluginParams): string[] {
   if (input.gitManager === 'homebrew') {
     const formula = resolveGitHomebrewFormula(input)
@@ -584,13 +607,11 @@ async function runCommands(
     try {
       const result =
         platform === 'win32'
-          ? await execFileAsync('powershell', [
-              '-NoProfile',
-              '-ExecutionPolicy',
-              'Bypass',
-              '-Command',
-              command,
-            ], { signal })
+          ? await execFileAsync(
+              'powershell',
+              ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+              { signal },
+            )
           : await execFileAsync('/bin/sh', ['-c', command], { signal })
       if (result.stdout.trim()) output.push(result.stdout.trim())
       if (result.stderr.trim()) output.push(`stderr: ${result.stderr.trim()}`)
@@ -672,7 +693,9 @@ const gitEnvPlugin = {
       )
       appendPhaseLog(logs, 'download', downloadStartedAt, `artifacts=${resolvedDownloads.length}`)
 
-      commands = buildInstallCommands(params, resolvedDownloads, {
+      const executionDownloads = resolveExecutionDownloads(params, resolvedDownloads, logs)
+
+      commands = buildInstallCommands(params, executionDownloads, {
         allowScoopBootstrapReset: allowFreshScoopBootstrapReset,
       })
       const commandStartedAt = Date.now()

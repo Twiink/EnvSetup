@@ -22,6 +22,7 @@ vi.mock('../../src/main/core/download', () => ({
   validateOfficialDownloads: vi.fn(),
 }))
 
+import { downloadArtifacts } from '../../src/main/core/download'
 import gitPlugin from '../../fixtures/plugins/git-env/index'
 
 describe('git env plugin', () => {
@@ -124,6 +125,18 @@ describe('git env plugin', () => {
 
   it('removes the whole Scoop bootstrap root on rollback when Scoop was absent before install', async () => {
     vi.mocked(execFile).mockClear()
+    vi.mocked(downloadArtifacts).mockResolvedValueOnce([
+      {
+        artifact: {
+          url: 'https://mock.test/scoop-install',
+          tool: 'scoop',
+          kind: 'installer',
+          official: true,
+        },
+        localPath: '/tmp/cached',
+        cacheHit: true,
+      },
+    ])
     vi.mocked(execFile)
       .mockImplementationOnce((_file, _args, callback) => {
         callback(null, { stdout: '', stderr: '' })
@@ -144,7 +157,14 @@ describe('git env plugin', () => {
     expect(result.executionMode).toBe('real_run')
     expect(result.logs).toContain('preexisting_scoop_root=absent')
     expect(result.logs).toContain('fresh_scoop_bootstrap_retry=enabled')
+    expect(result.logs).toContain('scoop_bootstrap_cache_bypassed=true localPath=/tmp/cached')
     expect(result.commands.join('\n')).toContain('$maxAttempts = 2')
+    expect(result.commands.join('\n')).toContain(
+      'Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer',
+    )
+    expect(result.commands.join('\n')).not.toContain(
+      '$installer = [System.IO.Path]::GetFullPath("/tmp/cached")',
+    )
     expect(result.commands.join('\n')).toContain(
       'Retrying Scoop git install with an explicit 7zip dependency bootstrap.',
     )
@@ -202,6 +222,48 @@ describe('git env plugin', () => {
     )
     expect(result.rollbackCommands?.join('\n')).toContain(
       "foreach ($shimName in @('git.cmd', 'git.exe', 'git.ps1'))",
+    )
+  })
+
+  it('reuses a freshly downloaded Scoop bootstrap script when the download cache was not hit', async () => {
+    vi.mocked(execFile).mockClear()
+    vi.mocked(execFile)
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: '', stderr: '' })
+      })
+      .mockImplementationOnce((_file, _args, callback) => {
+        callback(null, { stdout: 'Installed.', stderr: '' })
+      })
+    vi.mocked(downloadArtifacts).mockResolvedValueOnce([
+      {
+        artifact: {
+          url: 'https://mock.test/scoop-install',
+          tool: 'scoop',
+          kind: 'installer',
+          official: true,
+        },
+        localPath: '/tmp/fresh-scoop-install.ps1',
+        cacheHit: false,
+      },
+    ])
+
+    const result = await gitPlugin.install({
+      gitManager: 'scoop',
+      installRootDir: 'C:\\toolchain',
+      downloadCacheDir: 'C:\\download-cache',
+      dryRun: false,
+      platform: 'win32',
+      onProgress: vi.fn(),
+    })
+
+    expect(result.logs).toContain(
+      'scoop_bootstrap_cache_bypassed=false localPath=/tmp/fresh-scoop-install.ps1',
+    )
+    expect(result.commands.join('\n')).toContain(
+      '$installer = [System.IO.Path]::GetFullPath("/tmp/fresh-scoop-install.ps1")',
+    )
+    expect(result.commands.join('\n')).not.toContain(
+      'Invoke-WebRequest -UseBasicParsing -Uri "https://get.scoop.sh" -OutFile $installer',
     )
   })
 
