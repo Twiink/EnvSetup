@@ -190,8 +190,11 @@ function collectInstallPathsFromTask(task?: InstallTask): string[] {
   return [
     ...new Set(
       task.plugins.flatMap((plugin) => {
-        const installRootDir = plugin.lastResult?.paths.installRootDir ?? plugin.params.installRootDir
-        return typeof installRootDir === 'string' && installRootDir.length > 0 ? [installRootDir] : []
+        const installRootDir =
+          plugin.lastResult?.paths.installRootDir ?? plugin.params.installRootDir
+        return typeof installRootDir === 'string' && installRootDir.length > 0
+          ? [installRootDir]
+          : []
       }),
     ),
   ]
@@ -233,69 +236,91 @@ export default function App() {
   const [rollbackSuggestions, setRollbackSuggestions] = useState<RollbackSuggestion[]>([])
   const [exportMessage, setExportMessage] = useState<string>()
 
-  function emitLog(level: LogLevel, source: string, message: string, context?: Record<string, unknown>) {
+  useEffect(() => {
+    if (!exportMessage) {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setExportMessage(undefined)
+    }, 3000)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [exportMessage])
+
+  function emitLog(
+    level: LogLevel,
+    source: string,
+    message: string,
+    context?: Record<string, unknown>,
+  ) {
     window.envSetup.writeLog({ level, source, message, context }).catch(() => {})
   }
-  const syncBootstrapData = useCallback((
-    bootstrap: BootstrapData,
-    preferredTemplateId?: string,
-    options: { resetWorkspaceState?: boolean } = {},
-  ) => {
-    const {
-      templates: nextTemplates,
-      nodeLtsVersions: nextNodeLtsVersions,
-      javaLtsVersions: nextJavaLtsVersions,
-      pythonVersions: nextPythonVersions,
-      gitVersions: nextGitVersions,
-      mysqlVersions: nextMysqlVersions,
-      redisVersions: nextRedisVersions,
-      mavenVersions: nextMavenVersions,
-    } = bootstrap
+  const syncBootstrapData = useCallback(
+    (
+      bootstrap: BootstrapData,
+      preferredTemplateId?: string,
+      options: { resetWorkspaceState?: boolean } = {},
+    ) => {
+      const {
+        templates: nextTemplates,
+        nodeLtsVersions: nextNodeLtsVersions,
+        javaLtsVersions: nextJavaLtsVersions,
+        pythonVersions: nextPythonVersions,
+        gitVersions: nextGitVersions,
+        mysqlVersions: nextMysqlVersions,
+        redisVersions: nextRedisVersions,
+        mavenVersions: nextMavenVersions,
+      } = bootstrap
 
-    if (nextTemplates.length === 0) {
-      setError('No templates found — fixtures/templates may be missing or empty')
-      return
-    }
+      if (nextTemplates.length === 0) {
+        setError('No templates found — fixtures/templates may be missing or empty')
+        return
+      }
 
-    const nextSelectedTemplate =
-      getTemplateById(nextTemplates, preferredTemplateId ?? selectedTemplateIdRef.current) ??
-      nextTemplates[0]
+      const nextSelectedTemplate =
+        getTemplateById(nextTemplates, preferredTemplateId ?? selectedTemplateIdRef.current) ??
+        nextTemplates[0]
 
-    setTemplates(nextTemplates)
-    setNodeLtsVersions(nextNodeLtsVersions)
-    setJavaLtsVersions(nextJavaLtsVersions)
-    setPythonVersions(nextPythonVersions)
-    setGitVersions(nextGitVersions)
-    setMysqlVersions(nextMysqlVersions)
-    setRedisVersions(nextRedisVersions)
-    setMavenVersions(nextMavenVersions)
-    setSelectedTemplateId(nextSelectedTemplate.id)
-    selectedTemplateIdRef.current = nextSelectedTemplate.id
-    setValues(
-      buildInitialValues(
-        nextSelectedTemplate,
-        nextNodeLtsVersions,
-        nextJavaLtsVersions,
-        nextPythonVersions,
-        nextGitVersions,
-        nextMysqlVersions,
-        nextRedisVersions,
-        nextMavenVersions,
-      ),
-    )
+      setTemplates(nextTemplates)
+      setNodeLtsVersions(nextNodeLtsVersions)
+      setJavaLtsVersions(nextJavaLtsVersions)
+      setPythonVersions(nextPythonVersions)
+      setGitVersions(nextGitVersions)
+      setMysqlVersions(nextMysqlVersions)
+      setRedisVersions(nextRedisVersions)
+      setMavenVersions(nextMavenVersions)
+      setSelectedTemplateId(nextSelectedTemplate.id)
+      selectedTemplateIdRef.current = nextSelectedTemplate.id
+      setValues(
+        buildInitialValues(
+          nextSelectedTemplate,
+          nextNodeLtsVersions,
+          nextJavaLtsVersions,
+          nextPythonVersions,
+          nextGitVersions,
+          nextMysqlVersions,
+          nextRedisVersions,
+          nextMavenVersions,
+        ),
+      )
 
-    if (options.resetWorkspaceState) {
-      setPrecheck(undefined)
-      setTask(undefined)
-      setTaskProgressEvents([])
-      setTaskMessage(undefined)
-      setCleanupBackup(undefined)
-      setRollbackResult(undefined)
-      setRollbackSuggestions([])
-      setRollbackDialogOpen(false)
-      activeTaskIdRef.current = undefined
-    }
-  }, [])
+      if (options.resetWorkspaceState) {
+        setPrecheck(undefined)
+        setTask(undefined)
+        setTaskProgressEvents([])
+        setTaskMessage(undefined)
+        setCleanupBackup(undefined)
+        setRollbackResult(undefined)
+        setRollbackSuggestions([])
+        setRollbackDialogOpen(false)
+        activeTaskIdRef.current = undefined
+      }
+    },
+    [],
+  )
 
   const refreshSnapshots = useCallback(async () => {
     const nextSnapshots = await window.envSetup.listSnapshots()
@@ -722,7 +747,11 @@ export default function App() {
 
   async function handleCreateSnapshot() {
     if (!task) {
-      setError(locale === 'zh-CN' ? '请先创建任务，再创建快照。' : 'Create a task before creating a snapshot.')
+      setError(
+        locale === 'zh-CN'
+          ? '请先创建任务，再创建快照。'
+          : 'Create a task before creating a snapshot.',
+      )
       return
     }
 

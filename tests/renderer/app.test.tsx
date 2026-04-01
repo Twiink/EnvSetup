@@ -322,7 +322,13 @@ const listSnapshots = vi.fn()
 const createSnapshot = vi.fn()
 const deleteSnapshot = vi.fn()
 const executeRollback = vi.fn()
-let taskProgressHandler: ((event: Parameters<EnvSetupApi['onTaskProgress']>[0] extends (event: infer E) => void ? E : never) => void) | undefined
+let taskProgressHandler:
+  | ((
+      event: Parameters<EnvSetupApi['onTaskProgress']>[0] extends (event: infer E) => void
+        ? E
+        : never,
+    ) => void)
+  | undefined
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -736,6 +742,38 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'EnvSetup' })).toBeInTheDocument()
     expect(await screen.findByText('Templates')).toBeInTheDocument()
     expect(await screen.findByText('Node.js Environment')).toBeInTheDocument()
+  })
+
+  it('auto dismisses the log export status after 3 seconds', async () => {
+    render(<App />)
+
+    const exportButton = await screen.findByRole('button', { name: '导出文本日志' })
+
+    vi.useFakeTimers()
+    vi.mocked(window.envSetup.exportLogs).mockResolvedValueOnce({
+      filePath: '/tmp/envsetup-log.txt',
+      totalEntries: 4,
+      infoCount: 3,
+      errorCount: 1,
+    })
+
+    try {
+      await act(async () => {
+        fireEvent.click(exportButton)
+        await Promise.resolve()
+      })
+
+      expect(window.envSetup.exportLogs).toHaveBeenCalledWith('text')
+      expect(screen.getByRole('status')).toHaveTextContent('日志已导出')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000)
+      })
+
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('switches to the beginner guide and back without losing workspace state', async () => {
