@@ -330,8 +330,8 @@ async function finalizeBackgroundTask(
   if (nextTask.status === 'succeeded' && nextTask.snapshotId) {
     try {
       await markSnapshotDeletable(paths.snapshotsDir, nextTask.snapshotId)
-    } catch {
-      // 非关键操作，忽略错误
+    } catch (err) {
+      console.warn(`[task:finalize] markSnapshotDeletable failed for snapshot ${nextTask.snapshotId}:`, err)
     }
   }
 
@@ -339,8 +339,8 @@ async function finalizeBackgroundTask(
     try {
       const rollbackSuggestions = await suggestRollbackSnapshots(paths.snapshotsDir, nextTask.id)
       nextTask = { ...nextTask, rollbackSuggestions }
-    } catch {
-      // 非关键操作，忽略错误
+    } catch (err) {
+      console.warn(`[task:finalize] suggestRollbackSnapshots failed for task ${nextTask.id}:`, err)
     }
   }
 
@@ -558,8 +558,8 @@ export function registerIpcHandlers(): void {
       })
       await updateSnapshotMeta(paths.snapshotsDir, snapshot)
       snapshotId = snapshot.id
-    } catch {
-      // 快照创建失败不阻断任务执行
+    } catch (err) {
+      console.warn(`[task:start] createSnapshot failed for task ${task.id}, proceeding without rollback support:`, err)
     }
 
     return beginTaskExecution({

@@ -249,6 +249,7 @@ export function applyPluginResult(
 
     plugin.lastResult = installResult
     plugin.verifyResult = verifyResult
+    plugin.context = installResult.context ?? {}
     plugin.status =
       verifyResult.status === 'verified_success' ? 'verified_success' : installResult.status
     plugin.error = verifyResult.error ?? installResult.error
@@ -556,6 +557,9 @@ export async function prepareTaskPluginRetry(options: {
     plugin.logs = []
     plugin.error = undefined
     plugin.errorCode = undefined
+    plugin.lastResult = undefined
+    plugin.verifyResult = undefined
+    plugin.context = {}
     plugin.finishedAt = undefined
     draft.finishedAt = undefined
     draft.resultLevel = undefined
